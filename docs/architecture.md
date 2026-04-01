@@ -33,11 +33,6 @@ CMswap is a Web3 application built with Next.js featuring multi-DEX swap aggrega
 │  │              LP Position Management (V3)             │   │
 │  │              LP Mining (Uniswap V3 Staker)           │   │
 │  └──────────────────────────────────────────────────────┘   │
-└─────────┼───────────────────┼───────────────────┼───────────┘
-          │                   │                   │
-┌─────────────────────────────────────────────────────────────┐
-│  Chains: KUB Testnet, KUB Mainnet, JBC, BSC, Base, Worldchain│
-│  DEXs: CMswap (V3), Jibswap (V2), UdonSwap (V2), Ponder (V2), Diamon (V2), Uniswap (V3), PancakeSwap (V3)│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,6 +79,9 @@ CMswap is a Web3 application built with Next.js featuring multi-DEX swap aggrega
 /              # Landing page (SSG)
 /swap          # Swap feature (client-side)
 /earn          # Earn feature: LP positions + mining (client-side)
+/bridge        # Bridge feature (coming)
+/launchpad     # Launchpad feature (coming)
+/points        # Points feature (coming)
 ```
 
 ### Component Structure

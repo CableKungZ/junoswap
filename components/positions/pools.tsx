@@ -121,7 +121,10 @@ function useCommonPools(chainId: number): { pools: V3PoolData[]; isLoading: bool
     const p35 = usePoolsForPair(t3, t5, chainId)
     const p45 = usePoolsForPair(t4, t5, chainId)
 
-    const poolResults = [p01, p02, p03, p04, p05, p12, p13, p14, p15, p23, p24, p25, p34, p35, p45]
+    const poolResults = useMemo(
+        () => [p01, p02, p03, p04, p05, p12, p13, p14, p15, p23, p24, p25, p34, p35, p45],
+        [p01, p02, p03, p04, p05, p12, p13, p14, p15, p23, p24, p25, p34, p35, p45]
+    )
 
     const allPools = useMemo(() => {
         const combined = poolResults.flatMap((r) => r.pools)

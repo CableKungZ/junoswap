@@ -4,7 +4,7 @@ Implementation phases and TODO list for CMswap development.
 
 ## Project Status
 
-**Current Phase**: Phase 4 - Bridge Feature (In Progress - Foundation Complete)
+**Current Phase**: Phase 4 - Bridge Feature (Planning)
 
 - [x] Phase 1: Foundation ✅
 - [x] Phase 2: Swap Feature & Multi-Chain Expansion ✅
@@ -86,68 +86,47 @@ Implementation phases and TODO list for CMswap development.
 
 ## Phase 4: Bridge Feature
 
-**Duration**: 2-3 weeks (revised from 6-8 weeks - backend complete)
-**Goal**: Implement custom cross-chain USDT bridging between KUB, JB Chain, and BSC
+**Duration**: 2-3 weeks
+**Goal**: Integrate external bridge aggregator for cross-chain token transfers
 
-**Status**: Backend Complete (Smart Contracts + Relayer) | Frontend Pending
+**Status**: Planning
 
-### Smart Contracts ✅ (COMPLETE)
+### Architecture Decision
 
-- [x] TBridgeV2.sol - Core bridge with lock/unlock mechanism
-- [x] TBridgeVault.sol - Liquidity vault for LP providers
-- [x] TBridgeTokenRegistry.sol - Token whitelisting and cross-chain mappings
-- [x] TBridgeFeeCollector.sol - Protocol fee management
-- [x] Deployment scripts (KUB, JBC, BSC)
-- [x] Comprehensive test suite
+- **Approach**: Integrate an external bridge aggregator SDK (e.g., LI.FI, Socket, Squid)
+- **Rationale**: Broader chain coverage, no backend infrastructure to maintain, battle-tested bridging infrastructure, faster time-to-market
+- **Target chains (initial)**: BSC (56), Base (8453), Worldchain (480)
+- **Future expansion**: KUB Chain, JB Chain, additional providers
 
-### Relayer Backend ✅ (COMPLETE)
+### Research & Evaluation (PENDING)
 
-- [x] Event scanner for BridgeInitiated events
-- [x] Transaction executor for releaseFunds
-- [x] SQLite database with migrations
-- [x] Gas price management with capping
-- [x] Retry logic with exponential backoff
-- [x] Support for KUB (96), JBC (8899), BSC (56)
-
-### Internal Security Audit (PENDING)
-
-- [ ] Smart contract review
-  - [ ] Reentrancy analysis
-  - [ ] Access control review
-  - [ ] Integer overflow/underflow checks
-  - [ ] Logic validation
-- [ ] Relayer security review
-  - [ ] Private key handling
-  - [ ] Database security
-  - [ ] API security
-  - [ ] Error handling review
-- [ ] Test coverage verification
-- [ ] Gas optimization review
+- [ ] Evaluate bridge aggregator providers (LI.FI, Socket/Bungee, Squid Router)
+- [ ] Verify chain support for BSC, Base, Worldchain
+- [ ] Compare SDK quality, TypeScript support, viem/wagmi compatibility
+- [ ] Review pricing models and license terms
+- [ ] Test quote API with target chain pairs
 
 ### Frontend UI (PENDING)
 
 - [ ] Bridge interface
   - [ ] Source chain selector
   - [ ] Destination chain selector
-  - [ ] Token input (USDT)
+  - [ ] Token input
   - [ ] Amount input
   - [ ] Bridge button
 - [ ] Bridge quotes
-  - [ ] Calculate bridge fees (protocol + relayer)
+  - [ ] Fetch quotes from bridge aggregator
   - [ ] Display bridge fee breakdown
-  - [ ] Display estimated time
+  - [ ] Display estimated delivery time
   - [ ] Display destination amount (after fees)
-  - [ ] Display slippage protection
 - [ ] Bridge execution
-  - [ ] Approve USDT tokens
+  - [ ] Token approval flow
   - [ ] Execute bridge transaction
-  - [ ] Handle cross-chain messaging
-  - [ ] Handle mint/burn operations
+  - [ ] Handle transaction submission
 - [ ] Transaction tracking
   - [ ] Source chain confirmation
   - [ ] Bridge status (pending/relaying/completed)
   - [ ] Destination chain confirmation
-  - [ ] Transfer history
 
 ---
 
@@ -165,7 +144,7 @@ Implementation phases and TODO list for CMswap development.
   - [ ] Token description
   - [ ] Token image upload
 - [ ] Token deployment
-  - [ ] Deploy ERC20 contract (Foundry)
+  - [ ] Deploy ERC20 contract
   - [ ] Verify contract
   - [ ] Display deployment status
 - [ ] Liquidity pool creation
@@ -179,10 +158,8 @@ Implementation phases and TODO list for CMswap development.
 
 ### Smart Contracts
 
-**Foundry Contracts**
-
 ```solidity
-// contracts/src/
+// contracts/src/ (to be set up when Phase 5 begins)
 ├── LaunchpadToken.sol        # ERC20 implementation
 ├── LaunchpadFactory.sol      # Factory pattern
 └── interfaces/
@@ -220,10 +197,10 @@ types/
 
 ### TODO
 
-- [ ] Create Foundry ERC20 token template
+- [ ] Create ERC20 token template
 - [ ] Create deployment scripts
 - [ ] Build launch-form component
-- [ ] Integrate Foundry deployment
+- [ ] Integrate contract deployment
 - [ ] Integrate Uniswap V4 SDK
 - [ ] Add transaction tracking
 - [ ] Test on testnet
@@ -358,7 +335,7 @@ POST /api/quests/complete      # Complete quest
 - [ ] Unit tests (Vitest)
 - [ ] Integration tests
 - [ ] E2E tests (Playwright)
-- [ ] Contract tests (Foundry)
+- [ ] Contract tests
 - [ ] Fuzzing tests
 
 ### Security
@@ -387,9 +364,10 @@ POST /api/quests/complete      # Complete quest
 
 ### Advanced Bridge Features
 
-- [ ] More bridge providers (LayerZero, Wormhole, Across)
-- [ ] Bridge comparison
-- [ ] Route optimization
+- [ ] Additional bridge providers and routes
+- [ ] Bridge comparison across providers
+- [ ] Route optimization for best price/speed
+- [ ] KUB Chain and JB Chain bridge support
 
 ### Advanced Launchpad Features
 
@@ -503,23 +481,10 @@ types/
 | Phase 1 | ✅ Complete | - | ✅ Complete | Foundation |
 | Phase 2 | ✅ Complete | - | ✅ Complete | Swap & Multi-Chain |
 | Phase 3 | ✅ Complete | - | ✅ Complete | Earn Feature |
-| Phase 4 | 2-3 weeks | TBD | TBD | Bridge |
+| Phase 4 | 2-3 weeks | TBD | TBD | Bridge (External Aggregator) |
 | Phase 5 | 2 weeks | TBD | TBD | Launchpad Feature |
 | Phase 6 | 1-2 weeks | TBD | TBD | Points Feature |
 | Phase 7 | 1-2 weeks | TBD | TBD | Polish & Optimization |
 | **MVP Total** | **9-12 weeks** | **TBD** | **TBD** | |
 | Phase 8 | Post-MVP | TBD | TBD | Advanced Features |
 | Phase 9 | 2-3 weeks | TBD | TBD | Subgraph & Analytics |
-
----
-
-## Contributing
-
-Want to help build cmswap? Check out our [contributing guidelines](../CONTRIBUTING.md) (coming soon).
-
-### Areas to Contribute
-
-1. **UI/UX** - Improve the design and user experience
-2. **Testing** - Write tests for existing features
-3. **Documentation** - Improve docs and add examples
-4. **Smart Contracts** - Help audit and improve contracts
