@@ -25,33 +25,37 @@ function EarnContent() {
     const dexConfig = getV3Config(chainId)
     if (!dexConfig?.positionManager) {
         return (
-            <div className="flex min-h-screen items-start justify-center p-4 pt-24">
-                <Card className="w-full max-w-md">
-                    <CardHeader>
-                        <CardTitle>Chain Not Supported</CardTitle>
-                        <CardDescription>
-                            Liquidity management is not available on this chain. Please switch to a
-                            supported chain like KUB Chain or JBC.
-                        </CardDescription>
-                    </CardHeader>
-                </Card>
+            <div className="flex min-h-screen items-start justify-center p-4">
+                <div className="w-full max-w-md space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Chain Not Supported</CardTitle>
+                            <CardDescription>
+                                Liquidity management is not available on this chain. Please switch
+                                to a supported chain like KUB Chain or JBC.
+                            </CardDescription>
+                        </CardHeader>
+                    </Card>
+                </div>
             </div>
         )
     }
     if (!isConnected) {
         return (
-            <div className="flex min-h-screen items-start justify-center p-4 pt-24">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
-                        <CardTitle>Connect Wallet</CardTitle>
-                        <CardDescription>
-                            Connect your wallet to manage liquidity positions.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-center">
-                        <ConnectButton />
-                    </CardContent>
-                </Card>
+            <div className="flex min-h-screen items-start justify-center p-4">
+                <div className="w-full max-w-md space-y-4">
+                    <Card>
+                        <CardHeader className="text-center">
+                            <CardTitle>Connect Wallet</CardTitle>
+                            <CardDescription>
+                                Connect your wallet to manage liquidity positions.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex justify-center">
+                            <ConnectButton />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         )
     }

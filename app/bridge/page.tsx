@@ -1,22 +1,52 @@
 'use client'
 
 import { Suspense } from 'react'
+import { useChainId } from 'wagmi'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { BridgeCard } from '@/components/bridge/bridge-card'
+import { BRIDGE_SUPPORTED_CHAIN_IDS } from '@/types/bridge'
+
+function BridgeContent() {
+    const chainId = useChainId()
+    const isSupported = BRIDGE_SUPPORTED_CHAIN_IDS.includes(
+        chainId as (typeof BRIDGE_SUPPORTED_CHAIN_IDS)[number]
+    )
+
+    if (!isSupported) {
+        return (
+            <div className="flex min-h-screen items-start justify-center p-4">
+                <div className="w-full max-w-md space-y-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Chain Not Supported</CardTitle>
+                            <CardDescription>
+                                Bridge is not available on this chain. Please switch to a supported
+                                chain like BNB Chain, Base, or Worldchain.
+                            </CardDescription>
+                        </CardHeader>
+                    </Card>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="flex min-h-screen items-start justify-center p-4">
+            <div className="w-full max-w-md space-y-4">
+                <BridgeCard />
+            </div>
+        </div>
+    )
+}
 
 export default function BridgePage() {
     return (
         <Suspense
             fallback={
-                <div className="flex items-center justify-center min-h-screen">Loading...</div>
+                <div className="flex min-h-screen items-center justify-center">Loading...</div>
             }
         >
-            <div className="flex flex-col items-center justify-center min-h-screen px-4">
-                <div className="text-center space-y-4 max-w-md">
-                    <h1 className="text-4xl font-bold">Bridge</h1>
-                    <p className="text-muted-foreground">
-                        Transfer tokens across chains securely. Coming soon in Phase 4.
-                    </p>
-                </div>
-            </div>
+            <BridgeContent />
         </Suspense>
     )
 }
