@@ -2,10 +2,12 @@
 
 import { useMemo } from 'react'
 import { useChainId } from 'wagmi'
+import { Layers } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/empty-state'
 import { TOKEN_LISTS } from '@/lib/tokens'
 import { usePoolsForPair } from '@/hooks/usePools'
 import { useEarnStore } from '@/store/earn-store'
@@ -84,16 +86,6 @@ function LoadingState() {
     )
 }
 
-function EmptyState() {
-    return (
-        <Card>
-            <CardContent className="py-12 text-center">
-                <div className="text-muted-foreground">No pools available on this chain.</div>
-            </CardContent>
-        </Card>
-    )
-}
-
 function useCommonPools(chainId: number): { pools: V3PoolData[]; isLoading: boolean } {
     const tokens = TOKEN_LISTS[chainId] ?? []
     // Get first 6 tokens to check pools (always use fixed number for stable hook count)
@@ -148,7 +140,17 @@ export function PoolsList() {
         return <LoadingState />
     }
     if (pools.length === 0) {
-        return <EmptyState />
+        return (
+            <Card>
+                <CardContent className="py-12">
+                    <EmptyState
+                        icon={Layers}
+                        title="No pools available"
+                        description="No pools available on this chain."
+                    />
+                </CardContent>
+            </Card>
+        )
     }
     return (
         <div className="space-y-3">

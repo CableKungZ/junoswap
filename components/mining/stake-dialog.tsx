@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
+import { FileQuestion, Loader2 } from 'lucide-react'
 import {
     Dialog,
     DialogContent,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useEarnStore, useSelectedIncentive } from '@/store/earn-store'
 import { useUserPositions } from '@/hooks/useUserPositions'
 import { useDepositInfo } from '@/hooks/useStakedPositions'
@@ -144,16 +146,20 @@ export function StakeDialog() {
                     <div className="space-y-3">
                         <Label>Select Position to Stake</Label>
                         {isLoadingPositions ? (
-                            <div className="text-center text-muted-foreground py-4">
-                                Loading positions...
-                            </div>
+                            <EmptyState
+                                icon={Loader2}
+                                title="Loading positions..."
+                                compact
+                                className="[&_svg]:animate-spin [&_svg]:text-muted-foreground"
+                            />
                         ) : eligiblePositions.length === 0 ? (
-                            <div className="text-center text-muted-foreground py-4 border rounded-lg">
-                                <div>No eligible positions found.</div>
-                                <div className="text-sm mt-1">
-                                    Create an LP position for this pool first.
-                                </div>
-                            </div>
+                            <EmptyState
+                                icon={FileQuestion}
+                                title="No eligible positions"
+                                description="Create an LP position for this pool first."
+                                compact
+                                className="border rounded-lg"
+                            />
                         ) : (
                             <RadioGroup
                                 value={selectedPositionId ?? ''}

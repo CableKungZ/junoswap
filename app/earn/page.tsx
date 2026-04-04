@@ -2,9 +2,11 @@
 
 import { Suspense } from 'react'
 import { useAccount, useChainId } from 'wagmi'
+import { Unplug, Wallet } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { PoolsList } from '@/components/positions/pools'
 import { PositionsList } from '@/components/positions/positions-list'
 import { AddLiquidityDialog } from '@/components/positions/add-liquidity-dialog'
@@ -28,13 +30,13 @@ function EarnContent() {
             <div className="flex min-h-screen items-start justify-center p-4">
                 <div className="w-full max-w-md space-y-4">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Chain Not Supported</CardTitle>
-                            <CardDescription>
-                                Liquidity management is not available on this chain. Please switch
-                                to a supported chain like KUB Chain or JBC.
-                            </CardDescription>
-                        </CardHeader>
+                        <CardContent className="py-12">
+                            <EmptyState
+                                icon={Unplug}
+                                title="Chain Not Supported"
+                                description="Liquidity management is not available on this chain. Please switch to a supported chain like KUB Chain or JBC."
+                            />
+                        </CardContent>
                     </Card>
                 </div>
             </div>
@@ -45,14 +47,13 @@ function EarnContent() {
             <div className="flex min-h-screen items-start justify-center p-4">
                 <div className="w-full max-w-md space-y-4">
                     <Card>
-                        <CardHeader className="text-center">
-                            <CardTitle>Connect Wallet</CardTitle>
-                            <CardDescription>
-                                Connect your wallet to manage liquidity positions.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex justify-center">
-                            <ConnectButton />
+                        <CardContent className="py-12">
+                            <EmptyState
+                                icon={Wallet}
+                                title="Connect Wallet"
+                                description="Connect your wallet to manage liquidity positions."
+                                action={<ConnectButton />}
+                            />
                         </CardContent>
                     </Card>
                 </div>

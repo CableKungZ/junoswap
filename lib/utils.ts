@@ -5,6 +5,10 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }
 
+export function getInitials(address: string): string {
+    return address.slice(2, 4).toUpperCase()
+}
+
 export function formatAddress(address: string, startChars = 6, endChars = 4): string {
     if (!address || address.length < 10) return address
     return `${address.slice(0, startChars)}...${address.slice(-endChars)}`

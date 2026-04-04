@@ -3,9 +3,11 @@
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import type { Address } from 'viem'
+import { Coins, Loader2, Wallet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import type { StakedPosition, IncentiveKey } from '@/types/earn'
 import { usePositionsByTokenIds } from '@/hooks/useUserPositions'
 import { useIncentives } from '@/hooks/useIncentives'
@@ -79,9 +81,12 @@ export function StakedPositions() {
         return (
             <Card>
                 <CardContent className="pt-6">
-                    <div className="text-center text-muted-foreground">
-                        Connect your wallet to view staked positions.
-                    </div>
+                    <EmptyState
+                        icon={Wallet}
+                        title="Connect wallet"
+                        description="Connect your wallet to view staked positions."
+                        compact
+                    />
                 </CardContent>
             </Card>
         )
@@ -96,9 +101,13 @@ export function StakedPositions() {
         return (
             <Card>
                 <CardContent className="pt-6">
-                    <div className="text-center text-muted-foreground">
-                        Loading staked positions...
-                    </div>
+                    <EmptyState
+                        icon={Loader2}
+                        title="Loading"
+                        description="Loading staked positions..."
+                        compact
+                        className="[&_svg]:animate-spin [&_svg]:text-muted-foreground"
+                    />
                 </CardContent>
             </Card>
         )
@@ -109,12 +118,12 @@ export function StakedPositions() {
                 <h2 className="text-lg font-semibold">My Staked Positions</h2>
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-center space-y-2">
-                            <div className="text-muted-foreground">No staked positions found.</div>
-                            <div className="text-sm text-muted-foreground">
-                                Stake your LP positions in a mining pool to earn rewards.
-                            </div>
-                        </div>
+                        <EmptyState
+                            icon={Coins}
+                            title="No staked positions"
+                            description="Stake your LP positions in a mining pool to earn rewards."
+                            compact
+                        />
                     </CardContent>
                 </Card>
             </div>

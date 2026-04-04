@@ -1,6 +1,4 @@
-import { ArrowRight, Repeat, GitBranch, Rocket } from 'lucide-react'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Repeat, GitBranch, Rocket } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const features = [
@@ -18,7 +16,7 @@ const features = [
             'Move tokens seamlessly across multiple chains. Fast, secure, and low-cost cross-chain transfers.',
         icon: GitBranch,
         href: '/bridge',
-        comingSoon: true,
+        comingSoon: false,
     },
     {
         name: 'Memecoin Launchpad',
@@ -39,19 +37,12 @@ export function Features() {
                     <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
                         Everything you need to trade and launch
                     </p>
-                    <p className="mt-6 text-lg leading-8 text-gray-400">
-                        cmswap combines the best DeFi tools into one seamless experience. No more
-                        juggling multiple dApps.
-                    </p>
                 </div>
-                <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-8 sm:mt-20 lg:max-w-none lg:grid-cols-3">
+                <div className="mx-auto mt-16 grid max-w-xl grid-cols-1 gap-8 sm:mt-20 lg:max-w-none lg:grid-cols-3">
                     {features.map((feature) => {
                         const Icon = feature.icon
                         return (
-                            <Card
-                                key={feature.name}
-                                className="group transition-all hover:bg-primary/5"
-                            >
+                            <Card key={feature.name} className="group transition-all">
                                 <CardHeader>
                                     <div className="mb-4 inline-flex rounded-lg bg-primary/10 p-3 w-fit">
                                         <Icon className="h-6 w-6 text-primary" />
@@ -67,12 +58,6 @@ export function Features() {
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-muted-foreground">{feature.description}</p>
-                                    <Link href={feature.href}>
-                                        <Button variant="ghost" className="mt-6 gap-2">
-                                            Learn more
-                                            <ArrowRight className="h-4 w-4" />
-                                        </Button>
-                                    </Link>
                                 </CardContent>
                             </Card>
                         )

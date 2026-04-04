@@ -13,9 +13,14 @@ function AccountInfo({ className = '' }: { className?: string }) {
     const { address } = useAccount()
     return (
         <AccountDropdown>
-            <Button variant="outline" size="default" className={`font-mono text-sm ${className}`}>
-                {address ? formatAddress(address) : 'Connecting...'}
-            </Button>
+            <button
+                className={`relative flex items-center gap-2 h-8 px-2 rounded-md text-xs font-mono text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors ${className}`}
+                aria-label="Account menu"
+            >
+                <span className="hidden sm:inline">
+                    {address ? formatAddress(address, 4, 3) : '...'}
+                </span>
+            </button>
         </AccountDropdown>
     )
 }
@@ -36,13 +41,14 @@ export function ConnectButton({ className = '' }: { className?: string }) {
     return (
         <>
             <Button
-                size="default"
-                className={className}
+                variant="ghost"
+                size="sm"
+                className={`gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground ${className}`}
                 onClick={() => setIsModalOpen(true)}
                 aria-label="Connect wallet"
             >
-                <Wallet className="mr-2 h-4 w-4" aria-hidden="true" />
-                Connect Wallet
+                <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                Connect
             </Button>
             <ConnectModal open={isModalOpen} onOpenChange={setIsModalOpen} />
         </>

@@ -41,18 +41,20 @@ const navigation = [
 
 export function Footer() {
     return (
-        <footer className="bg-gray-900/50 py-12">
+        <footer className="bg-muted/30 py-12">
             <div className="mx-auto max-w-7xl px-6 lg:px-8">
                 <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
                     {navigation.map((section) => (
                         <div key={section.name}>
-                            <h3 className="text-sm font-semibold text-gray-400">{section.name}</h3>
+                            <h3 className="text-sm font-semibold text-muted-foreground">
+                                {section.name}
+                            </h3>
                             <ul className="mt-4 space-y-3">
                                 {section.children.map((item) => (
                                     <li key={item.name}>
                                         <Link
                                             href={item.href}
-                                            className="text-sm text-gray-500 transition-colors hover:text-gray-300"
+                                            className="text-sm text-muted-foreground/70 transition-colors hover:text-foreground"
                                         >
                                             {item.name}
                                         </Link>
@@ -62,15 +64,15 @@ export function Footer() {
                         </div>
                     ))}
                 </div>
-                <div className="mt-12 border-t border-gray-800 pt-8">
+                <div className="mt-12 border-t border-border/50 pt-8">
                     <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground/70">
                             &copy; {new Date().getFullYear()} cmswap. All rights reserved.
                         </p>
                         <div className="flex gap-6">
                             <a
                                 href="#"
-                                className="text-gray-500 transition-colors hover:text-gray-300"
+                                className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">Twitter</span>
                                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
@@ -79,7 +81,7 @@ export function Footer() {
                             </a>
                             <a
                                 href="#"
-                                className="text-gray-500 transition-colors hover:text-gray-300"
+                                className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">GitHub</span>
                                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
@@ -92,7 +94,7 @@ export function Footer() {
                             </a>
                             <a
                                 href="#"
-                                className="text-gray-500 transition-colors hover:text-gray-300"
+                                className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">Discord</span>
                                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">

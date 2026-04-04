@@ -2,10 +2,12 @@
 
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
+import { Droplets } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useUserPositions } from '@/hooks/useUserPositions'
 import { useEarnStore, useEarnSettings } from '@/store/earn-store'
 import { formatTokenAmount } from '@/services/tokens'
@@ -142,20 +144,6 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
     )
 }
 
-function EmptyState() {
-    const { openAddLiquidity } = useEarnStore()
-    return (
-        <Card>
-            <CardContent className="py-12 text-center">
-                <div className="text-muted-foreground mb-4">
-                    You don&apos;t have any liquidity positions yet.
-                </div>
-                <Button onClick={() => openAddLiquidity()}>Create Position</Button>
-            </CardContent>
-        </Card>
-    )
-}
-
 function LoadingState() {
     return (
         <div className="space-y-3">
@@ -185,6 +173,7 @@ export function PositionsList() {
     const { address } = useAccount()
     const chainId = useChainId()
     const { positions, isLoading } = useUserPositions(address, chainId)
+    const { openAddLiquidity } = useEarnStore()
     const settings = useEarnSettings()
     const filteredPositions = useMemo(() => {
         const result = settings.hideClosedPositions
@@ -205,7 +194,18 @@ export function PositionsList() {
         return <LoadingState />
     }
     if (filteredPositions.length === 0) {
-        return <EmptyState />
+        return (
+            <Card>
+                <CardContent className="py-12">
+                    <EmptyState
+                        icon={Droplets}
+                        title="No liquidity positions"
+                        description="You don't have any liquidity positions yet."
+                        action={<Button onClick={() => openAddLiquidity()}>Create Position</Button>}
+                    />
+                </CardContent>
+            </Card>
+        )
     }
     return (
         <div className="space-y-3">

@@ -32,30 +32,31 @@
     }
 
     .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 142 100% 45%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 142 100% 45%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        --background: 230 15% 3.5%;
+        --foreground: 210 20% 98%;
+        --card: 232 14% 6%;
+        --card-foreground: 210 20% 98%;
+        --popover: 234 14% 8%;
+        --popover-foreground: 210 20% 98%;
+        --primary: 153 96% 44%;
+        --primary-foreground: 230 20% 5%;
+        --secondary: 232 12% 10%;
+        --secondary-foreground: 210 15% 92%;
+        --muted: 230 10% 10.5%;
+        --muted-foreground: 220 8% 55%;
+        --accent: 232 14% 12%;
+        --accent-foreground: 210 15% 95%;
+        --destructive: 0 72% 42%;
+        --destructive-foreground: 210 20% 98%;
+        --border: 228 12% 14%;
+        --input: 228 12% 14%;
+        --ring: 153 96% 44%;
+        --chart-1: 153 80% 45%;
+        --chart-2: 217 75% 55%;
+        --chart-3: 270 60% 58%;
+        --chart-4: 40 85% 60%;
+        --chart-5: 340 70% 55%;
+        --radius: 0.75rem;
     }
 }
 
@@ -65,5 +66,28 @@
     }
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+@layer components {
+    .card-glow {
+        box-shadow:
+            0 0 0 1px hsl(230 15% 5% / 0.3),
+            0 2px 8px hsl(230 25% 3% / 0.2),
+            inset 0 1px 0 hsl(230 15% 12% / 0.05);
+    }
+
+    .btn-primary-glow {
+        box-shadow:
+            0 0 0 1px hsl(153 96% 44% / 0.2),
+            0 2px 8px hsl(153 80% 35% / 0.25),
+            0 8px 24px hsl(153 60% 25% / 0.1);
+    }
+
+    .btn-primary-glow:hover {
+        box-shadow:
+            0 0 0 1px hsl(153 96% 50% / 0.3),
+            0 2px 12px hsl(153 80% 40% / 0.3),
+            0 8px 32px hsl(153 60% 30% / 0.15);
     }
 }

@@ -3,9 +3,11 @@
 import { useMemo } from 'react'
 import { useChainId } from 'wagmi'
 import type { Address } from 'viem'
+import { Gem, Loader2, Unplug } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IncentiveCard } from './incentive-card'
 import { useIncentives } from '@/hooks/useIncentives'
 import { useEarnStore, useMiningSettings } from '@/store/earn-store'
@@ -55,9 +57,12 @@ export function MiningPools() {
         return (
             <Card>
                 <CardContent className="pt-6">
-                    <div className="text-center text-muted-foreground">
-                        LP Mining is not available on this chain.
-                    </div>
+                    <EmptyState
+                        icon={Unplug}
+                        title="Not available"
+                        description="LP Mining is not available on this chain."
+                        compact
+                    />
                 </CardContent>
             </Card>
         )
@@ -66,7 +71,12 @@ export function MiningPools() {
         return (
             <Card>
                 <CardContent className="pt-6">
-                    <div className="text-center text-muted-foreground">Loading incentives...</div>
+                    <EmptyState
+                        icon={Loader2}
+                        title="Loading incentives"
+                        compact
+                        className="[&_svg]:animate-spin [&_svg]:text-muted-foreground"
+                    />
                 </CardContent>
             </Card>
         )
@@ -94,14 +104,12 @@ export function MiningPools() {
             {filteredIncentives.length === 0 ? (
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="text-center space-y-2">
-                            <div className="text-muted-foreground">
-                                No active mining incentives available.
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Check back later for new rewards programs.
-                            </div>
-                        </div>
+                        <EmptyState
+                            icon={Gem}
+                            title="No active mining incentives"
+                            description="Check back later for new rewards programs."
+                            compact
+                        />
                     </CardContent>
                 </Card>
             ) : (

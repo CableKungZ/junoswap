@@ -15,7 +15,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
-import { ChevronDown, Search, Copy } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ChevronDown, Search, Copy, SearchX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBalance } from '@/services/tokens'
 import { toastSuccess } from '@/lib/toast'
@@ -79,9 +80,7 @@ function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
                         {searchQuery ? 'Search Results' : 'All Tokens'}
                     </p>
                     {filteredTokens.length === 0 ? (
-                        <div className="py-8 text-center text-sm text-muted-foreground">
-                            No tokens found
-                        </div>
+                        <EmptyState icon={SearchX} title="No tokens found" compact />
                     ) : (
                         <div className="space-y-1">
                             {filteredTokens.map((token) => (

@@ -3,7 +3,7 @@
 import { useDisconnect, useAccount, useBalance } from 'wagmi'
 import { useChainId } from 'wagmi'
 import { getChainMetadata } from '@/lib/wagmi'
-import { formatAddress } from '@/lib/utils'
+import { formatAddress, getInitials } from '@/lib/utils'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -47,19 +47,16 @@ export function AccountDropdown({ children }: { children: React.ReactNode }) {
         disconnect()
         toastSuccess('Wallet disconnected')
     }
-    const getInitials = (addr: string) => {
-        return addr.slice(2, 4).toUpperCase()
-    }
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
             <DropdownMenuContent
                 align="end"
-                className="w-72 bg-card/95 backdrop-blur-md border-border/50"
+                className="w-64 bg-card/95 backdrop-blur-md border-border/50"
             >
-                <div className="flex items-center gap-3 p-4">
-                    <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-primary text-primary-foreground font-mono">
+                <div className="flex items-center gap-2.5 px-3 py-3">
+                    <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/15 text-primary text-xs font-mono">
                             {address ? getInitials(address) : '?'}
                         </AvatarFallback>
                     </Avatar>
@@ -69,8 +66,8 @@ export function AccountDropdown({ children }: { children: React.ReactNode }) {
                         </div>
                         <div className="text-xs text-muted-foreground">
                             {balance
-                                ? `${Number(balance.formatted).toFixed(4)} ${balance.symbol}`
-                                : '0.0000 ETH'}
+                                ? `${Number(balance.formatted).toFixed(3)} ${balance.symbol}`
+                                : '0.000 ETH'}
                         </div>
                     </div>
                 </div>

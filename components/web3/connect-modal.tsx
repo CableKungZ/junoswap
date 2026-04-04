@@ -43,22 +43,22 @@ export function ConnectModal({ open, onOpenChange }: ConnectModalProps) {
                 aria-describedby="wallet-connect-description"
             >
                 <DialogHeader>
-                    <DialogTitle className="text-xl">Connect Wallet</DialogTitle>
+                    <DialogTitle className="text-lg">Connect Wallet</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-3 py-4">
                     {connectors.map((connector) => (
                         <Button
                             key={connector.id}
                             variant="outline"
-                            className="w-full justify-start h-14 px-4 hover:bg-primary/10 hover:border-primary/50"
+                            className="w-full justify-start h-12 px-3 hover:bg-muted/50 hover:border-border"
                             onClick={() => handleConnect(connector.id)}
                             disabled={isPending}
                             aria-label={`Connect with ${WALLET_NAMES[connector.id] || connector.name}`}
                         >
                             {isPending ? (
-                                <Loader2 className="mr-3 h-5 w-5 animate-spin" aria-hidden="true" />
+                                <Loader2 className="mr-3 h-4 w-4 animate-spin" aria-hidden="true" />
                             ) : (
-                                <Wallet className="mr-3 h-5 w-5" aria-hidden="true" />
+                                <Wallet className="mr-3 h-4 w-4" aria-hidden="true" />
                             )}
                             <div className="flex flex-col items-start">
                                 <span className="font-medium">
@@ -73,9 +73,9 @@ export function ConnectModal({ open, onOpenChange }: ConnectModalProps) {
                         </Button>
                     ))}
                 </div>
-                <div className="text-center text-sm text-muted-foreground">
-                    <p>By connecting, you agree to our Terms of Service</p>
-                </div>
+                <p className="text-center text-xs text-muted-foreground/70 pb-1">
+                    By connecting, you agree to our Terms of Service
+                </p>
             </DialogContent>
         </Dialog>
     )
