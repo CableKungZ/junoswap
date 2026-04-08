@@ -20,7 +20,7 @@ import { ChainSelect } from './chain-select'
 import { TokenSelect } from '@/components/swap/token-select'
 import { SettingsDialog } from '@/components/swap/settings-dialog'
 import { BridgeStatus } from './bridge-status'
-import { ArrowDownUp, ArrowRightLeft } from 'lucide-react'
+import { ArrowDownUp, ArrowRightLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { isValidNumberInput } from '@/lib/utils'
 
 export function BridgeCard() {
@@ -30,6 +30,7 @@ export function BridgeCard() {
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     const [isRateFlipped, setIsRateFlipped] = useState(false)
     const [showStatus, setShowStatus] = useState(false)
+    const [isFeeExpanded, setIsFeeExpanded] = useState(false)
 
     const {
         fromChainId,
@@ -269,11 +270,51 @@ export function BridgeCard() {
                                     </div>
                                 )}
                                 {feeCosts.length > 0 && (
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Bridge Fee</span>
-                                        <span className="font-medium">
-                                            {feeCosts.map((f) => f.percentage).join(' + ')}
-                                        </span>
+                                    <div>
+                                        <div
+                                            className="flex justify-between cursor-pointer select-none"
+                                            onClick={() => setIsFeeExpanded(!isFeeExpanded)}
+                                        >
+                                            <span className="text-muted-foreground flex items-center gap-1">
+                                                Bridge Fee
+                                                {isFeeExpanded ? (
+                                                    <ChevronUp className="h-3 w-3" />
+                                                ) : (
+                                                    <ChevronDown className="h-3 w-3" />
+                                                )}
+                                            </span>
+                                            <span className="font-medium">
+                                                {feeCosts
+                                                    .reduce(
+                                                        (sum, f) => sum + parseFloat(f.percentage),
+                                                        0
+                                                    )
+                                                    .toFixed(4)
+                                                    .replace(/0+$/, '')
+                                                    .replace(/\.$/, '')}
+                                                %
+                                            </span>
+                                        </div>
+                                        {isFeeExpanded && (
+                                            <div className="mt-1 space-y-0.5 pl-2 border-l border-border">
+                                                {feeCosts.map((f, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className="flex justify-between text-muted-foreground"
+                                                    >
+                                                        <span>{f.name}</span>
+                                                        <span>
+                                                            {f.percentage}%{' '}
+                                                            {f.amountUSD &&
+                                                            f.amountUSD !== '0' &&
+                                                            f.amountUSD !== '0.0'
+                                                                ? `($${f.amountUSD})`
+                                                                : ''}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {estimatedDuration != null && (
