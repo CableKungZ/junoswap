@@ -7,7 +7,7 @@
 **The fastest way to trade tokens across multiple chains.**
 Get the best prices across all DEXs with one click. No registration. No KYC. Just connect and swap.
 
-[Swap →](https://v1.cmswap.xyz/swap) · [Earn →](https://v1.cmswap.xyz/earn) · [Documentation →](./architecture.md) · [Discord →](https://discord.gg/k92ReT5EYy)
+[Swap →](https://v1.cmswap.xyz/swap) · [Bridge →](https://v1.cmswap.xyz/bridge) · [Earn →](https://v1.cmswap.xyz/earn) · [Documentation →](./architecture.md) · [Discord →](https://discord.gg/k92ReT5EYy)
 
 ---
 
@@ -21,6 +21,7 @@ Get the best prices across all DEXs with one click. No registration. No KYC. Jus
 ### Features
 
 - Multi-DEX swap with auto best-rate selection
+- Cross-chain bridge via LI.FI (BSC, Base, Worldchain)
 - Liquidity management with concentrated liquidity (V3)
 - LP mining with real-time reward tracking
 - Multi-hop routing for indirect token pairs
@@ -30,14 +31,14 @@ Get the best prices across all DEXs with one click. No registration. No KYC. Jus
 
 ### Supported Chains
 
-| Chain | DEXs | Explorer |
-|-------|------|----------|
-| **KUB Chain** | CMswap V3, Udonswap, Ponder, Diamon | [bkcscan.com](https://www.bkcscan.com) |
-| **JB Chain** | CMswap V3, Jibswap V2 | [exp-l1.jibchain.net](https://exp-l1.jibchain.net) |
-| **KUB Testnet** | CMswap V3 | [testnet.bkcscan.com](https://testnet.bkcscan.com) |
-| **Worldchain** | Uniswap V3 | [explorer.alchemy.com](https://worldchain-mainnet.explorer.alchemy.com) |
-| **Base** | Uniswap V3 | [basescan.org](https://basescan.org) |
-| **BNB Chain** | PancakeSwap V3 | [bscscan.com](https://bscscan.com) |
+| Chain | DEXs | Bridge | Explorer |
+|-------|------|--------|----------|
+| **KUB Chain** | CMswap V3, Udonswap, Ponder, Diamon | | [bkcscan.com](https://www.bkcscan.com) |
+| **JB Chain** | CMswap V3, Jibswap V2 | | [exp-l1.jibchain.net](https://exp-l1.jibchain.net) |
+| **KUB Testnet** | CMswap V3 | | [testnet.bkcscan.com](https://testnet.bkcscan.com) |
+| **Worldchain** | Uniswap V3 | LI.FI | [explorer.alchemy.com](https://worldchain-mainnet.explorer.alchemy.com) |
+| **Base** | Uniswap V3 | LI.FI | [basescan.org](https://basescan.org) |
+| **BNB Chain** | PancakeSwap V3 | LI.FI | [bscscan.com](https://bscscan.com) |
 
 ---
 

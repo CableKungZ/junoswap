@@ -29,7 +29,7 @@ Blockchain Layer
 
 ### Rendering Strategy
 
-**Decision**: Landing page uses SSG (Static Site Generation); all feature pages (Swap, Earn) are client-side only.
+**Decision**: Landing page uses SSG (Static Site Generation); all feature pages (Swap, Bridge, Earn) are client-side only.
 
 **Why**: The landing page needs fast load times and SEO indexing. Feature pages require wallet connection and real-time blockchain state, which can only run in the browser.
 
@@ -65,7 +65,7 @@ Blockchain Layer
 /              # Landing page (SSG)
 /swap          # Swap feature (client-side)
 /earn          # Earn feature: LP positions + mining (client-side)
-/bridge        # Bridge feature (coming)
+/bridge        # Bridge feature (client-side)
 /launchpad     # Launchpad feature (coming)
 /points        # Points feature (coming)
 ```
@@ -115,6 +115,11 @@ components/
     ├── stake-dialog.tsx   # Stake LP position
     ├── unstake-dialog.tsx # Unstake + claim rewards
     └── staked-positions.tsx # User's staked positions
+│
+└── bridge/                # Bridge feature (3 components)
+    ├── bridge-card.tsx    # Main bridge interface
+    ├── bridge-status.tsx  # 3-phase status tracker (polls every 10s)
+    └── chain-select.tsx   # Chain dropdown (filtered to supported chains)
 ```
 
 ---
@@ -297,6 +302,71 @@ User navigates to /earn → Mining tab
 
 ---
 
+## Bridge Feature Architecture
+
+### LI.FI Integration
+
+```
+User selects chains + tokens + amount
+  └─> Debounced (500ms)
+  └─> useBridgeQuote: fetchBridgeRoutes (RECOMMENDED order)
+      └─> Returns ranked routes from LI.FI aggregators
+  └─> Display best route with fees, gas, and estimated time
+  └─> User clicks Bridge
+      └─> Check allowance → Approve if needed
+      └─> executeRoute via LI.FI SDK
+      └─> BridgeStatus: Poll getStatus every 10s
+          ├─> Source phase (tx submitted on fromChain)
+          ├─> Bridging phase (cross-chain relay)
+          └─> Destination phase (funds received on toChain)
+```
+
+**Provider**: LI.FI SDK v3.16.3
+**Supported Chains**: BNB Chain (56), Base (8453), Worldchain (480)
+**Integrator Fee**: 3% (requires LI.FI whitelisting)
+**Default Slippage**: 3% (configurable)
+
+**Config**: `lib/lifi.ts`
+**Services**: `services/bridge/lifi.ts`
+
+### Route Fetching
+
+- Uses `fetchBridgeRoutes` (getRoutes API) with `order: RECOMMENDED` for best-route selection
+- AbortController cancels stale requests when inputs change
+- Extracts fee breakdown, gas cost (USD), and estimated execution duration from route response
+- Quote automatically refetches when chain, token, amount, or slippage changes
+
+**Hook**: `hooks/useBridgeQuote.ts`
+
+### Bridge Execution
+
+- Calls `executeRoute` from LI.FI SDK — SDK handles full tx lifecycle via registered EVM provider
+- Status polling via `getStatus` every 10 seconds with 3-phase tracking:
+  - **Source**: transaction confirmed on origin chain
+  - **Bridging**: cross-chain relay in progress
+  - **Destination**: funds received on target chain
+- Toast notifications on success/failure
+- Unsupported chains show EmptyState with chain-switch prompt
+
+**Hook**: `hooks/useBridgeExecution.ts`
+**Component**: `components/bridge/bridge-status.tsx`
+
+### Features
+
+- Cross-chain token transfers across BSC, Base, and Worldchain
+- Automatic best-route selection via LI.FI aggregation
+- Fee breakdown with gas cost and integrator fee display
+- Estimated execution duration per route
+- Configurable slippage protection
+- 3-phase real-time status tracking with explorer links
+- Direction swap (flip from/to chains and tokens)
+- Unsupported chain detection with switch prompt
+
+**Page**: `app/bridge/page.tsx`
+**Store**: `store/bridge-store.ts`
+
+---
+
 ## State Management
 
 ### Zustand Store
@@ -318,6 +388,16 @@ Manages earn state with:
 - Selected incentive/staked position
 - Settings (hide ended incentives)
 - LocalStorage persistence for settings
+
+**Location**: `store/bridge-store.ts`
+
+Manages bridge state with:
+- Chain selection (fromChainId, toChainId) with direction swap
+- Token selection (fromToken, toToken)
+- Input amount with quote invalidation on change
+- Route quote with loading/error states
+- Settings (slippage)
+- LocalStorage persistence for settings only
 
 ### Caching (TanStack Query)
 
@@ -397,6 +477,7 @@ Vercel Edge
 - `types/routing.ts` - Route types, pool info
 - `types/web3.ts` - Wallet connection types
 - `types/earn.ts` - LP positions, incentives, staking, rewards
+- `types/bridge.ts` - Bridge state, settings, supported chain IDs
 
 ### Services
 - `services/tokens.ts` - Token balances, allowances, approvals
@@ -405,6 +486,7 @@ Vercel Edge
 - `services/mining/incentives.ts` - Incentive status utilities
 - `services/mining/staking.ts` - Staking transaction encoding
 - `services/mining/rewards.ts` - Reward calculation
+- `services/bridge/lifi.ts` - LI.FI quote/routes/execution/status
 
 ### Hooks
 - `hooks/useMultiDexQuotes.ts` - Aggregate all DEX quotes
@@ -425,6 +507,8 @@ Vercel Edge
 - `hooks/useStakedPositions.ts` - Staked positions tracking
 - `hooks/usePendingRewards.ts` - Pending rewards calculation
 - `hooks/useStaking.ts` - Stake/unstake transactions
+- `hooks/useBridgeQuote.ts` - Debounced route fetching with fee/gas breakdown
+- `hooks/useBridgeExecution.ts` - Route execution with status tracking
 
 ### ABIs
 - `lib/abis/erc20.ts` - ERC20 token standard
@@ -454,6 +538,7 @@ Vercel Edge
 
 **Core**: Next.js 15.2, React 19, TypeScript 5.8
 **Web3**: wagmi 2.15, viem 2.25, @tanstack/react-query 5.62
+**Bridge**: @lifi/sdk 3.16.3
 **State**: Zustand 5.0
 **UI**: Radix UI, Tailwind 3.4, lucide-react, framer-motion, sonner
 **Dev**: ESLint 9, Prettier 3.4, Husky 9.1, Vitest 2.1, Playwright 1.49
