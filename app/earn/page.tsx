@@ -1,8 +1,8 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Unplug, Wallet } from 'lucide-react'
+import { Plus, Unplug } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -16,13 +16,14 @@ import { IncreaseLiquidityDialog } from '@/components/positions/increase-liquidi
 import { MiningPools, StakedPositions, StakeDialog, UnstakeDialog } from '@/components/mining'
 import { useEarnStore, useActiveTab } from '@/store/earn-store'
 import { getV3Config } from '@/lib/dex-config'
-import { ConnectButton } from '@/components/web3/connect-button'
+import { ConnectModal } from '@/components/web3/connect-modal'
 
 function EarnContent() {
     const { isConnected } = useAccount()
     const chainId = useChainId()
     const activeTab = useActiveTab()
     const { setActiveTab, openAddLiquidity } = useEarnStore()
+    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     const dexConfig = getV3Config(chainId)
     if (!dexConfig?.positionManager) {
         return (
@@ -37,26 +38,24 @@ function EarnContent() {
             </div>
         )
     }
-    if (!isConnected) {
-        return (
-            <div className="flex min-h-screen items-start justify-center p-4">
-                <div className="w-full max-w-md space-y-4">
-                    <EmptyState
-                        icon={Wallet}
-                        title="Connect Wallet"
-                        description="Connect your wallet to manage liquidity positions."
-                        action={<ConnectButton />}
-                    />
-                </div>
-            </div>
-        )
-    }
     return (
         <div className="flex min-h-screen items-start justify-center p-4 pt-8">
             <div className="w-full max-w-4xl space-y-4">
                 <div className="flex items-center justify-between">
                     <h1 className="text-2xl font-bold">Liquidity</h1>
-                    <Button onClick={() => openAddLiquidity()}>+ New Position</Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            if (!isConnected) {
+                                setIsConnectModalOpen(true)
+                                return
+                            }
+                            openAddLiquidity()
+                        }}
+                    >
+                        <Plus />
+                        New Position
+                    </Button>
                 </div>
                 <Tabs
                     value={activeTab}
@@ -85,6 +84,7 @@ function EarnContent() {
                 <IncreaseLiquidityDialog />
                 <StakeDialog />
                 <UnstakeDialog />
+                <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
             </div>
         </div>
     )

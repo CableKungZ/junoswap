@@ -2,12 +2,13 @@
 
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Droplets } from 'lucide-react'
+import { Droplets, Plus, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ConnectButton } from '@/components/web3/connect-button'
 import { useUserPositions } from '@/hooks/useUserPositions'
 import { useEarnStore, useEarnSettings } from '@/store/earn-store'
 import { formatTokenAmount } from '@/services/tokens'
@@ -117,12 +118,13 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
                     {!isClosed && (
                         <Button
                             size="sm"
-                            variant="default"
+                            variant="outline"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 openIncreaseLiquidity(position)
                             }}
                         >
+                            <Plus />
                             Add
                         </Button>
                     )}
@@ -190,6 +192,16 @@ export function PositionsList() {
         })
         return result
     }, [positions, settings.hideClosedPositions])
+    if (!address) {
+        return (
+            <EmptyState
+                icon={Wallet}
+                title="Connect Wallet"
+                description="Connect your wallet to view your liquidity positions."
+                action={<ConnectButton />}
+            />
+        )
+    }
     if (isLoading) {
         return <LoadingState />
     }
@@ -199,7 +211,12 @@ export function PositionsList() {
                 icon={Droplets}
                 title="No liquidity positions"
                 description="You don't have any liquidity positions yet."
-                action={<Button onClick={() => openAddLiquidity()}>Create Position</Button>}
+                action={
+                    <Button onClick={() => openAddLiquidity()}>
+                        <Plus />
+                        Create Position
+                    </Button>
+                }
             />
         )
     }

@@ -1,13 +1,22 @@
 'use client'
 
-import { useMemo } from 'react'
-import { useChainId } from 'wagmi'
-import { Layers } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useAccount, useChainId } from 'wagmi'
+import { Layers, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ConnectModal } from '@/components/web3/connect-modal'
 import { TOKEN_LISTS } from '@/lib/tokens'
 import { usePoolsForPair } from '@/hooks/usePools'
 import { useEarnStore } from '@/store/earn-store'
@@ -15,74 +24,84 @@ import { formatFeeTier } from '@/lib/liquidity-helpers'
 import type { V3PoolData } from '@/types/earn'
 import type { Token } from '@/types/tokens'
 
-function PoolCard({ pool }: { pool: V3PoolData }) {
+function PoolRow({ pool, onConnect }: { pool: V3PoolData; onConnect: () => void }) {
+    const { isConnected } = useAccount()
     const { openAddLiquidity } = useEarnStore()
     return (
-        <Card>
-            <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="flex -space-x-2">
-                            <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
-                                <AvatarImage src={pool.token0.logo} alt={pool.token0.symbol} />
-                                <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                    {pool.token0.symbol.slice(0, 2)}
-                                </AvatarFallback>
-                            </Avatar>
-                            <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
-                                <AvatarImage src={pool.token1.logo} alt={pool.token1.symbol} />
-                                <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                    {pool.token1.symbol.slice(0, 2)}
-                                </AvatarFallback>
-                            </Avatar>
-                        </div>
-                        <div>
-                            <div className="font-medium">
-                                {pool.token0.symbol} / {pool.token1.symbol}
-                            </div>
-                            <Badge variant="outline" className="mt-1">
-                                {formatFeeTier(pool.fee)}
-                            </Badge>
-                        </div>
+        <TableRow>
+            <TableCell>
+                <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2">
+                        <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
+                            <AvatarImage src={pool.token0.logo} alt={pool.token0.symbol} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                {pool.token0.symbol.slice(0, 2)}
+                            </AvatarFallback>
+                        </Avatar>
+                        <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
+                            <AvatarImage src={pool.token1.logo} alt={pool.token1.symbol} />
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                {pool.token1.symbol.slice(0, 2)}
+                            </AvatarFallback>
+                        </Avatar>
                     </div>
-                    <div className="flex items-center gap-4">
-                        {/* TVL placeholder - would need subgraph data */}
-                        <div className="text-right text-sm">
-                            <div className="text-muted-foreground">Liquidity</div>
-                            <div>{pool.liquidity > 0n ? 'Active' : 'Empty'}</div>
-                        </div>
-                        <Button size="sm" onClick={() => openAddLiquidity(pool)}>
-                            Add
-                        </Button>
-                    </div>
+                    <span className="font-medium">
+                        {pool.token0.symbol} / {pool.token1.symbol}
+                    </span>
                 </div>
-            </CardContent>
-        </Card>
+            </TableCell>
+            <TableCell>
+                <Badge variant="outline">{formatFeeTier(pool.fee)}</Badge>
+            </TableCell>
+            <TableCell>
+                <span className="text-sm">{pool.liquidity > 0n ? 'Active' : 'Empty'}</span>
+            </TableCell>
+            <TableCell className="text-right">
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                        if (!isConnected) {
+                            onConnect()
+                            return
+                        }
+                        openAddLiquidity(pool)
+                    }}
+                >
+                    {isConnected && <Plus />}
+                    {isConnected ? 'Add' : 'Connect Wallet'}
+                </Button>
+            </TableCell>
+        </TableRow>
     )
 }
 
 function LoadingState() {
     return (
-        <div className="space-y-3">
+        <TableBody>
             {[1, 2, 3].map((i) => (
-                <Card key={i}>
-                    <CardContent className="p-4">
-                        <div className="animate-pulse">
-                            <div className="flex items-center gap-3">
-                                <div className="flex -space-x-2">
-                                    <div className="w-8 h-8 rounded-full bg-muted" />
-                                    <div className="w-8 h-8 rounded-full bg-muted" />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="h-4 w-24 bg-muted rounded" />
-                                    <div className="h-3 w-16 bg-muted rounded" />
-                                </div>
+                <TableRow key={i}>
+                    <TableCell>
+                        <div className="flex items-center gap-3">
+                            <div className="flex -space-x-2">
+                                <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+                                <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
                             </div>
+                            <div className="h-4 w-24 bg-muted rounded animate-pulse" />
                         </div>
-                    </CardContent>
-                </Card>
+                    </TableCell>
+                    <TableCell>
+                        <div className="h-5 w-14 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell>
+                        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell>
+                        <div className="h-8 w-20 bg-muted rounded animate-pulse ml-auto" />
+                    </TableCell>
+                </TableRow>
             ))}
-        </div>
+        </TableBody>
     )
 }
 
@@ -136,8 +155,23 @@ function useCommonPools(chainId: number): { pools: V3PoolData[]; isLoading: bool
 export function PoolsList() {
     const chainId = useChainId()
     const { pools, isLoading } = useCommonPools(chainId)
+    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     if (isLoading) {
-        return <LoadingState />
+        return (
+            <Card>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Pool</TableHead>
+                            <TableHead>Fee Tier</TableHead>
+                            <TableHead>Liquidity</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <LoadingState />
+                </Table>
+            </Card>
+        )
     }
     if (pools.length === 0) {
         return (
@@ -149,10 +183,29 @@ export function PoolsList() {
         )
     }
     return (
-        <div className="space-y-3">
-            {pools.map((pool) => (
-                <PoolCard key={pool.address} pool={pool} />
-            ))}
-        </div>
+        <>
+            <Card>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Pool</TableHead>
+                            <TableHead>Fee Tier</TableHead>
+                            <TableHead>Liquidity</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {pools.map((pool) => (
+                            <PoolRow
+                                key={pool.address}
+                                pool={pool}
+                                onConnect={() => setIsConnectModalOpen(true)}
+                            />
+                        ))}
+                    </TableBody>
+                </Table>
+            </Card>
+            <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+        </>
     )
 }

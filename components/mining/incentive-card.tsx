@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { useAccount } from 'wagmi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +9,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Copy } from 'lucide-react'
 import { formatAddress } from '@/lib/utils'
 import { toastSuccess } from '@/lib/toast'
+import { ConnectModal } from '@/components/web3/connect-modal'
 import type { Incentive } from '@/types/earn'
 import { formatTokenAmount } from '@/services/tokens'
 import {
@@ -22,6 +24,8 @@ interface IncentiveCardProps {
 }
 
 export function IncentiveCard({ incentive, onStake }: IncentiveCardProps) {
+    const { isConnected } = useAccount()
+    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     const status = getIncentiveStatus(incentive)
     const progress = getIncentiveProgress(incentive.startTime, incentive.endTime)
     const timeRemaining = formatTimeRemaining(incentive.endTime)
@@ -134,13 +138,26 @@ export function IncentiveCard({ incentive, onStake }: IncentiveCardProps) {
                     </div>
                 )}
                 <Button
-                    onClick={() => onStake(incentive)}
+                    onClick={() => {
+                        if (!isConnected) {
+                            setIsConnectModalOpen(true)
+                            return
+                        }
+                        onStake(incentive)
+                    }}
                     disabled={status === 'ended'}
                     className="w-full"
                     variant={status === 'active' ? 'default' : 'secondary'}
                 >
-                    {status === 'active' ? 'Stake' : status === 'pending' ? 'Coming Soon' : 'Ended'}
+                    {!isConnected
+                        ? 'Connect Wallet'
+                        : status === 'active'
+                          ? 'Stake'
+                          : status === 'pending'
+                            ? 'Coming Soon'
+                            : 'Ended'}
                 </Button>
+                <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
             </CardContent>
         </Card>
     )
