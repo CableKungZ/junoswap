@@ -27,6 +27,7 @@ export function usePositionValue(position: PositionWithTokens | null): {
     currentPrice: string
     priceLower: string
     priceUpper: string
+    currentTick: number
     isLoading: boolean
 } {
     const chainId = useChainId()
@@ -61,6 +62,7 @@ export function usePositionValue(position: PositionWithTokens | null): {
             currentPrice: '0',
             priceLower: '0',
             priceUpper: '0',
+            currentTick: position?.tickLower ?? 0,
             isLoading,
         }
         if (!position) return defaultResult
@@ -106,6 +108,7 @@ export function usePositionValue(position: PositionWithTokens | null): {
             currentPrice,
             priceLower,
             priceUpper,
+            currentTick,
             isLoading,
         }
     }, [position, poolState, isLoading])

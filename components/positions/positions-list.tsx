@@ -2,11 +2,12 @@
 
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Droplets, Plus, Wallet } from 'lucide-react'
+import { Droplets, Minus, Plus, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConnectButton } from '@/components/web3/connect-button'
 import { useUserPositions } from '@/hooks/useUserPositions'
@@ -21,14 +22,15 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
     const isClosed = position.liquidity === 0n
     return (
         <Card
-            className="cursor-pointer hover:bg-accent/50 transition-colors"
+            className="cursor-pointer position-card-hover"
             onClick={() => openPositionDetails(position)}
         >
-            <CardContent className="p-4">
+            <CardContent className="p-5">
+                {/* Header: Pair identity + status */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="flex -space-x-2">
-                            <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
+                            <Avatar className="h-9 w-9 shrink-0 border-2 border-background">
                                 <AvatarImage
                                     src={position.token0Info.logo}
                                     alt={position.token0Info.symbol}
@@ -37,7 +39,7 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
                                     {position.token0Info.symbol.slice(0, 2)}
                                 </AvatarFallback>
                             </Avatar>
-                            <Avatar className="h-8 w-8 shrink-0 border-2 border-background">
+                            <Avatar className="h-9 w-9 shrink-0 border-2 border-background">
                                 <AvatarImage
                                     src={position.token1Info.logo}
                                     alt={position.token1Info.symbol}
@@ -47,84 +49,141 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
                                 </AvatarFallback>
                             </Avatar>
                         </div>
-                        <div>
-                            <div className="font-medium">
+                        <div className="flex items-center gap-2">
+                            <span className="text-base font-semibold">
                                 {position.token0Info.symbol} / {position.token1Info.symbol}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                {(position.fee / 10000).toFixed(2)}% fee
-                            </div>
+                            </span>
+                            <Badge variant="outline" className="text-xs">
+                                {(position.fee / 10000).toFixed(2)}%
+                            </Badge>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                         {isClosed ? (
                             <Badge variant="secondary">Closed</Badge>
                         ) : position.inRange ? (
-                            <Badge variant="default" className="bg-green-600">
+                            <Badge
+                                variant="outline"
+                                className="bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                            >
+                                <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
                                 In Range
                             </Badge>
                         ) : (
-                            <Badge variant="secondary">Out of Range</Badge>
+                            <Badge
+                                variant="outline"
+                                className="bg-amber-500/15 text-amber-400 border-amber-500/25"
+                            >
+                                Out of Range
+                            </Badge>
                         )}
                     </div>
                 </div>
+
+                <Separator className="my-4" />
+
+                {/* Data section */}
                 {!isClosed && (
-                    <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <div className="text-muted-foreground">Pooled</div>
-                            <div>
-                                {formatTokenAmount(position.amount0, position.token0Info.decimals)}{' '}
-                                {position.token0Info.symbol}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Liquidity
                             </div>
-                            <div>
-                                {formatTokenAmount(position.amount1, position.token1Info.decimals)}{' '}
-                                {position.token1Info.symbol}
+                            <div className="space-y-1">
+                                <div>
+                                    <span className="text-sm font-medium font-mono tracking-tight">
+                                        {formatTokenAmount(
+                                            position.amount0,
+                                            position.token0Info.decimals
+                                        )}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                        {position.token0Info.symbol}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-sm font-medium font-mono tracking-tight">
+                                        {formatTokenAmount(
+                                            position.amount1,
+                                            position.token1Info.decimals
+                                        )}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                        {position.token1Info.symbol}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        {hasFees && (
-                            <div>
-                                <div className="text-muted-foreground">Unclaimed Fees</div>
-                                <div>
-                                    {formatTokenAmount(
-                                        position.tokensOwed0,
-                                        position.token0Info.decimals
-                                    )}{' '}
-                                    {position.token0Info.symbol}
-                                </div>
-                                <div>
-                                    {formatTokenAmount(
-                                        position.tokensOwed1,
-                                        position.token1Info.decimals
-                                    )}{' '}
-                                    {position.token1Info.symbol}
-                                </div>
+                        <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                Unclaimed Fees
                             </div>
-                        )}
+                            {hasFees ? (
+                                <div className="space-y-1">
+                                    <div>
+                                        <span className="text-sm font-medium font-mono tracking-tight text-emerald-400">
+                                            {formatTokenAmount(
+                                                position.tokensOwed0,
+                                                position.token0Info.decimals
+                                            )}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground ml-1">
+                                            {position.token0Info.symbol}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-sm font-medium font-mono tracking-tight text-emerald-400">
+                                            {formatTokenAmount(
+                                                position.tokensOwed1,
+                                                position.token1Info.decimals
+                                            )}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground ml-1">
+                                            {position.token1Info.symbol}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-muted-foreground">
+                                    No fees to collect
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
-                <div className="mt-3 flex gap-2 justify-end">
+
+                {isClosed && (
+                    <div className="text-sm text-muted-foreground">
+                        Position has been closed. You may still have unclaimed fees.
+                    </div>
+                )}
+
+                {/* Action buttons */}
+                <Separator className="my-4" />
+                <div className="flex gap-2">
                     {hasFees && (
                         <Button
                             size="sm"
-                            variant="outline"
+                            className="flex-1"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 openCollectFees(position)
                             }}
                         >
-                            Collect
+                            Collect Fees
                         </Button>
                     )}
                     {!isClosed && (
                         <Button
                             size="sm"
                             variant="outline"
+                            className="flex-1"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 openIncreaseLiquidity(position)
                             }}
                         >
-                            <Plus />
+                            <Plus className="h-3.5 w-3.5" />
                             Add
                         </Button>
                     )}
@@ -132,11 +191,13 @@ function PositionCard({ position }: { position: PositionWithTokens }) {
                         <Button
                             size="sm"
                             variant="outline"
+                            className="flex-1"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 openRemoveLiquidity(position)
                             }}
                         >
+                            <Minus className="h-3.5 w-3.5" />
                             Remove
                         </Button>
                     )}
@@ -151,17 +212,43 @@ function LoadingState() {
         <div className="space-y-3">
             {[1, 2, 3].map((i) => (
                 <Card key={i}>
-                    <CardContent className="p-4">
-                        <div className="animate-pulse">
-                            <div className="flex items-center gap-3">
-                                <div className="flex -space-x-2">
-                                    <div className="w-8 h-8 rounded-full bg-muted" />
-                                    <div className="w-8 h-8 rounded-full bg-muted" />
+                    <CardContent className="p-5">
+                        <div className="animate-pulse space-y-4">
+                            {/* Header skeleton */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex -space-x-2">
+                                        <div className="h-9 w-9 rounded-full bg-muted" />
+                                        <div className="h-9 w-9 rounded-full bg-muted" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="h-4 w-28 bg-muted rounded" />
+                                    </div>
+                                </div>
+                                <div className="h-5 w-20 bg-muted rounded-full" />
+                            </div>
+                            {/* Separator */}
+                            <div className="h-[1px] bg-muted" />
+                            {/* Data skeleton */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <div className="h-3 w-16 bg-muted rounded" />
+                                    <div className="h-4 w-24 bg-muted rounded" />
+                                    <div className="h-4 w-20 bg-muted rounded" />
                                 </div>
                                 <div className="space-y-2">
+                                    <div className="h-3 w-20 bg-muted rounded" />
                                     <div className="h-4 w-24 bg-muted rounded" />
-                                    <div className="h-3 w-16 bg-muted rounded" />
+                                    <div className="h-4 w-20 bg-muted rounded" />
                                 </div>
+                            </div>
+                            {/* Range bar skeleton */}
+                            {/* Separator */}
+                            <div className="h-[1px] bg-muted" />
+                            {/* Buttons skeleton */}
+                            <div className="flex gap-2">
+                                <div className="h-8 flex-1 bg-muted rounded" />
+                                <div className="h-8 flex-1 bg-muted rounded" />
                             </div>
                         </div>
                     </CardContent>

@@ -124,17 +124,36 @@ export function RangeSelector({
             </div>
             <div className="h-16 bg-muted rounded-lg flex items-center justify-center">
                 <div className="relative w-full h-2 bg-muted-foreground/20 rounded mx-4">
-                    <div
-                        className="absolute h-full bg-primary rounded"
-                        style={{
-                            left: '20%',
-                            right: '20%',
-                        }}
-                    />
-                    <div
-                        className="absolute w-1 h-4 bg-foreground rounded -top-1"
-                        style={{ left: '50%', transform: 'translateX(-50%)' }}
-                    />
+                    {(() => {
+                        const tickRange = config.tickUpper - config.tickLower
+                        if (tickRange <= 0) return null
+                        const normalizedCurrent = (currentTick - config.tickLower) / tickRange
+                        const padding = 0.1
+                        const trackMin = -padding
+                        const trackMax = 1 + padding
+                        const trackSpan = trackMax - trackMin
+                        const rangeLeftPct = ((0 - trackMin) / trackSpan) * 100
+                        const rangeRightPct = ((1 - trackMin) / trackSpan) * 100
+                        const markerPct = Math.max(
+                            2,
+                            Math.min(98, ((normalizedCurrent - trackMin) / trackSpan) * 100)
+                        )
+                        return (
+                            <>
+                                <div
+                                    className="absolute h-full bg-primary rounded"
+                                    style={{
+                                        left: `${rangeLeftPct}%`,
+                                        right: `${100 - rangeRightPct}%`,
+                                    }}
+                                />
+                                <div
+                                    className="absolute w-1 h-4 bg-foreground rounded -top-1"
+                                    style={{ left: `${markerPct}%`, transform: 'translateX(-50%)' }}
+                                />
+                            </>
+                        )
+                    })()}
                 </div>
             </div>
             {config.tickLower !== config.tickUpper && (

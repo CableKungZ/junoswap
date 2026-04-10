@@ -277,19 +277,49 @@ export function IncreaseLiquidityDialog() {
                                 {selectedPosition.token0Info.symbol}
                             </div>
                             <div className="h-2 bg-muted rounded-full relative overflow-hidden">
-                                <div
-                                    className={`absolute h-full rounded-full transition-colors ${
-                                        inRange ? 'bg-green-600' : 'bg-muted-foreground/30'
-                                    }`}
-                                    style={{
-                                        left: '10%',
-                                        right: '10%',
-                                    }}
-                                />
-                                <div
-                                    className="absolute w-1 h-4 bg-foreground rounded -top-1 z-10"
-                                    style={{ left: '50%', transform: 'translateX(-50%)' }}
-                                />
+                                {(() => {
+                                    const tickLower = selectedPosition.tickLower
+                                    const tickUpper = selectedPosition.tickUpper
+                                    const curTick = pool?.tick ?? tickLower
+                                    const tickRange = tickUpper - tickLower
+                                    if (tickRange <= 0) return null
+                                    const normalizedCurrent = (curTick - tickLower) / tickRange
+                                    const padding = 0.1
+                                    const trackMin = -padding
+                                    const trackMax = 1 + padding
+                                    const trackSpan = trackMax - trackMin
+                                    const rangeLeftPct = ((0 - trackMin) / trackSpan) * 100
+                                    const rangeRightPct = ((1 - trackMin) / trackSpan) * 100
+                                    const markerPct = Math.max(
+                                        2,
+                                        Math.min(
+                                            98,
+                                            ((normalizedCurrent - trackMin) / trackSpan) * 100
+                                        )
+                                    )
+                                    return (
+                                        <>
+                                            <div
+                                                className={`absolute h-full rounded-full transition-colors ${
+                                                    inRange
+                                                        ? 'bg-green-600'
+                                                        : 'bg-muted-foreground/30'
+                                                }`}
+                                                style={{
+                                                    left: `${rangeLeftPct}%`,
+                                                    right: `${100 - rangeRightPct}%`,
+                                                }}
+                                            />
+                                            <div
+                                                className="absolute w-1 h-4 bg-foreground rounded -top-1 z-10"
+                                                style={{
+                                                    left: `${markerPct}%`,
+                                                    transform: 'translateX(-50%)',
+                                                }}
+                                            />
+                                        </>
+                                    )
+                                })()}
                             </div>
                         </CardContent>
                     </Card>
