@@ -10,7 +10,7 @@
         --card-foreground: 0 0% 3.9%;
         --popover: 0 0% 100%;
         --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
+        --primary: 0 100% 60%;
         --primary-foreground: 0 0% 98%;
         --secondary: 0 0% 96.1%;
         --secondary-foreground: 0 0% 9%;
@@ -38,7 +38,7 @@
         --card-foreground: 210 20% 98%;
         --popover: 234 14% 8%;
         --popover-foreground: 210 20% 98%;
-        --primary: 153 96% 44%;
+        --primary: 0 100% 60%;
         --primary-foreground: 230 20% 5%;
         --secondary: 232 12% 10%;
         --secondary-foreground: 210 15% 92%;
@@ -50,7 +50,7 @@
         --destructive-foreground: 210 20% 98%;
         --border: 228 12% 14%;
         --input: 228 12% 14%;
-        --ring: 153 96% 44%;
+        --ring: 0 100% 60%;
         --chart-1: 153 80% 45%;
         --chart-2: 217 75% 55%;
         --chart-3: 270 60% 58%;
@@ -78,17 +78,7 @@
     }
 
     .btn-primary-glow {
-        box-shadow:
-            0 0 0 1px hsl(153 96% 44% / 0.2),
-            0 2px 8px hsl(153 80% 35% / 0.25),
-            0 8px 24px hsl(153 60% 25% / 0.1);
-    }
-
-    .btn-primary-glow:hover {
-        box-shadow:
-            0 0 0 1px hsl(153 96% 50% / 0.3),
-            0 2px 12px hsl(153 80% 40% / 0.3),
-            0 8px 32px hsl(153 60% 30% / 0.15);
+        box-shadow: 0 1px 2px hsl(0 0% 0% / 0.05);
     }
 
     .position-card-hover {
@@ -96,7 +86,7 @@
     }
 
     .position-card-hover:hover {
-        border-color: hsl(153 96% 44% / 0.15);
+        border-color: hsl(0 100% 60% / 0.15);
         box-shadow:
             0 0 0 1px hsl(230 15% 5% / 0.3),
             0 4px 16px hsl(230 25% 3% / 0.3),
@@ -104,6 +94,6 @@
     }
 
     .header-border-glow {
-        box-shadow: 0 1px 0 hsl(153 96% 44% / 0.06);
+        box-shadow: 0 1px 0 hsl(0 100% 60% / 0.06);
     }
 }

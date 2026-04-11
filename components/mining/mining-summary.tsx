@@ -77,7 +77,7 @@ export function MiningSummary() {
                 <CardContent className="p-4 flex items-center gap-3">
                     <div>
                         <div className="text-xs text-muted-foreground">Pending Rewards</div>
-                        <div className="text-xl font-bold text-emerald-400">
+                        <div className="text-xl font-bold">
                             {totalRewards && totalRewards.length > 0
                                 ? totalRewards.map((r) => `${r.formatted} ${r.symbol}`).join(' + ')
                                 : '0'}

@@ -232,7 +232,7 @@ function StakedPositionCard({ stakedPosition, onUnstake }: StakedPositionCardPro
                         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             Pending Rewards
                         </div>
-                        <div className="text-lg font-bold text-emerald-400 font-mono tracking-tight mt-1">
+                        <div className="text-lg font-bold font-mono tracking-tight mt-1">
                             {formattedRewards}
                         </div>
                         <div className="text-xs text-muted-foreground">
