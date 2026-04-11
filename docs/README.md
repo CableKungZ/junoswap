@@ -13,7 +13,7 @@ Get the best prices across all DEXs with one click. No registration. No KYC. Jus
 
 ### Why Junoswap?
 
-- **Best Prices** — Aggregates quotes from 7 DEXs (Junoswap, Uniswap, PancakeSwap, Jibswap, Udonswap, Ponder, Diamon) with smart routing
+- **Best Prices** — Aggregates quotes from 7 DEXs (CMswap, Uniswap, PancakeSwap, Jibswap, Udonswap, Ponder, Diamon) with smart routing
 - **6 Chains** — KUB Chain, JB Chain, Worldchain, Base, BNB Chain, and more from a single interface
 - **Non-Custodial** — Your funds never leave your wallet. Open-source, built with battle-tested smart contracts
 - **Lightning Fast** — Built on Next.js 15 with modern Web3 libraries for instant quotes and fast execution
@@ -33,9 +33,9 @@ Get the best prices across all DEXs with one click. No registration. No KYC. Jus
 
 | Chain | DEXs | Bridge | Explorer |
 |-------|------|--------|----------|
-| **KUB Chain** | Junoswap V3, Udonswap, Ponder, Diamon | | [bkcscan.com](https://www.bkcscan.com) |
-| **JB Chain** | Junoswap V3, Jibswap V2 | | [exp-l1.jibchain.net](https://exp-l1.jibchain.net) |
-| **KUB Testnet** | Junoswap V3 | | [testnet.bkcscan.com](https://testnet.bkcscan.com) |
+| **KUB Chain** | CMswap V3, Udonswap, Ponder, Diamon | | [bkcscan.com](https://www.bkcscan.com) |
+| **JB Chain** | CMswap V3, Jibswap V2 | | [exp-l1.jibchain.net](https://exp-l1.jibchain.net) |
+| **KUB Testnet** | CMswap V3 | | [testnet.bkcscan.com](https://testnet.bkcscan.com) |
 | **Worldchain** | Uniswap V3 | LI.FI | [explorer.alchemy.com](https://worldchain-mainnet.explorer.alchemy.com) |
 | **Base** | Uniswap V3 | LI.FI | [basescan.org](https://basescan.org) |
 | **BNB Chain** | PancakeSwap V3 | LI.FI | [bscscan.com](https://bscscan.com) |

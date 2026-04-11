@@ -62,9 +62,9 @@ Implementation phases and TODO list for Junoswap development.
 
 ### Completed Chain Integrations ✅
 
-- [x] **KUB Testnet** - Junoswap V3
-- [x] **KUB Mainnet** - Junoswap V3, Udonswap V2, Ponder Finance V2, Diamon Finance V2
-- [x] **JB Chain** - Junoswap V3, Jibswap V2
+- [x] **KUB Testnet** - CMswap V3
+- [x] **KUB Mainnet** - CMswap V3, Udonswap V2, Ponder Finance V2, Diamon Finance V2
+- [x] **JB Chain** - CMswap V3, Jibswap V2
 - [x] **Worldchain** - Uniswap V3
 - [x] **Base** - Uniswap V3
 - [x] **BSC** - PancakeSwap V3 (0.25% fee tier)

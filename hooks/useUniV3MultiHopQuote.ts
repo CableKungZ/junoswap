@@ -77,7 +77,7 @@ export function useUniV3MultiHopQuote({
     const targetDexId = useMemo(() => {
         if (dexId) return dexId
         const v3Dexs = getDexsByProtocol(chainId, ProtocolType.V3)
-        return v3Dexs[0] ?? 'junoswap'
+        return v3Dexs[0] ?? 'cmswap'
     }, [dexId, chainId])
     const dexConfig = getV3Config(chainId, targetDexId)
     const wrapOperation = useMemo(() => getWrapOperation(tokenIn, tokenOut), [tokenIn, tokenOut])

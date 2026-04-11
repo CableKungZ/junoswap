@@ -1,4 +1,4 @@
-export type DEXType = 'junoswap' | 'uniswap' | 'sushiswap' | 'pancakeswap' | string
+export type DEXType = 'cmswap' | 'uniswap' | 'sushiswap' | 'pancakeswap' | string
 
 export interface DEXMetadata {
     id: DEXType
@@ -10,13 +10,13 @@ export interface DEXMetadata {
 }
 
 export const DEX_REGISTRY: Record<string, DEXMetadata> = {
-    junoswap: {
-        id: 'junoswap',
-        name: 'junoswap',
-        displayName: 'Junoswap',
+    cmswap: {
+        id: 'cmswap',
+        name: 'cmswap',
+        displayName: 'CMswap',
         icon: 'favicon.ico',
         description: 'Uniswap V3 DEX',
-        website: 'https://junoswap.xyz',
+        website: 'https://cmswap.xyz',
     },
     uniswap: {
         id: 'uniswap',

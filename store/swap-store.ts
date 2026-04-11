@@ -64,7 +64,7 @@ export const useSwapStore = create<SwapStore>()(
             (set, _get) => ({
                 ...initialState,
                 settings: defaultSettings,
-                selectedDex: 'junoswap',
+                selectedDex: 'cmswap',
                 dexQuotes: {},
                 bestQuoteDex: null,
 
