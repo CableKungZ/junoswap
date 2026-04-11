@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, Zap, Shield, TrendingUp } from 'lucide-react'
+import { ArrowRight, Shield, TrendingUp } from 'lucide-react'
 
 export function Hero() {
     return (
@@ -9,15 +9,14 @@ export function Hero() {
             <div className="mx-auto max-w-7xl px-6 lg:px-8">
                 <div className="mx-auto max-w-3xl text-center">
                     <h1 className="text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-                        Swap, Bridge & Launch
+                        Trade, Launch & Win
                         <span className="bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
                             {' '}
                             Everything
                         </span>
                     </h1>
                     <p className="mt-6 text-lg leading-8 text-muted-foreground sm:text-xl">
-                        The ultimate Web3 aggregation platform. Access the best rates across DEXs,
-                        bridge tokens seamlessly, and launch your own memecoin - all in one place.
+                        Best rates. Any chain. One platform.
                     </p>
                     <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
                         <Link href="/swap">
@@ -40,10 +39,6 @@ export function Hero() {
                         <div className="flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-primary" />
                             <span>Best Rates Guaranteed</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Zap className="h-5 w-5 text-primary" />
-                            <span>Lightning Fast</span>
                         </div>
                     </div>
                 </div>

@@ -8,10 +8,19 @@ import { Toaster } from '@/components/ui/sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-    title: 'Junoswap - Multi-Chain Web3 Aggregation Platform',
+    title: 'Junoswap — Web3 Aggregation Platform',
     description:
-        'Swap, Bridge, and Launch tokens across multiple blockchains. Best rates on Ethereum, BSC, Polygon, and more.',
-    keywords: ['DeFi', 'DEX', 'swap', 'bridge', 'launchpad', 'Web3', 'crypto'],
+        'Compare DEX rates across multiple chains. Swap tokens at the best price, bridge instantly, and launch your own memecoin — all on Junoswap.',
+    keywords: [
+        'DeFi',
+        'DEX aggregator',
+        'token swap',
+        'cross-chain bridge',
+        'memecoin launchpad',
+        'Web3',
+        'crypto swap',
+        'best swap rates',
+    ],
     icons: {
         icon: '/favicon.ico',
     },
