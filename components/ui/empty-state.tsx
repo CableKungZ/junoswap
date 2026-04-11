@@ -1,8 +1,7 @@
-import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface EmptyStateProps {
-    icon: LucideIcon
+    icon?: React.ComponentType<{ className?: string }>
     title: string
     description?: string
     action?: React.ReactNode
@@ -26,14 +25,18 @@ export function EmptyState({
                 className
             )}
         >
-            <div
-                className={cn(
-                    'flex items-center justify-center',
-                    compact ? 'mb-1 h-12 w-12' : 'mb-2 h-16 w-16'
-                )}
-            >
-                <Icon className={cn('text-primary shrink-0', compact ? 'h-5 w-5' : 'h-16 w-16')} />
-            </div>
+            {Icon && (
+                <div
+                    className={cn(
+                        'flex items-center justify-center',
+                        compact ? 'mb-1 h-12 w-12' : 'mb-2 h-16 w-16'
+                    )}
+                >
+                    <Icon
+                        className={cn('text-primary shrink-0', compact ? 'h-5 w-5' : 'h-16 w-16')}
+                    />
+                </div>
+            )}
             <h3
                 className={cn(
                     'font-semibold tracking-tight text-foreground',

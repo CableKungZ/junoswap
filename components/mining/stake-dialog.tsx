@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { FileQuestion, Loader2 } from 'lucide-react'
 import {
     Dialog,
     DialogContent,
@@ -146,15 +145,9 @@ export function StakeDialog() {
                     <div className="space-y-3">
                         <Label>Select Position to Stake</Label>
                         {isLoadingPositions ? (
-                            <EmptyState
-                                icon={Loader2}
-                                title="Loading positions..."
-                                compact
-                                className="[&_svg]:animate-spin [&_svg]:text-muted-foreground"
-                            />
+                            <EmptyState title="Loading positions..." compact />
                         ) : eligiblePositions.length === 0 ? (
                             <EmptyState
-                                icon={FileQuestion}
                                 title="No eligible positions"
                                 description="Create an LP position for this pool first."
                                 compact

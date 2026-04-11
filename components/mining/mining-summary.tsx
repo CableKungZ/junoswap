@@ -3,7 +3,6 @@
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { Card, CardContent } from '@/components/ui/card'
-import { Gem, Layers, TrendingUp } from 'lucide-react'
 import { useIncentives } from '@/hooks/useIncentives'
 import { usePositionsByTokenIds } from '@/hooks/useUserPositions'
 import { useStakedPositions } from '@/hooks/useStakedPositions'
@@ -60,9 +59,6 @@ export function MiningSummary() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Gem className="h-4 w-4 text-primary" />
-                    </div>
                     <div>
                         <div className="text-xs text-muted-foreground">Active Mining Pools</div>
                         <div className="text-xl font-bold">{activeCount}</div>
@@ -71,9 +67,6 @@ export function MiningSummary() {
             </Card>
             <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Layers className="h-4 w-4 text-primary" />
-                    </div>
                     <div>
                         <div className="text-xs text-muted-foreground">Your Stakes</div>
                         <div className="text-xl font-bold">{enrichedPositions.length}</div>
@@ -82,9 +75,6 @@ export function MiningSummary() {
             </Card>
             <Card>
                 <CardContent className="p-4 flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <TrendingUp className="h-4 w-4 text-primary" />
-                    </div>
                     <div>
                         <div className="text-xs text-muted-foreground">Pending Rewards</div>
                         <div className="text-xl font-bold text-emerald-400">

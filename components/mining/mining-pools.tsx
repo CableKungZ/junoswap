@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react'
 import { useChainId } from 'wagmi'
-import { Gem, Unplug } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
@@ -77,7 +76,6 @@ export function MiningPools() {
     if (!stakerAddress) {
         return (
             <EmptyState
-                icon={Unplug}
                 title="Not available"
                 description="LP Mining is not available on this chain."
                 compact
@@ -146,7 +144,6 @@ export function MiningPools() {
             </div>
             {filteredIncentives.length === 0 ? (
                 <EmptyState
-                    icon={Gem}
                     title="No active mining incentives"
                     description="Check back later for new rewards programs."
                     compact

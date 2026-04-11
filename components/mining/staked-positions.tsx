@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Coins, Wallet } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -100,7 +99,6 @@ export function StakedPositions() {
     if (!address) {
         return (
             <EmptyState
-                icon={Wallet}
                 title="Connect wallet"
                 description="Connect your wallet to view staked positions."
                 compact
@@ -132,7 +130,6 @@ export function StakedPositions() {
                     <p className="text-sm text-muted-foreground">0 staked positions</p>
                 </div>
                 <EmptyState
-                    icon={Coins}
                     title="No staked positions"
                     description="Stake your LP positions in a mining pool to earn rewards."
                     compact
