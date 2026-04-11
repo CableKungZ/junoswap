@@ -4,13 +4,13 @@ Implementation phases and TODO list for Junoswap development.
 
 ## Project Status
 
-**Current Phase**: Phase 5 - Launchpad Feature (Planning)
+**Current Phase**: Phase 5 - Launchpad Feature (Smart Contracts Complete, Frontend In Progress)
 
 - [x] Phase 1: Foundation ✅
 - [x] Phase 2: Swap Feature & Multi-Chain Expansion ✅
 - [x] Phase 3: Earn Feature ✅
 - [x] Phase 4: Bridge Feature ✅
-- [ ] Phase 5: Launchpad Feature
+- [ ] Phase 5: Launchpad Feature (Smart Contracts ✅)
 - [ ] Phase 6: Points Feature
 - [ ] Phase 7: Polish & Optimization
 - [ ] Phase 8: Advanced Features (Post-MVP)
@@ -100,63 +100,68 @@ Implementation phases and TODO list for Junoswap development.
 ## Phase 5: Launchpad Feature
 
 **Duration**: 2 weeks
-**Goal**: Implement memecoin launch platform
+**Goal**: Implement memecoin launch platform using bonding curve mechanism
+**Architecture**: Pump.fun-style bonding curve with automatic Uniswap V3 pool creation on graduation
 
-### Features
+### Smart Contracts ✅ (COMPLETE)
+
+- [x] Bonding curve launch contract (`PumpCoreNative.sol`)
+  - [x] Token creation with name, symbol, logo, description, and social links
+  - [x] Buy/sell via constant-product bonding curve (1% fee)
+  - [x] Graduation mechanism: migrates liquidity to Uniswap V3 pool when threshold reached
+  - [x] LP tokens sent to burn address (`0xdead`) on graduation
+- [x] ERC20 token contract (`ERC20Token.sol`) — constructor-based minting
+- [x] Deployment script for KUB Testnet (`DeployPumpCoreNative.s.sol`)
+- [x] Comprehensive test suite (`PumpCoreNative.t.sol`) with mock contracts
+
+```solidity
+// contracts/src/
+├── PumpCoreNative.sol         # Bonding curve launch contract ✅
+├── ERC20Token.sol             # Simple ERC20 ✅
+└── interfaces/
+    ├── v3-core/               # Uniswap V3 core interfaces ✅
+    └── v3-periphery/          # Uniswap V3 periphery interfaces ✅
+
+// contracts/script/
+└── DeployPumpCoreNative.s.sol # KUB Testnet deployment ✅
+
+// contracts/test/
+└── PumpCoreNative.t.sol       # Comprehensive test suite ✅
+```
+
+### Frontend (Pending)
 
 - [ ] Token creation form
   - [ ] Token name input
   - [ ] Token symbol input
-  - [ ] Total supply input
   - [ ] Token description
   - [ ] Token image upload
-- [ ] Token deployment
-  - [ ] Deploy ERC20 contract
-  - [ ] Verify contract
-  - [ ] Display deployment status
-- [ ] Liquidity pool creation
-  - [ ] Configure pool parameters
-  - [ ] Create Uniswap V4 pool
-  - [ ] Add initial liquidity
-- [ ] Launch management
-  - [ ] Launch status tracker
-  - [ ] Token page generation
-  - [ ] Social link integration
-
-### Smart Contracts
-
-```solidity
-// contracts/src/ (to be set up when Phase 5 begins)
-├── LaunchpadToken.sol        # ERC20 implementation
-├── LaunchpadFactory.sol      # Factory pattern
-└── interfaces/
-    └── ILaunchpad.sol         # Launchpad interface
-```
+  - [ ] Social link inputs
+- [ ] Token trading interface
+  - [ ] Buy/sell via bonding curve
+  - [ ] Real-time price chart
+  - [ ] Transaction status tracking
+- [ ] Token page
+  - [ ] Token info display
+  - [ ] Graduation status tracker
+  - [ ] Social links display
 
 ### Files to Create
 
 ```
 components/launchpad/
 ├── launch-form.tsx           # Token creation form
+├── token-trade-card.tsx      # Buy/sell bonding curve interface
 ├── deploy-status.tsx         # Deployment progress
-├── pool-config.tsx           # Liquidity pool setup
 └── token-page.tsx            # Deployed token page
 
-contracts/
-├── src/
-│   ├── LaunchpadToken.sol
-│   └── LaunchpadFactory.sol
-├── script/
-│   └── DeployToken.s.sol
-└── test/
-    └── LaunchpadTest.t.sol
-
 services/
-└── uniswap.ts                # Uniswap V4 SDK
+└── launchpad.ts              # PumpCoreNative contract interaction
 
 hooks/
-├── useDeployToken.ts         # Token deployment
-└── useCreatePool.ts          # Pool creation
+├── useCreateToken.ts         # Token creation
+├── useBondingCurve.ts        # Buy/sell on bonding curve
+└── useTokenInfo.ts           # Token data fetching
 
 types/
 └── launchpad.ts              # Launchpad types
@@ -164,13 +169,15 @@ types/
 
 ### TODO
 
-- [ ] Create ERC20 token template
-- [ ] Create deployment scripts
+- [x] Create ERC20 token template
+- [x] Create bonding curve smart contract
+- [x] Create deployment scripts
+- [x] Write comprehensive contract tests
 - [ ] Build launch-form component
-- [ ] Integrate contract deployment
-- [ ] Integrate Uniswap V4 SDK
+- [ ] Build token trading interface
+- [ ] Integrate contract interaction hooks
 - [ ] Add transaction tracking
-- [ ] Test on testnet
+- [ ] Test on KUB Testnet
 - [ ] Security audit (before mainnet)
 
 ---
@@ -448,8 +455,8 @@ types/
 | Phase 1 | ✅ Complete | - | ✅ Complete | Foundation |
 | Phase 2 | ✅ Complete | - | ✅ Complete | Swap & Multi-Chain |
 | Phase 3 | ✅ Complete | - | ✅ Complete | Earn Feature |
-| Phase 4 | 2-3 weeks | TBD | TBD | Bridge (External Aggregator) |
-| Phase 5 | 2 weeks | TBD | TBD | Launchpad Feature |
+| Phase 4 | ✅ Complete | - | ✅ Complete | Bridge (LI.FI SDK) |
+| Phase 5 | 2 weeks | In Progress | TBD | Launchpad (Contracts ✅, Frontend pending) |
 | Phase 6 | 1-2 weeks | TBD | TBD | Points Feature |
 | Phase 7 | 1-2 weeks | TBD | TBD | Polish & Optimization |
 | **MVP Total** | **9-12 weeks** | **TBD** | **TBD** | |
