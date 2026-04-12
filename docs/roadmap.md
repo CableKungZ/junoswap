@@ -4,13 +4,13 @@ Implementation phases and TODO list for Junoswap development.
 
 ## Project Status
 
-**Current Phase**: Phase 5 - Launchpad Feature (Smart Contracts Complete, Frontend In Progress)
+**Current Phase**: Phase 5 - Launchpad Feature (Smart Contracts Complete, Frontend In Progress - KUB Testnet)
 
 - [x] Phase 1: Foundation ✅
 - [x] Phase 2: Swap Feature & Multi-Chain Expansion ✅
 - [x] Phase 3: Earn Feature ✅
 - [x] Phase 4: Bridge Feature ✅
-- [ ] Phase 5: Launchpad Feature (Smart Contracts ✅)
+- [ ] Phase 5: Launchpad Feature (Smart Contracts ✅, Frontend KUB Testnet ✅)
 - [ ] Phase 6: Points Feature
 - [ ] Phase 7: Polish & Optimization
 - [ ] Phase 8: Advanced Features (Post-MVP)
@@ -129,22 +129,30 @@ Implementation phases and TODO list for Junoswap development.
 └── PumpCoreNative.t.sol       # Comprehensive test suite ✅
 ```
 
-### Frontend (Pending)
+### Frontend (KUB Testnet ✅)
 
-- [ ] Token creation form
-  - [ ] Token name input
-  - [ ] Token symbol input
-  - [ ] Token description
-  - [ ] Token image upload
-  - [ ] Social link inputs
-- [ ] Token trading interface
-  - [ ] Buy/sell via bonding curve
-  - [ ] Real-time price chart
-  - [ ] Transaction status tracking
-- [ ] Token page
-  - [ ] Token info display
-  - [ ] Graduation status tracker
-  - [ ] Social links display
+- [x] Token creation form
+  - [x] Token name input
+  - [x] Token symbol input
+  - [x] Token description
+  - [x] Token logo URL input
+  - [x] Social link inputs (Website, Twitter, Telegram)
+- [x] Token trading interface
+  - [x] Buy/sell via bonding curve
+  - [x] Price estimation with slippage protection
+  - [x] Transaction status tracking with toast notifications
+  - [x] ERC20 approval flow for selling
+- [x] Token page
+  - [x] Token info display (name, symbol, logo, creator)
+  - [x] Graduation status tracker with progress bar
+  - [x] Social links display
+  - [x] Market info (market cap, reserves, price)
+- [x] Token discovery
+  - [x] Event-based token list from Creation events
+  - [x] Token cards with graduation progress
+  - [x] Click-through to token detail page
+- [ ] Real-time price chart
+- [ ] Token image upload (IPFS)
 
 ### Files to Create
 
@@ -173,10 +181,10 @@ types/
 - [x] Create bonding curve smart contract
 - [x] Create deployment scripts
 - [x] Write comprehensive contract tests
-- [ ] Build launch-form component
-- [ ] Build token trading interface
-- [ ] Integrate contract interaction hooks
-- [ ] Add transaction tracking
+- [x] Build launch-form component
+- [x] Build token trading interface
+- [x] Integrate contract interaction hooks
+- [x] Add transaction tracking
 - [ ] Test on KUB Testnet
 - [ ] Security audit (before mainnet)
 
