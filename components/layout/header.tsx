@@ -45,7 +45,7 @@ export function Header() {
                         >
                             {/* Drawer header */}
                             <div className="flex items-center space-x-2 mt-2 mb-6">
-                                <Image src="/favicon.ico" alt="junoswap" width={28} height={28} />
+                                <Image src="/logo.svg" alt="junoswap" width={24} height={24} />
                                 <span className="text-lg font-bold">Junoswap</span>
                             </div>
 
@@ -74,7 +74,7 @@ export function Header() {
 
                     {/* Logo */}
                     <Link href="/" className="flex items-center space-x-2">
-                        <Image src="/favicon.ico" alt="junoswap" width={32} height={32} />
+                        <Image src="/logo.svg" alt="junoswap" width={28} height={28} />
                         <span className="hidden md:inline text-xl font-bold">Junoswap</span>
                     </Link>
 
