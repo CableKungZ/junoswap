@@ -143,7 +143,7 @@ components/
 
 | DEX | Priority | Protocol | Chains | Status |
 |-----|----------|----------|--------|--------|
-| CMswap | 1 | Uniswap V3 | KUB Testnet, JBC, KUB Mainnet | ✅ Active |
+| JunoSwap | 1 | Uniswap V3 | KUB Testnet, JBC, KUB Mainnet | ✅ Active |
 | Uniswap | 1 | Uniswap V3 | Worldchain, Base | ✅ Active |
 | PancakeSwap | 1 | PancakeSwap V3 | BSC | ✅ Active |
 | Jibswap | 2 | Uniswap V2 | JBC | ✅ Active |
@@ -153,18 +153,18 @@ components/
 
 **Config**: `lib/dex-config.ts`
 
-**KUB Testnet (CMswap V3)**:
+**KUB Testnet (JunoSwap V3)**:
 - Factory: `0xCBd41F872FD46964bD4Be4d72a8bEBA9D656565b`
 - Quoter: `0x3F64C4Dfd224a102A4d705193a7c40899Cf21fFe`
 - Router: `0x3C5514335dc4E2B0D9e1cc98ddE219c50173c5Be`
 - Fee Tiers: 100, 500, 3000, 10000
 
 **JBC Chain**:
-- CMswap (V3): Factory `0x5835f123bDF137864263bf204Cf4450aAD1Ba3a7`, Quoter `0x5ad32c64A2aEd381299061F32465A22B1f7A2EE2`, Router `0x2174b3346CCEdBB4Faaff5d8088ff60B74909A9d`
+- JunoSwap (V3): Factory `0x5835f123bDF137864263bf204Cf4450aAD1Ba3a7`, Quoter `0x5ad32c64A2aEd381299061F32465A22B1f7A2EE2`, Router `0x2174b3346CCEdBB4Faaff5d8088ff60B74909A9d`
 - Jibswap (V2): Factory `0x4BBdA880C5A0cDcEc6510f0450c6C8bC5773D499`, Router `0x766F8C9321704DC228D43271AF9b7aAB0E529D38`
 
 **KUB Mainnet**:
-- CMswap (V3): Factory `0x090C6E5fF29251B1Ef9EC31605Bdd13351eA316C`, Quoter `0xCB0c6E78519f6B4c1b9623e602E831dEf0f5ff7f`, Router `0x3F7582E36843FF79F173c7DC19f517832496f2D8`
+- JunoSwap (V3): Factory `0x090C6E5fF29251B1Ef9EC31605Bdd13351eA316C`, Quoter `0xCB0c6E78519f6B4c1b9623e602E831dEf0f5ff7f`, Router `0x3F7582E36843FF79F173c7DC19f517832496f2D8`
 - UdonSwap (V2): Factory `0x18c7a4CA020A0c648976208dF2e3AE1BAA32e8d1`, Router `0x7aA32A818cD3a6BcdF827f6a411B7adFF56e7A4A`
 - Ponder Finance (V2): Factory `0x20B17e92Dd1866eC6747ACaA38fe1f7075e4B359E`, Router `0xD19C5cebFa9A8919Cc3db2F19163089feBd9604E`
 - Diamon Finance (V2): Factory `0x6E906Dc4749642a456907deCB323A0065dC6F26E`, Router `0xAb30a29168D792c5e6a54E4bcF1Aec926a3b20FA`
@@ -230,7 +230,7 @@ User inputs amount
 User inputs amount
   └─> Debounced (500ms)
   └─> useMultiDexQuotes: Fetch ALL DEXs in parallel
-      ├─> CMswap V3: Direct + Multi-hop routes
+      ├─> JunoSwap V3: Direct + Multi-hop routes
       ├─> Jibswap V2: Direct + Multi-hop routes
       ├─> UdonSwap V2: Direct + Multi-hop routes
       ├─> Ponder Finance V2: Direct + Multi-hop routes
@@ -243,7 +243,7 @@ User inputs amount
   └─> User clicks Swap → Execute with selected DEX
 ```
 
-**Priority Order**: CMswap (1) → Uniswap (1) → PancakeSwap (1) → Jibswap (2) → UdonSwap (3) → Ponder Finance (4) → Diamon Finance (5)
+**Priority Order**: JunoSwap (1) → Uniswap (1) → PancakeSwap (1) → Jibswap (2) → UdonSwap (3) → Ponder Finance (4) → Diamon Finance (5)
 
 **Config**: `lib/dex-config.ts` - Priority-based DEX registry
 

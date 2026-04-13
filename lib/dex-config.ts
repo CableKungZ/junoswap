@@ -110,8 +110,8 @@ export type FeeTier = (typeof FEE_TIERS)[keyof typeof FEE_TIERS]
  * Unified DEX configuration registry
  */
 export const DEX_CONFIGS_REGISTRY: Record<DEXType, DEXConfiguration> = {
-    cmswap: {
-        dexId: 'cmswap',
+    junoswap: {
+        dexId: 'junoswap',
         defaultProtocol: ProtocolType.V3,
         priority: 1,
         protocols: {
@@ -285,7 +285,7 @@ export const DEX_CONFIGS_REGISTRY: Record<DEXType, DEXConfiguration> = {
  * Get V3 protocol configuration with type narrowing
  */
 export function getV3Config(chainId: number, dexId?: DEXType): V3Config | undefined {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -313,7 +313,7 @@ export function getV3StakerAddress(chainId: number, dexId?: DEXType): Address | 
  * Get V2 protocol configuration with type narrowing
  */
 export function getV2Config(chainId: number, dexId?: DEXType): V2Config | undefined {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -337,7 +337,7 @@ export function getProtocolConfig<T extends ProtocolType>(
     dexId?: DEXType,
     protocolType?: T
 ): Extract<ProtocolConfig, { protocolType: T }> | undefined {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -361,7 +361,7 @@ export function getProtocolConfig<T extends ProtocolType>(
  * Get default protocol configuration for a DEX on a chain
  */
 export function getDexConfig(chainId: number, dexId?: DEXType): ProtocolConfig | undefined {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -384,7 +384,7 @@ export function supportsProtocol(
     protocolType: ProtocolType,
     dexId?: DEXType
 ): boolean {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -404,7 +404,7 @@ export function supportsProtocol(
  * Check if DEX is available on a chain (supports any protocol)
  */
 export function isDexSupported(chainId: number, dexId?: DEXType): boolean {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -423,7 +423,7 @@ export function isDexSupported(chainId: number, dexId?: DEXType): boolean {
  * Get all supported protocols for a DEX on a chain
  */
 export function getSupportedProtocols(chainId: number, dexId?: DEXType): ProtocolType[] {
-    const targetDex = dexId || 'cmswap'
+    const targetDex = dexId || 'junoswap'
     const dexConfig = DEX_CONFIGS_REGISTRY[targetDex]
 
     if (!dexConfig) {
@@ -552,10 +552,10 @@ export const COMMON_FEE_TIERS = [
  * Get the default DEX for a given chain
  * Returns 'pancakeswap' for BSC (uses PancakeSwap V3)
  * Returns 'uniswap' for Worldchain and Base (uses actual Uniswap V3)
- * Returns 'cmswap' for other chains (uses forked/custom deployments)
+ * Returns 'junoswap' for other chains (uses forked/custom deployments)
  */
 export function getDefaultDexForChain(chainId: number): DEXType {
     if (chainId === bsc.id) return 'pancakeswap'
     if (chainId === worldchain.id || chainId === base.id) return 'uniswap'
-    return 'cmswap'
+    return 'junoswap'
 }

@@ -11,7 +11,7 @@ import { useMultiDexQuotes } from '@/hooks/useMultiDexQuotes'
 import { DEX_REGISTRY } from '@/types/dex'
 import { getSupportedDexs } from '@/lib/dex-config'
 import { Switch } from '@/components/ui/switch'
-import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 export function DexSelectCard() {
     const [expanded, setExpanded] = useState(false)
@@ -167,17 +167,6 @@ export function DexSelectCard() {
                                             )}
                                             <div className="mt-2">{renderQuoteInfo(dex.id)}</div>
                                         </div>
-                                        {dex.website && (
-                                            <a
-                                                href={dex.website}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-muted-foreground hover:text-foreground shrink-0"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <ExternalLink className="h-4 w-4" />
-                                            </a>
-                                        )}
                                     </div>
                                 </button>
                             )
