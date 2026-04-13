@@ -16,7 +16,7 @@ import {
 } from '@/services/dex/uniswap-v3'
 import type { SwapRoute } from '@/types/routing'
 import { toastError } from '@/lib/toast'
-import { isNativeToken } from '@/lib/wagmi'
+import { isNativeToken, shouldSkipUnwrap } from '@/lib/wagmi'
 import { getWrapOperation, getWrappedNativeAddress } from '@/services/tokens'
 import { WETH9_ABI } from '@/lib/abis/weth9'
 
@@ -66,6 +66,7 @@ export function useUniV3SwapExecution({
     }, [tokenIn, tokenOut])
     const isNativeInput = isNativeToken(tokenIn.address as Address)
     const isNativeOutput = isNativeToken(tokenOut.address as Address)
+    const skipUnwrap = isNativeOutput && shouldSkipUnwrap(tokenIn.chainId)
     const contractCall = useMemo(() => {
         const swapParams: SwapParams = {
             tokenIn: tokenIn.address as Address,
@@ -101,7 +102,7 @@ export function useUniV3SwapExecution({
 
         const txValue = isNativeInput ? amountIn : undefined
         if (route?.isMultiHop && route.path.length > 2 && route.fees) {
-            if (isNativeOutput) {
+            if (isNativeOutput && !skipUnwrap) {
                 const multicallData = buildMulticallMultiHopSwapToNative(
                     route.path,
                     route.fees,
@@ -131,7 +132,7 @@ export function useUniV3SwapExecution({
                 }
             }
         }
-        if (isNativeOutput) {
+        if (isNativeOutput && !skipUnwrap) {
             const multicallData = buildMulticallSwapToNative(swapParams, fee, tokenIn.chainId)
             return {
                 functionName: 'multicall' as const,
@@ -158,6 +159,7 @@ export function useUniV3SwapExecution({
         fee,
         isNativeInput,
         isNativeOutput,
+        skipUnwrap,
         route,
         skipSimulation,
     ])

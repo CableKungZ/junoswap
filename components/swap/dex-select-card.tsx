@@ -89,9 +89,9 @@ export function DexSelectCard() {
         <div className="space-y-2">
             <Card>
                 <CardContent className="p-4">
-                    <button
+                    <div
                         onClick={toggleExpanded}
-                        className="flex items-center justify-between w-full text-left"
+                        className="flex items-center justify-between w-full text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-2">
                             <Label className="text-muted-foreground">Swap via:</Label>
@@ -125,7 +125,7 @@ export function DexSelectCard() {
                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                             )}
                         </div>
-                    </button>
+                    </div>
                 </CardContent>
             </Card>
             {expanded && (

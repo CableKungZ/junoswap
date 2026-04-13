@@ -11,7 +11,7 @@ import { UNISWAP_V2_ROUTER_ABI } from '@/lib/abis/uniswap-v2-router'
 import { buildV2SwapParams, buildV2MultiHopSwapParams } from '@/services/dex/uniswap-v2'
 import type { SwapRoute } from '@/types/routing'
 import { toastError } from '@/lib/toast'
-import { isNativeToken } from '@/lib/wagmi'
+import { isNativeToken, shouldSkipUnwrap } from '@/lib/wagmi'
 import { getWrapOperation, getWrappedNativeAddress } from '@/services/tokens'
 import { WETH9_ABI } from '@/lib/abis/weth9'
 
@@ -59,6 +59,7 @@ export function useUniV2SwapExecution({
     }, [tokenIn, tokenOut])
     const isNativeInput = isNativeToken(tokenIn.address as Address)
     const isNativeOutput = isNativeToken(tokenOut.address as Address)
+    const skipUnwrap = isNativeOutput && shouldSkipUnwrap(tokenIn.chainId)
     const swapParams = useMemo(() => {
         if (route?.isMultiHop && route.path.length > 2) {
             return buildV2MultiHopSwapParams(
@@ -127,7 +128,7 @@ export function useUniV2SwapExecution({
                 ] as const,
                 value: amountIn,
             }
-        } else if (isNativeOutput) {
+        } else if (isNativeOutput && !skipUnwrap) {
             return {
                 functionName: 'swapExactTokensForETH' as const,
                 args: [
@@ -160,6 +161,7 @@ export function useUniV2SwapExecution({
         swapParams,
         isNativeInput,
         isNativeOutput,
+        skipUnwrap,
         skipSimulation,
     ])
     const {

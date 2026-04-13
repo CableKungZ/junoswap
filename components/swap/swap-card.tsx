@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useRef, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { parseUnits, formatUnits } from 'viem'
+import { parseUnits, formatUnits, type Address } from 'viem'
 import type { Token } from '@/types/tokens'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -29,7 +29,8 @@ import { ArrowDownUp, ArrowRightLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { isSameToken, getWrapOperation } from '@/services/tokens'
 import { isValidNumberInput } from '@/lib/utils'
-import { getChainMetadata } from '@/lib/wagmi'
+import { getChainMetadata, isNativeToken, shouldSkipUnwrap } from '@/lib/wagmi'
+import { useKkubUnwrap } from '@/hooks/useKkubUnwrap'
 
 export interface SwapCardProps {
     tokens?: Token[]
@@ -196,6 +197,8 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
         if (wrapOp === 'unwrap') return false
         return needsApproval
     }, [needsApproval, wrapOp])
+    const isKubUnwrapDirect = !!wrapOp && wrapOp === 'unwrap' && shouldSkipUnwrap(chainId)
+    const skipSwapSimulation = needsApprovalCheck || isKubUnwrapDirect
     const v3Swap = useUniV3SwapExecution({
         tokenIn: tokenIn ?? tokens[0]!,
         tokenOut: tokenOut ?? tokens[1] ?? tokens[0]!,
@@ -206,7 +209,7 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
         deadlineMinutes: settings.deadlineMinutes,
         fee,
         route: selectedDexRoute?.route,
-        skipSimulation: needsApprovalCheck,
+        skipSimulation: skipSwapSimulation,
     })
     const v2Swap = useUniV2SwapExecution({
         tokenIn: tokenIn ?? tokens[0]!,
@@ -217,7 +220,7 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
         slippage: settings.slippage,
         deadlineMinutes: settings.deadlineMinutes,
         route: selectedDexRoute?.route,
-        skipSimulation: needsApprovalCheck,
+        skipSimulation: skipSwapSimulation,
     })
     const {
         swap,
@@ -230,18 +233,44 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
         hash: swapHash,
         simulationError,
     } = isV2Protocol ? v2Swap : v3Swap
+    const isNativeOutput = !!tokenOut && isNativeToken(tokenOut.address as Address)
+    const skipUnwrap = (!!isNativeOutput || isKubUnwrapDirect) && shouldSkipUnwrap(chainId)
+    const {
+        startUnwrap,
+        reset: resetUnwrap,
+        isApproving: isApprovingUnwrap,
+        isConfirmingApproval: isConfirmingUnwrapApproval,
+        isWithdrawing,
+        isConfirmingWithdraw,
+        isUnwrapping,
+        isSuccess: isUnwrapSuccess,
+        isError: isUnwrapError,
+        unwrapHash,
+    } = useKkubUnwrap({
+        chainId,
+        amount: isKubUnwrapDirect ? amountInBigInt : amountOutMinimum,
+        owner: address,
+    })
+    // Auto-trigger KKUB unwrap after swap delivers KKUB on KUB chain
+    useEffect(() => {
+        if (isSuccess && skipUnwrap && !isUnwrapping && !isUnwrapSuccess && !isUnwrapError) {
+            startUnwrap()
+        }
+    }, [isSuccess, skipUnwrap, isUnwrapping, isUnwrapSuccess, isUnwrapError, startUnwrap])
     useEffect(() => {
         if (simulationError) {
             toastError(simulationError, 'Simulation failed')
         }
     }, [simulationError])
     useEffect(() => {
-        if (isSuccess && swapHash) {
+        const finalSuccess = skipUnwrap ? isUnwrapSuccess : isSuccess
+        const finalHash = skipUnwrap ? unwrapHash : swapHash
+        if (finalSuccess && finalHash) {
             const meta = getChainMetadata(chainId)
             const explorerUrl = meta?.explorer
-                ? `${meta.explorer}/tx/${swapHash}`
-                : `https://etherscan.io/tx/${swapHash}`
-            toast.success('Swap successful!', {
+                ? `${meta.explorer}/tx/${finalHash}`
+                : `https://etherscan.io/tx/${finalHash}`
+            toast.success(isKubUnwrapDirect ? 'Unwrap successful!' : 'Swap successful!', {
                 action: {
                     label: 'View Transaction',
                     onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
@@ -250,7 +279,22 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
             refetchBalanceIn?.()
             refetchBalanceOut?.()
         }
-    }, [isSuccess, swapHash, chainId, refetchBalanceIn, refetchBalanceOut])
+    }, [
+        skipUnwrap,
+        isKubUnwrapDirect,
+        isSuccess,
+        isUnwrapSuccess,
+        swapHash,
+        unwrapHash,
+        chainId,
+        refetchBalanceIn,
+        refetchBalanceOut,
+    ])
+    useEffect(() => {
+        if (isUnwrapError) {
+            toastError('KKUB unwrap failed. You received KKUB instead of KUB.')
+        }
+    }, [isUnwrapError])
     useEffect(() => {
         if (swapIsError && swapError) {
             toastError(swapError, 'Swap failed')
@@ -487,10 +531,13 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
                             !tokenOut ||
                             isQuoteLoading ||
                             isSameTokenSwap ||
-                            (isPreparing && !needsApprovalCheck) ||
-                            isExecuting ||
-                            (needsApprovalCheck && (isApproving || isConfirmingApproval)) ||
-                            (amountInBigInt > 0n && amountInBigInt > balanceInValue)
+                            (isKubUnwrapDirect
+                                ? isUnwrapping
+                                : (isPreparing && !needsApprovalCheck) ||
+                                  isExecuting ||
+                                  (needsApprovalCheck && (isApproving || isConfirmingApproval))) ||
+                            (amountInBigInt > 0n && amountInBigInt > balanceInValue) ||
+                            (!isKubUnwrapDirect && isUnwrapping)
                         }
                         onClick={() => {
                             if (!isConnected) {
@@ -499,7 +546,10 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
                             }
                             if (needsApprovalCheck) {
                                 approve()
+                            } else if (isKubUnwrapDirect) {
+                                if (!isUnwrapping && !isUnwrapSuccess) startUnwrap()
                             } else if (!isPreparing) {
+                                if (skipUnwrap) resetUnwrap()
                                 swap()
                             }
                         }}
@@ -511,34 +561,56 @@ export function SwapCard({ tokens: tokensOverride }: SwapCardProps) {
                               : amountInBigInt > 0n && amountInBigInt > balanceInValue
                                 ? 'Insufficient Balance'
                                 : isWrapUnwrap
-                                  ? isPreparing
-                                      ? 'Simulating...'
-                                      : isExecuting
-                                        ? wrapOperation === 'wrap'
-                                            ? 'Wrapping...'
-                                            : 'Unwrapping...'
-                                        : isConfirmingSwap
-                                          ? 'Confirming...'
-                                          : wrapOperation === 'wrap'
-                                            ? 'Wrap KUB'
-                                            : 'Unwrap tKKUB'
-                                  : needsApprovalCheck
-                                    ? isApproving
-                                        ? 'Approving...'
-                                        : isConfirmingApproval
-                                          ? 'Confirming...'
-                                          : `Approve ${tokenIn?.symbol || 'Token'}`
-                                    : isPreparing
-                                      ? 'Simulating...'
-                                      : isExecuting
-                                        ? 'Swapping...'
-                                        : isConfirmingSwap
-                                          ? 'Confirming...'
-                                          : isQuoteLoading
-                                            ? 'Fetching Quote...'
-                                            : tokenIn && tokenOut
-                                              ? 'Swap'
-                                              : 'Select Tokens'}
+                                  ? wrapOperation === 'unwrap' && isKubUnwrapDirect
+                                      ? isApprovingUnwrap
+                                          ? 'Approving KKUB...'
+                                          : isConfirmingUnwrapApproval
+                                            ? 'Confirming Approval...'
+                                            : isWithdrawing
+                                              ? 'Withdrawing KKUB...'
+                                              : isConfirmingWithdraw
+                                                ? 'Confirming...'
+                                                : isUnwrapSuccess
+                                                  ? 'Unwrapped!'
+                                                  : 'Unwrap KKUB'
+                                      : isPreparing
+                                        ? 'Simulating...'
+                                        : isExecuting
+                                          ? wrapOperation === 'wrap'
+                                              ? 'Wrapping...'
+                                              : 'Unwrapping...'
+                                          : isConfirmingSwap
+                                            ? 'Confirming...'
+                                            : wrapOperation === 'wrap'
+                                              ? 'Wrap KUB'
+                                              : 'Unwrap tKKUB'
+                                  : isUnwrapping
+                                    ? isApprovingUnwrap
+                                        ? 'Approving KKUB...'
+                                        : isConfirmingUnwrapApproval
+                                          ? 'Confirming Approval...'
+                                          : isWithdrawing
+                                            ? 'Withdrawing KKUB...'
+                                            : isConfirmingWithdraw
+                                              ? 'Confirming...'
+                                              : 'Unwrapping...'
+                                    : needsApprovalCheck
+                                      ? isApproving
+                                          ? 'Approving...'
+                                          : isConfirmingApproval
+                                            ? 'Confirming...'
+                                            : `Approve ${tokenIn?.symbol || 'Token'}`
+                                      : isPreparing
+                                        ? 'Simulating...'
+                                        : isExecuting
+                                          ? 'Swapping...'
+                                          : isConfirmingSwap
+                                            ? 'Confirming...'
+                                            : isQuoteLoading
+                                              ? 'Fetching Quote...'
+                                              : tokenIn && tokenOut
+                                                ? 'Swap'
+                                                : 'Select Tokens'}
                     </Button>
                 </div>
                 <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
