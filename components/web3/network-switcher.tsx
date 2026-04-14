@@ -1,35 +1,209 @@
 'use client'
 
 import Image from 'next/image'
-import { Fragment } from 'react'
+import { useState, useMemo } from 'react'
 import { useChainId, useSwitchChain } from 'wagmi'
-import { supportedChains, getChainMetadata } from '@/lib/wagmi'
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Loader2, ChevronDown } from 'lucide-react'
+import { supportedChains, getChainMetadata, kubTestnet } from '@/lib/wagmi'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Loader2, ChevronDown, Search, Check } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
 
-export function NetworkSwitcher({ className = '' }: { className?: string }) {
+const TESTNET_IDS: Set<number> = new Set([kubTestnet.id])
+
+interface NetworkSwitcherModalProps {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+}
+
+function NetworkSwitcherModal({ open, onOpenChange }: NetworkSwitcherModalProps) {
     const chainId = useChainId()
-    const { switchChain, isPending } = useSwitchChain()
-    const currentChain = getChainMetadata(chainId)
-    const handleSwitchChain = async (targetChainId: number) => {
-        if (targetChainId === chainId) return
-        try {
-            await switchChain({ chainId: targetChainId })
-            const meta = getChainMetadata(targetChainId)
-            toastSuccess(`Switched to ${meta?.name || 'unknown network'}`)
-        } catch {
-            toastError('Failed to switch network')
+    const { switchChain } = useSwitchChain()
+    const [searchQuery, setSearchQuery] = useState('')
+    const [pendingChainId, setPendingChainId] = useState<number | null>(null)
+
+    const { mainnets, testnets } = useMemo(() => {
+        const query = searchQuery.toLowerCase().trim()
+
+        const matches = (chain: (typeof supportedChains)[number]) => {
+            const meta = getChainMetadata(chain.id)
+            if (!meta) return false
+            if (!query) return true
+            return (
+                meta.name.toLowerCase().includes(query) || meta.symbol.toLowerCase().includes(query)
+            )
+        }
+
+        return {
+            mainnets: supportedChains.filter((c) => matches(c) && !TESTNET_IDS.has(c.id)),
+            testnets: supportedChains.filter((c) => matches(c) && TESTNET_IDS.has(c.id)),
+        }
+    }, [searchQuery])
+
+    const hasResults = mainnets.length > 0 || testnets.length > 0
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        onOpenChange(nextOpen)
+        if (!nextOpen) {
+            setSearchQuery('')
+            setPendingChainId(null)
         }
     }
+
+    const handleSwitchChain = (targetChainId: number) => {
+        if (targetChainId === chainId) return
+        setPendingChainId(targetChainId)
+        switchChain(
+            { chainId: targetChainId },
+            {
+                onSuccess: () => {
+                    const meta = getChainMetadata(targetChainId)
+                    toastSuccess(`Switched to ${meta?.name || 'unknown network'}`)
+                    handleOpenChange(false)
+                },
+                onError: () => {
+                    toastError('Failed to switch network')
+                },
+                onSettled: () => {
+                    setPendingChainId(null)
+                },
+            }
+        )
+    }
+
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent
+                className="sm:max-w-md bg-card/95 backdrop-blur-md border-border/50 card-glow"
+                aria-describedby="network-switch-description"
+            >
+                <DialogHeader>
+                    <DialogTitle className="text-lg">Select Network</DialogTitle>
+                </DialogHeader>
+
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search chains..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 bg-muted/30 border-border/50"
+                        autoFocus
+                    />
+                </div>
+
+                <div className="max-h-[400px] overflow-y-auto space-y-4">
+                    {mainnets.length > 0 && (
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground/70 px-1 uppercase tracking-wider">
+                                Mainnets
+                            </p>
+                            {mainnets.map((chain) => (
+                                <ChainItem
+                                    key={chain.id}
+                                    chainId={chain.id}
+                                    currentChainId={chainId}
+                                    pendingChainId={pendingChainId}
+                                    onSelect={handleSwitchChain}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {mainnets.length > 0 && testnets.length > 0 && <Separator />}
+
+                    {testnets.length > 0 && (
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground/70 px-1 uppercase tracking-wider">
+                                Testnets
+                            </p>
+                            {testnets.map((chain) => (
+                                <ChainItem
+                                    key={chain.id}
+                                    chainId={chain.id}
+                                    currentChainId={chainId}
+                                    pendingChainId={pendingChainId}
+                                    onSelect={handleSwitchChain}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {!hasResults && (
+                        <div className="flex flex-col items-center justify-center py-8 gap-2">
+                            <Search className="h-8 w-8 text-muted-foreground/50" />
+                            <p className="text-sm text-muted-foreground">No chains found</p>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+interface ChainItemProps {
+    chainId: number
+    currentChainId: number
+    pendingChainId: number | null
+    onSelect: (chainId: number) => void
+}
+
+function ChainItem({ chainId, currentChainId, pendingChainId, onSelect }: ChainItemProps) {
+    const meta = getChainMetadata(chainId)
+    if (!meta) return null
+
+    const isActive = chainId === currentChainId
+    const isPending = pendingChainId === chainId
+
+    return (
+        <button
+            onClick={() => onSelect(chainId)}
+            disabled={isActive || isPending}
+            className={`flex items-center gap-3 w-full px-3 py-3 rounded-xl transition-all duration-150 ${
+                isActive
+                    ? 'bg-primary/5 border border-primary/20 shadow-[0_0_0_1px_hsl(0_100%_60%/0.08),0_0_12px_hsl(0_100%_60%/0.06)]'
+                    : 'border border-transparent hover:bg-muted/50'
+            } disabled:cursor-not-allowed`}
+            aria-label={`Switch to ${meta.name}`}
+        >
+            <div
+                className={`relative h-8 w-8 flex-shrink-0 rounded-full ${isActive ? 'ring-2 ring-primary/30' : ''}`}
+            >
+                <Image src={meta.icon} alt={meta.name} fill className="rounded-full object-cover" />
+            </div>
+            <div className="flex-1 text-left">
+                <div
+                    className={`text-sm ${isActive ? 'font-semibold text-primary' : 'font-medium'}`}
+                >
+                    {meta.name}
+                </div>
+                <div
+                    className={`text-xs ${isActive ? 'text-primary/60' : 'text-muted-foreground'}`}
+                >
+                    {meta.symbol}
+                </div>
+            </div>
+            {isPending && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            {isActive && !isPending && (
+                <div className="flex items-center justify-center h-5 w-5 rounded-full bg-primary/10">
+                    <Check className="h-3 w-3 text-primary" />
+                </div>
+            )}
+        </button>
+    )
+}
+
+export function NetworkSwitcher({ className = '' }: { className?: string }) {
+    const [isModalOpen, setIsModalOpen] = useState(false)
+    const chainId = useChainId()
+    const { isPending } = useSwitchChain()
+    const currentChain = getChainMetadata(chainId)
+
+    return (
+        <>
+            <button
+                onClick={() => setIsModalOpen(true)}
                 aria-label="Select network"
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors ${className}`}
             >
@@ -50,42 +224,8 @@ export function NetworkSwitcher({ className = '' }: { className?: string }) {
                         )}
                     </>
                 )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-                align="end"
-                className="w-56 bg-card/95 backdrop-blur-md border-border/50"
-            >
-                {supportedChains.map((chain) => {
-                    const meta = getChainMetadata(chain.id)
-                    if (!meta) return null
-                    const isActive = chain.id === chainId
-                    return (
-                        <Fragment key={chain.id}>
-                            <DropdownMenuItem
-                                onClick={() => handleSwitchChain(chain.id)}
-                                disabled={isPending || isActive}
-                                className="flex items-center gap-3 cursor-pointer"
-                            >
-                                <div className="relative h-5 w-5 flex-shrink-0">
-                                    <Image
-                                        src={meta.icon}
-                                        alt={meta.name}
-                                        fill
-                                        className="rounded-full object-cover"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="font-medium">{meta.name}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                        {meta.symbol}
-                                    </div>
-                                </div>
-                                {isActive && <div className="h-2 w-2 rounded-full bg-primary" />}
-                            </DropdownMenuItem>
-                        </Fragment>
-                    )
-                })}
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </button>
+            <NetworkSwitcherModal open={isModalOpen} onOpenChange={setIsModalOpen} />
+        </>
     )
 }
