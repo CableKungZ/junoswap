@@ -3,13 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAccount, usePublicClient } from 'wagmi'
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,15 +12,20 @@ import { useLaunchpadStore } from '@/store/launchpad-store'
 import { useCreateToken } from '@/hooks/useCreateToken'
 import { PUMP_CORE_NATIVE_ADDRESS, PUMP_CORE_NATIVE_CHAIN_ID } from '@/lib/abis/pump-core-native'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { uploadToPinata } from '@/app/actions/upload-to-pinata'
 import { getChainMetadata } from '@/lib/wagmi'
 import type { CreateTokenForm } from '@/types/launchpad'
-import { Globe, Twitter, MessageCircle, ImageIcon, Coins, Loader2 } from 'lucide-react'
+import { Globe, Twitter, MessageCircle, Loader2 } from 'lucide-react'
+import { LogoUpload } from './logo-upload'
 
 export function CreateTokenDialog() {
     const router = useRouter()
     const { isConnected } = useAccount()
     const publicClient = usePublicClient({ chainId: PUMP_CORE_NATIVE_CHAIN_ID })
     const { isCreateDialogOpen, setIsCreateDialogOpen } = useLaunchpadStore()
+
+    const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
+    const [uploadingLogo, setUploadingLogo] = useState(false)
 
     const [form, setForm] = useState<CreateTokenForm>({
         name: '',
@@ -104,36 +103,56 @@ export function CreateTokenDialog() {
         setForm((prev) => ({ ...prev, [field]: value }))
     }
 
+    const handleCreate = async () => {
+        let logoUrl = form.logo
+
+        if (pendingLogoFile) {
+            setUploadingLogo(true)
+            const fd = new FormData()
+            fd.append('file', pendingLogoFile)
+            const result = await uploadToPinata(fd)
+            setUploadingLogo(false)
+
+            if (!result.success) {
+                toastError(new Error(result.error), 'Logo upload failed')
+                return
+            }
+
+            logoUrl = result.url
+            setForm((prev) => ({ ...prev, logo: result.url }))
+            setPendingLogoFile(null)
+        }
+
+        create(logoUrl)
+    }
+
     const getButtonText = () => {
         if (!isConnected) return 'Connect Wallet'
         if (!form.name.trim() || !form.symbol.trim()) return 'Enter Name & Symbol'
+        if (uploadingLogo) return 'Uploading logo...'
         if (isExecuting) return 'Creating...'
         if (isConfirming) return 'Confirming...'
         return 'Create Token'
     }
 
     const isButtonDisabled =
-        !isConnected || !form.name.trim() || !form.symbol.trim() || isExecuting || isConfirming
+        !isConnected ||
+        !form.name.trim() ||
+        !form.symbol.trim() ||
+        uploadingLogo ||
+        isExecuting ||
+        isConfirming
 
     return (
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl">
-                        <Coins className="h-5 w-5 text-primary" />
-                        Create Token
-                    </DialogTitle>
-                    <DialogDescription>
-                        Launch your own token on the bonding curve.
-                    </DialogDescription>
+                    <DialogTitle className="text-xl">Create Token</DialogTitle>
                 </DialogHeader>
 
                 <div className="space-y-5">
                     {/* Token Identity */}
                     <div>
-                        <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-                            Token Identity
-                        </h3>
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
                                 <Label htmlFor="token-name">Name *</Label>
@@ -161,19 +180,10 @@ export function CreateTokenDialog() {
 
                     {/* Logo & Description */}
                     <div>
-                        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Details</h3>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <Label htmlFor="token-logo" className="flex items-center gap-1.5">
-                                    <ImageIcon className="h-3.5 w-3.5" />
-                                    Logo URL
-                                </Label>
-                                <Input
-                                    id="token-logo"
-                                    placeholder="https://..."
-                                    value={form.logo}
-                                    onChange={(e) => updateField('logo', e.target.value)}
-                                />
+                                <Label>Logo</Label>
+                                <LogoUpload onFileSelect={setPendingLogoFile} />
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="token-description">Description</Label>
@@ -243,7 +253,7 @@ export function CreateTokenDialog() {
                         </div>
                     </div>
 
-                    <Button className="w-full" onClick={create} disabled={isButtonDisabled}>
+                    <Button className="w-full" onClick={handleCreate} disabled={isButtonDisabled}>
                         {(isExecuting || isConfirming) && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         )}

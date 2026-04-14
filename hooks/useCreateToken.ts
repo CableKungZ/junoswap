@@ -16,7 +16,7 @@ interface UseCreateTokenParams {
 }
 
 interface UseCreateTokenResult {
-    create: () => void
+    create: (logoOverride?: string) => void
     isPreparing: boolean
     isExecuting: boolean
     isConfirming: boolean
@@ -85,7 +85,7 @@ export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenRe
         if (!hash) setCreatedTokenAddress(null)
     }, [hash])
 
-    const create = () => {
+    const create = (logoOverride?: string) => {
         if (!form || totalFee === 0n) return
         setCreatedTokenAddress(null)
         writeContract({
@@ -95,7 +95,7 @@ export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenRe
             args: [
                 form.name,
                 form.symbol,
-                form.logo,
+                logoOverride ?? form.logo,
                 form.description,
                 form.link1,
                 form.link2,
