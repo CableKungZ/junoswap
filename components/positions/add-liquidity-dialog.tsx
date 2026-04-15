@@ -4,8 +4,8 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Loader2, ArrowUpDown } from 'lucide-react'
 import { RangeSelector } from './range-selector'
 import { TokenSelect } from '@/components/swap/token-select'
 import { useEarnStore, useRangeConfig } from '@/store/earn-store'
@@ -298,6 +298,7 @@ export function AddLiquidityDialog() {
         }
     }
     const getButtonText = () => {
+        if (!address) return 'Connect Wallet'
         if (isApproving0) return `Approving ${token0?.symbol}...`
         if (isConfirming0) return `Confirming ${token0?.symbol} approval...`
         if (isApproving1) return `Approving ${token1?.symbol}...`
@@ -318,119 +319,234 @@ export function AddLiquidityDialog() {
         if (!pool && !initialSqrtPriceX96) return true
         return false
     }
+
+    const handleSwapTokens = () => {
+        if (!token0 || !token1) return
+        const prevToken0 = token0
+        const prevAmount0 = amount0
+        setToken0(token1)
+        setToken1(prevToken0)
+        setAmount0(amount1)
+        setAmount1(prevAmount0)
+        if (activeInput === 'token0') setActiveInput('token1')
+        else if (activeInput === 'token1') setActiveInput('token0')
+    }
+
     return (
         <Dialog open={isAddLiquidityOpen} onOpenChange={closeAddLiquidity}>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] bg-card/95 backdrop-blur-md border-border/50 card-glow">
                 <DialogHeader>
-                    <DialogTitle>Add Liquidity</DialogTitle>
+                    <DialogTitle className="text-lg">Add Liquidity</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-6">
-                    <div className="grid grid-cols-2">
-                        <TokenSelect
-                            token={token0}
-                            tokens={TOKEN_LISTS[chainId] ?? []}
-                            onSelect={setToken0}
-                        />
-                        <TokenSelect
-                            token={token1}
-                            tokens={TOKEN_LISTS[chainId] ?? []}
-                            onSelect={setToken1}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Fee Tier</Label>
+                <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)] pr-1">
+                    {/* Pair & Fee Panel */}
+                    <div className="rounded-2xl bg-muted/20 border border-border/30 p-4 space-y-4">
+                        {/* Token Pair */}
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                                <TokenSelect
+                                    token={token0}
+                                    tokens={TOKEN_LISTS[chainId] ?? []}
+                                    onSelect={setToken0}
+                                    className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleSwapTokens}
+                                className="shrink-0 h-11 w-11 flex items-center justify-center rounded-xl bg-background/60 border border-border/30 hover:bg-background/80 hover:border-border/50 transition-all duration-150"
+                            >
+                                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                            <div className="flex-1">
+                                <TokenSelect
+                                    token={token1}
+                                    tokens={TOKEN_LISTS[chainId] ?? []}
+                                    onSelect={setToken1}
+                                    className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Fee Tier */}
                         <div className="grid grid-cols-4 gap-2">
                             {FEE_OPTIONS.map((option) => (
-                                <Button
+                                <button
                                     key={option.value}
                                     type="button"
-                                    size="sm"
-                                    variant={fee === option.value ? 'default' : 'outline'}
                                     onClick={() => setFee(option.value)}
-                                    className="flex flex-col h-auto py-2"
+                                    className={`flex flex-col items-center gap-0.5 py-2.5 px-1 rounded-xl text-center transition-all duration-150 ${
+                                        fee === option.value
+                                            ? 'bg-foreground/8 ring-1 ring-foreground/15'
+                                            : 'bg-background/40 hover:bg-background/60'
+                                    }`}
                                 >
-                                    <span>{option.label}</span>
-                                </Button>
+                                    <span
+                                        className={`text-xs font-semibold ${
+                                            fee === option.value
+                                                ? 'text-foreground'
+                                                : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        {option.label}
+                                    </span>
+                                    <span className="text-[9px] leading-tight text-muted-foreground/60">
+                                        {option.description}
+                                    </span>
+                                </button>
                             ))}
                         </div>
                     </div>
+
+                    {/* Range Selector */}
                     {token0 && token1 && (pool || derivedTick !== null) && (
-                        <RangeSelector
-                            currentTick={pool?.tick ?? derivedTick!}
-                            tickSpacing={pool?.tickSpacing ?? getTickSpacing(fee)}
-                            decimals0={token0.decimals}
-                            decimals1={token1.decimals}
-                            token0Symbol={token0.symbol}
-                            token1Symbol={token1.symbol}
-                            config={rangeConfig}
-                            onChange={setRangeConfig}
-                        />
+                        <>
+                            <Separator />
+                            <RangeSelector
+                                currentTick={pool?.tick ?? derivedTick!}
+                                tickSpacing={pool?.tickSpacing ?? getTickSpacing(fee)}
+                                decimals0={token0.decimals}
+                                decimals1={token1.decimals}
+                                token0Symbol={token0.symbol}
+                                token1Symbol={token1.symbol}
+                                config={rangeConfig}
+                                onChange={setRangeConfig}
+                            />
+                        </>
                     )}
+
+                    {/* Token Amount Inputs */}
                     {token0 && token1 && (
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <div className="flex justify-between">
-                                    <Label>{token0.symbol}</Label>
-                                    <span className="text-sm text-muted-foreground">
+                        <>
+                            <Separator />
+                            <div className="space-y-3">
+                                {/* Token 0 */}
+                                <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            {token0.logo && (
+                                                <img
+                                                    src={token0.logo}
+                                                    alt={token0.symbol}
+                                                    className="h-5 w-5 rounded-full object-cover"
+                                                />
+                                            )}
+                                            <span className="text-sm font-medium">
+                                                {token0.symbol}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
+                                            onClick={() => {
+                                                if (balance0 && token0) {
+                                                    setActiveInput('token0')
+                                                    setAmount0(
+                                                        formatTokenAmount(balance0, token0.decimals)
+                                                    )
+                                                }
+                                            }}
+                                        >
+                                            MAX
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={amount0}
+                                        onChange={(e) => {
+                                            setActiveInput('token0')
+                                            setAmount0(e.target.value)
+                                        }}
+                                        placeholder="0.0"
+                                        className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
                                         Balance:{' '}
                                         {balance0 ? formatBalance(balance0, token0.decimals) : '0'}
-                                    </span>
+                                    </p>
                                 </div>
-                                <Input
-                                    type="number"
-                                    step="any"
-                                    value={amount0}
-                                    onChange={(e) => {
-                                        setActiveInput('token0')
-                                        setAmount0(e.target.value)
-                                    }}
-                                    placeholder="0.0"
-                                />
-                            </div>
 
-                            <div className="space-y-2">
-                                <div className="flex justify-between">
-                                    <Label>{token1.symbol}</Label>
-                                    <span className="text-sm text-muted-foreground">
+                                {/* Token 1 */}
+                                <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            {token1.logo && (
+                                                <img
+                                                    src={token1.logo}
+                                                    alt={token1.symbol}
+                                                    className="h-5 w-5 rounded-full object-cover"
+                                                />
+                                            )}
+                                            <span className="text-sm font-medium">
+                                                {token1.symbol}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
+                                            onClick={() => {
+                                                if (balance1 && token1) {
+                                                    setActiveInput('token1')
+                                                    setAmount1(
+                                                        formatTokenAmount(balance1, token1.decimals)
+                                                    )
+                                                }
+                                            }}
+                                        >
+                                            MAX
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        value={amount1}
+                                        onChange={(e) => {
+                                            setActiveInput('token1')
+                                            setAmount1(e.target.value)
+                                        }}
+                                        placeholder="0.0"
+                                        className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
                                         Balance:{' '}
                                         {balance1 ? formatBalance(balance1, token1.decimals) : '0'}
-                                    </span>
+                                    </p>
                                 </div>
-                                <Input
-                                    type="number"
-                                    step="any"
-                                    value={amount1}
-                                    onChange={(e) => {
-                                        setActiveInput('token1')
-                                        setAmount1(e.target.value)
-                                    }}
-                                    placeholder="0.0"
-                                />
                             </div>
-                        </div>
+                        </>
                     )}
+
+                    {/* Initial Price (new pool only) */}
                     {token0 && token1 && !pool && !isLoadingPool && (
-                        <div className="space-y-2">
-                            <Label>Initial Price</Label>
-                            <Input
+                        <div className="rounded-xl bg-primary/5 border border-primary/10 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium">Initial Price</span>
+                                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium">
+                                    New Pool
+                                </span>
+                            </div>
+                            <input
                                 type="number"
                                 step="any"
                                 value={initialPrice}
                                 onChange={(e) => setInitialPrice(e.target.value)}
-                                placeholder={`e.g., 1.5 (${token1.symbol} per 1 ${token0.symbol})`}
+                                placeholder={`e.g. 1.5 (${token1.symbol} per 1 ${token0.symbol})`}
+                                className="w-full bg-transparent text-lg font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Starting price for the new pool. How much {token1.symbol} per 1{' '}
-                                {token0.symbol}.
+                            <p className="text-[10px] text-muted-foreground">
+                                Starting price — how much {token1.symbol} equals 1 {token0.symbol}
                             </p>
-                            {initialSqrtPriceX96 && (
-                                <p className="text-xs text-muted-foreground">
-                                    Pool will be created at this price with a full range position.
-                                </p>
-                            )}
                         </div>
                     )}
-                    <Button className="w-full" onClick={handleSubmit} disabled={isButtonDisabled()}>
+
+                    {/* Submit */}
+                    <Button
+                        className="w-full h-12 text-sm font-semibold"
+                        onClick={handleSubmit}
+                        disabled={isButtonDisabled()}
+                    >
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {getButtonText()}
                     </Button>
                 </div>

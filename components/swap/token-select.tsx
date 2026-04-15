@@ -133,9 +133,10 @@ export interface TokenSelectProps {
     token: Token | null
     tokens: Token[]
     onSelect: (token: Token) => void
+    className?: string
 }
 
-export function TokenSelect({ token, tokens, onSelect }: TokenSelectProps) {
+export function TokenSelect({ token, tokens, onSelect, className }: TokenSelectProps) {
     const [open, setOpen] = useState(false)
     const handleSelect = (selectedToken: Token) => {
         onSelect(selectedToken)
@@ -146,7 +147,11 @@ export function TokenSelect({ token, tokens, onSelect }: TokenSelectProps) {
             <DialogTrigger asChild>
                 <Button
                     variant="outline"
-                    className={cn('min-w-32 justify-start px-3', !token && 'text-muted-foreground')}
+                    className={cn(
+                        'min-w-32 justify-start px-3',
+                        !token && 'text-muted-foreground',
+                        className
+                    )}
                 >
                     {token ? (
                         <div className="flex items-center gap-2">
