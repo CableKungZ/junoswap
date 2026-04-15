@@ -7,7 +7,7 @@
 **The fastest way to trade tokens across multiple chains.**
 Get the best prices across all DEXs with one click. No registration. No KYC. Just connect and swap.
 
-[Swap →](https://v1.junoswap.xyz/swap) · [Bridge →](https://v1.junoswap.xyz/bridge) · [Earn →](https://v1.junoswap.xyz/earn) · [Launchpad →](https://v1.junoswap.xyz/launchpad) · [Documentation →](./architecture.md) · [Discord →](https://discord.gg/k92ReT5EYy)
+[Swap →](https://v1.junoswap.xyz/swap) · [Bridge →](https://v1.junoswap.xyz/bridge) · [Earn →](https://v1.junoswap.xyz/earn) · [Launchpad →](https://v1.junoswap.xyz/launchpad) · [Documentation →](./architecture.md) · [Discord →](https://discord.gg/caE5wzQBME)
 
 ---
 
@@ -61,7 +61,7 @@ For tech stack, project structure, architecture, and code reference — see [arc
 
 ## Community
 
-[Docs](./README.md) · [Roadmap](./roadmap.md) · [Architecture](./architecture.md) · [Twitter](https://x.com/junoswap) · [Discord](https://discord.gg/k92ReT5EYy) · [GitHub](https://github.com/coshi190/junoswap)
+[Docs](./README.md) · [Roadmap](./roadmap.md) · [Architecture](./architecture.md) · [Twitter](https://x.com/junoswaptrade) · [Discord](https://discord.gg/caE5wzQBME) · [GitHub](https://github.com/coshi190/junoswap)
 
 Contributions welcome — UI/UX, testing, docs, smart contracts. 
 

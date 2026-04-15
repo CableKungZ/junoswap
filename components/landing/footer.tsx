@@ -71,7 +71,9 @@ export function Footer() {
                         </p>
                         <div className="flex gap-6">
                             <a
-                                href="#"
+                                href="https://x.com/junoswaptrade"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">Twitter</span>
@@ -80,7 +82,9 @@ export function Footer() {
                                 </svg>
                             </a>
                             <a
-                                href="#"
+                                href="https://github.com/coshi190/junoswap"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">GitHub</span>
@@ -93,7 +97,9 @@ export function Footer() {
                                 </svg>
                             </a>
                             <a
-                                href="#"
+                                href="https://discord.gg/caE5wzQBME"
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="text-muted-foreground/70 transition-colors hover:text-foreground"
                             >
                                 <span className="sr-only">Discord</span>
