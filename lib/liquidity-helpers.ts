@@ -498,6 +498,36 @@ export function calculateRangePercentage(
     }
 }
 
+/**
+ * Calculate the viewport for the range slider.
+ * Uses a fixed viewport based on the Safe preset (±50%) so that
+ * visual slider width accurately represents range width:
+ *   Safe fills most of the track, Common less, Narrow a small sliver.
+ * Full Range uses the entire tick space.
+ * Custom ranges use the wider of the current range or a minimum span
+ * centered on the midpoint, so thumbs never collide.
+ */
+export function calculateSliderViewport(
+    tickLower: number,
+    tickUpper: number,
+    _tickSpacing: number,
+    preset: RangePreset
+): { lower: number; upper: number } {
+    if (preset === 'full') {
+        return { lower: MIN_TICK, upper: MAX_TICK }
+    }
+
+    // Fixed viewport: ±60% from center of range (wider than Safe ±50%)
+    // so all presets share the same track scale and width differences are visible
+    const midTick = (tickLower + tickUpper) / 2
+    const halfSpan = Math.ceil(6050 * 1.2) // ~7260 ticks ≈ ±72% covers Safe + room to drag
+
+    const lower = Math.max(Math.floor(midTick - halfSpan), MIN_TICK)
+    const upper = Math.min(Math.ceil(midTick + halfSpan), MAX_TICK)
+
+    return { lower, upper }
+}
+
 // ============ Slippage Calculations ============
 
 /**
