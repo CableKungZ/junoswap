@@ -1,15 +1,20 @@
 'use client'
 
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useRef } from 'react'
 import { useWriteContract, useReadContract, usePublicClient } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
+import { parseEther } from 'viem'
 import type { Address } from 'viem'
 import {
     PUMP_CORE_NATIVE_ADDRESS,
     PUMP_CORE_NATIVE_ABI,
     PUMP_CORE_NATIVE_CHAIN_ID,
 } from '@/lib/abis/pump-core-native'
+import { calculateBuyOutput, calculateMinOutput, INITIAL_TOKEN_SUPPLY } from '@/services/launchpad'
+import { useLaunchpadStore } from '@/store/launchpad-store'
 import type { CreateTokenForm } from '@/types/launchpad'
+
+export type CreatePhase = 'idle' | 'creating' | 'buying' | 'success' | 'error'
 
 interface UseCreateTokenParams {
     form: CreateTokenForm | null
@@ -17,6 +22,7 @@ interface UseCreateTokenParams {
 
 interface UseCreateTokenResult {
     create: (logoOverride?: string) => void
+    phase: CreatePhase
     isPreparing: boolean
     isExecuting: boolean
     isConfirming: boolean
@@ -25,12 +31,27 @@ interface UseCreateTokenResult {
     error: Error | null
     hash: Address | undefined
     createdTokenAddress: Address | null
+    expectedTokens: bigint
+    minTokenOut: bigint
+    totalCost: bigint
 }
 
 export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenResult {
-    const [createdTokenAddress, setCreatedTokenAddress] = useState<Address | null>(null)
+    const { settings } = useLaunchpadStore()
     const publicClient = usePublicClient({ chainId: PUMP_CORE_NATIVE_CHAIN_ID })
 
+    const [phase, setPhase] = useState<CreatePhase>('idle')
+    const [createdTokenAddress, setCreatedTokenAddress] = useState<Address | null>(null)
+    const [phaseError, setPhaseError] = useState<Error | null>(null)
+
+    // Track buy params so the buy-triggering effect is stable
+    const buyParamsRef = useRef<{
+        tokenAddr: Address
+        minTokenOut: bigint
+        buyAmount: bigint
+    } | null>(null)
+
+    // --- Read contract state ---
     const { data: createFee } = useReadContract({
         address: PUMP_CORE_NATIVE_ADDRESS,
         abi: PUMP_CORE_NATIVE_ABI,
@@ -45,50 +66,196 @@ export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenRe
         chainId: PUMP_CORE_NATIVE_CHAIN_ID,
     })
 
-    const totalFee = useMemo(() => {
+    const { data: virtualAmount } = useReadContract({
+        address: PUMP_CORE_NATIVE_ADDRESS,
+        abi: PUMP_CORE_NATIVE_ABI,
+        functionName: 'virtualAmount',
+        chainId: PUMP_CORE_NATIVE_CHAIN_ID,
+    })
+
+    // --- Parse upfront buy amount ---
+    const upfrontBuyNative = useMemo(() => {
+        const str = form?.upfrontBuyAmount?.trim()
+        if (!str || str === '0' || str === '0.0' || str === '0.00') return 0n
+        try {
+            const val = parseEther(str)
+            return val > 0n ? val : 0n
+        } catch {
+            return 0n
+        }
+    }, [form?.upfrontBuyAmount])
+
+    // --- Calculate expected buy output (uses initial reserve state) ---
+    const expectedTokens = useMemo(() => {
+        if (upfrontBuyNative <= 0n || initialNative === undefined || virtualAmount === undefined)
+            return 0n
+        return calculateBuyOutput(
+            upfrontBuyNative,
+            initialNative as bigint,
+            INITIAL_TOKEN_SUPPLY,
+            virtualAmount as bigint
+        )
+    }, [upfrontBuyNative, initialNative, virtualAmount])
+
+    const minTokenOut = useMemo(
+        () => calculateMinOutput(expectedTokens, settings.slippageBps),
+        [expectedTokens, settings.slippageBps]
+    )
+
+    // --- Total cost ---
+    const createCost = useMemo(() => {
         if (createFee === undefined || initialNative === undefined) return 0n
         return (createFee as bigint) + (initialNative as bigint)
     }, [createFee, initialNative])
 
+    const totalCost = useMemo(() => createCost + upfrontBuyNative, [createCost, upfrontBuyNative])
+
+    // --- Transaction 1: Create Token ---
     const {
-        data: hash,
-        writeContract,
-        isPending: isExecuting,
-        isError: isWriteError,
-        error: writeError,
+        data: createHash,
+        writeContract: writeCreate,
+        isPending: isCreateExecuting,
+        isError: isCreateWriteError,
+        error: createWriteError,
     } = useWriteContract()
 
-    // Poll for receipt manually (more reliable than useWaitForTransactionReceipt on custom chains)
-    const { data: receipt } = useQuery({
-        queryKey: ['create-token-receipt', hash],
+    const { data: createReceipt } = useQuery({
+        queryKey: ['create-token-receipt', createHash],
         queryFn: async () => {
-            if (!hash || !publicClient) return null
-            return publicClient.getTransactionReceipt({ hash })
+            if (!createHash || !publicClient) return null
+            return publicClient.getTransactionReceipt({ hash: createHash })
         },
-        enabled: !!hash && !!publicClient,
+        enabled: !!createHash && !!publicClient,
         refetchInterval: (query) => {
-            // Stop polling once we have a receipt
             if (query.state.data) return false
             return 2000
         },
     })
 
-    const isConfirming = !!hash && !receipt
-    const isSuccess = !!receipt && receipt.status === 'success'
-    const isError = isWriteError || (!!receipt && receipt.status === 'reverted')
-    const error =
-        writeError ||
-        (isError && receipt?.status === 'reverted' ? new Error('Transaction reverted') : null)
+    const isCreateConfirming = !!createHash && !createReceipt
+    const isCreateSuccess = !!createReceipt && createReceipt.status === 'success'
 
-    // Reset token address on new tx
+    // --- Transaction 2: Buy ---
+    const {
+        data: buyHash,
+        writeContract: writeBuy,
+        isPending: isBuyExecuting,
+        isError: isBuyWriteError,
+        error: buyWriteError,
+    } = useWriteContract()
+
+    const { data: buyReceipt } = useQuery({
+        queryKey: ['upfront-buy-receipt', buyHash],
+        queryFn: async () => {
+            if (!buyHash || !publicClient) return null
+            return publicClient.getTransactionReceipt({ hash: buyHash })
+        },
+        enabled: !!buyHash && !!publicClient,
+        refetchInterval: (query) => {
+            if (query.state.data) return false
+            return 2000
+        },
+    })
+
+    const isBuyConfirming = !!buyHash && !buyReceipt
+    const isBuySuccess = !!buyReceipt && buyReceipt.status === 'success'
+
+    // --- Parse token address from creation receipt ---
+    const parseTokenAddress = async (hash: Address): Promise<Address | null> => {
+        if (!publicClient) return null
+        try {
+            const receipt = await publicClient.getTransactionReceipt({ hash })
+            for (const log of receipt.logs) {
+                if (log.address.toLowerCase() === PUMP_CORE_NATIVE_ADDRESS.toLowerCase()) {
+                    const tokenAddr = `0x${log.topics[1]?.slice(26)}` as Address
+                    if (tokenAddr && tokenAddr.length === 42) return tokenAddr
+                }
+            }
+        } catch {
+            // fall through
+        }
+        return null
+    }
+
+    // --- Effect: When create succeeds, trigger buy or mark success ---
+    const didTriggerBuy = useRef(false)
+
     useEffect(() => {
-        if (!hash) setCreatedTokenAddress(null)
-    }, [hash])
+        if (!isCreateSuccess || !createHash) return
+        if (didTriggerBuy.current) return
 
+        if (upfrontBuyNative > 0n) {
+            // Parse token address then trigger buy
+            didTriggerBuy.current = true
+            setPhase('buying')
+            parseTokenAddress(createHash).then((tokenAddr) => {
+                if (!tokenAddr) {
+                    setPhaseError(new Error('Failed to parse token address from receipt'))
+                    setPhase('error')
+                    return
+                }
+                setCreatedTokenAddress(tokenAddr)
+                buyParamsRef.current = {
+                    tokenAddr,
+                    minTokenOut,
+                    buyAmount: upfrontBuyNative,
+                }
+                writeBuy({
+                    address: PUMP_CORE_NATIVE_ADDRESS,
+                    abi: PUMP_CORE_NATIVE_ABI,
+                    functionName: 'buy',
+                    args: [tokenAddr, minTokenOut],
+                    value: upfrontBuyNative,
+                    chainId: PUMP_CORE_NATIVE_CHAIN_ID,
+                })
+            })
+        } else {
+            // No upfront buy — extract address and mark success
+            parseTokenAddress(createHash).then((tokenAddr) => {
+                setCreatedTokenAddress(tokenAddr)
+            })
+            setPhase('success')
+        }
+    }, [isCreateSuccess, createHash, upfrontBuyNative, minTokenOut, writeBuy])
+
+    // --- Effect: When buy succeeds ---
+    useEffect(() => {
+        if (isBuySuccess) {
+            setPhase('success')
+        }
+    }, [isBuySuccess])
+
+    // --- Effect: Handle errors ---
+    useEffect(() => {
+        if (
+            phase === 'creating' &&
+            (isCreateWriteError || (createReceipt && createReceipt.status === 'reverted'))
+        ) {
+            setPhaseError(createWriteError ?? new Error('Create transaction reverted'))
+            setPhase('error')
+        }
+    }, [phase, isCreateWriteError, createWriteError, createReceipt])
+
+    useEffect(() => {
+        if (
+            phase === 'buying' &&
+            (isBuyWriteError || (buyReceipt && buyReceipt.status === 'reverted'))
+        ) {
+            setPhaseError(buyWriteError ?? new Error('Buy transaction reverted'))
+            // Token was created, so mark as error but still have address
+            setPhase('error')
+        }
+    }, [phase, isBuyWriteError, buyWriteError, buyReceipt])
+
+    // --- Reset on new create call ---
     const create = (logoOverride?: string) => {
-        if (!form || totalFee === 0n) return
+        if (!form || createCost === 0n) return
+        setPhase('creating')
+        setPhaseError(null)
         setCreatedTokenAddress(null)
-        writeContract({
+        didTriggerBuy.current = false
+        buyParamsRef.current = null
+        writeCreate({
             address: PUMP_CORE_NATIVE_ADDRESS,
             abi: PUMP_CORE_NATIVE_ABI,
             functionName: 'createToken',
@@ -101,20 +268,30 @@ export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenRe
                 form.link2,
                 form.link3,
             ],
-            value: totalFee,
+            value: createCost,
             chainId: PUMP_CORE_NATIVE_CHAIN_ID,
         })
     }
 
+    // --- Computed state ---
+    const isExecuting =
+        (phase === 'creating' && isCreateExecuting) || (phase === 'buying' && isBuyExecuting)
+    const isConfirming =
+        (phase === 'creating' && isCreateConfirming) || (phase === 'buying' && isBuyConfirming)
+
     return {
         create,
+        phase,
         isPreparing: false,
         isExecuting,
         isConfirming,
-        isSuccess,
-        isError,
-        error,
-        hash,
+        isSuccess: phase === 'success',
+        isError: phase === 'error',
+        error: phaseError,
+        hash: phase === 'buying' || phase === 'success' ? (buyHash ?? createHash) : createHash,
         createdTokenAddress,
+        expectedTokens,
+        minTokenOut,
+        totalCost,
     }
 }

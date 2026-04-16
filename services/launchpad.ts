@@ -4,6 +4,9 @@ import { PUMP_CORE_NATIVE_ADDRESS, PUMP_CORE_NATIVE_ABI } from '@/lib/abis/pump-
 
 const PUMP_FEE_BPS = 100n // 1%
 
+/** Initial token supply: 1 billion with 18 decimals */
+export const INITIAL_TOKEN_SUPPLY = 1000000000n * 10n ** 18n
+
 /**
  * Calculate buy output amount (client-side, mirrors on-chain logic)
  * Buy uses virtualAmount + nativeReserve as input reserve

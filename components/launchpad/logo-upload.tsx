@@ -1,22 +1,22 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Upload, X } from 'lucide-react'
+import { Upload, X, ImagePlus } from 'lucide-react'
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml', 'image/webp']
 const MAX_FILE_SIZE = 1024 * 1024 // 1MB
 
 interface LogoUploadProps {
     onFileSelect: (file: File | null) => void
+    compact?: boolean
 }
 
-export function LogoUpload({ onFileSelect }: LogoUploadProps) {
+export function LogoUpload({ onFileSelect, compact }: LogoUploadProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [isDragOver, setIsDragOver] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Cleanup object URL on unmount or when preview changes
     useEffect(() => {
         return () => {
             if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -69,6 +69,60 @@ export function LogoUpload({ onFileSelect }: LogoUploadProps) {
         onFileSelect(null)
     }, [onFileSelect])
 
+    const openPicker = () => fileInputRef.current?.click()
+
+    if (compact) {
+        return (
+            <>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp"
+                    className="hidden"
+                    onChange={handleInputChange}
+                />
+                {previewUrl ? (
+                    <div className="relative group">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={previewUrl}
+                            alt="Token logo preview"
+                            className="h-[72px] w-[72px] rounded-xl object-cover border"
+                        />
+                        <button
+                            type="button"
+                            onClick={clear}
+                            className="absolute -top-1.5 -right-1.5 rounded-full bg-destructive p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <X className="h-3 w-3" />
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={openPicker}
+                        onDragOver={(e) => {
+                            e.preventDefault()
+                            setIsDragOver(true)
+                        }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={handleDrop}
+                        className={`flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed transition-colors ${
+                            isDragOver
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                        }`}
+                    >
+                        <ImagePlus className="h-5 w-5 text-muted-foreground" />
+                    </button>
+                )}
+                {errorMessage && (
+                    <p className="text-[10px] text-destructive mt-1">{errorMessage}</p>
+                )}
+            </>
+        )
+    }
+
     return (
         <div className="space-y-2">
             <input
@@ -102,7 +156,7 @@ export function LogoUpload({ onFileSelect }: LogoUploadProps) {
                 </div>
             ) : (
                 <div
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={openPicker}
                     onDragOver={(e) => {
                         e.preventDefault()
                         setIsDragOver(true)

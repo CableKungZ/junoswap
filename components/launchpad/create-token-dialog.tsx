@@ -1,27 +1,23 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { useAccount, usePublicClient } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { useLaunchpadStore } from '@/store/launchpad-store'
 import { useCreateToken } from '@/hooks/useCreateToken'
-import { PUMP_CORE_NATIVE_ADDRESS, PUMP_CORE_NATIVE_CHAIN_ID } from '@/lib/abis/pump-core-native'
-import { toastError, toastSuccess } from '@/lib/toast'
+import { PUMP_CORE_NATIVE_CHAIN_ID } from '@/lib/abis/pump-core-native'
+import { toastError, toastSuccess, toastWarning } from '@/lib/toast'
 import { uploadToPinata } from '@/app/actions/upload-to-pinata'
 import { getChainMetadata } from '@/lib/wagmi'
+import { formatKub, formatTokenAmount } from '@/services/launchpad'
 import type { CreateTokenForm } from '@/types/launchpad'
-import { Globe, Twitter, MessageCircle, Loader2 } from 'lucide-react'
+import { Globe, Twitter, MessageCircle, Loader2, Coins } from 'lucide-react'
 import { LogoUpload } from './logo-upload'
 
 export function CreateTokenDialog() {
-    const router = useRouter()
     const { isConnected } = useAccount()
-    const publicClient = usePublicClient({ chainId: PUMP_CORE_NATIVE_CHAIN_ID })
     const { isCreateDialogOpen, setIsCreateDialogOpen } = useLaunchpadStore()
 
     const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
@@ -35,9 +31,21 @@ export function CreateTokenDialog() {
         link1: '',
         link2: '',
         link3: '',
+        upfrontBuyAmount: '',
     })
 
-    const { create, isExecuting, isConfirming, isSuccess, isError, error, hash } = useCreateToken({
+    const {
+        create,
+        phase,
+        isExecuting,
+        isConfirming,
+        isSuccess,
+        isError,
+        error,
+        hash,
+        expectedTokens,
+        totalCost,
+    } = useCreateToken({
         form: form.name && form.symbol ? form : null,
     })
 
@@ -52,14 +60,14 @@ export function CreateTokenDialog() {
                 link1: '',
                 link2: '',
                 link3: '',
+                upfrontBuyAmount: '',
             })
+            setPendingLogoFile(null)
         }
     }, [isCreateDialogOpen])
 
-    // Handle success - navigate to token page
+    // Handle success
     const handleSuccess = useCallback(async () => {
-        if (!hash) return
-
         const metadata = getChainMetadata(PUMP_CORE_NATIVE_CHAIN_ID)
         toastSuccess('Token created!', {
             action: {
@@ -67,37 +75,29 @@ export function CreateTokenDialog() {
                 onClick: () => window.open(`${metadata.explorer}/tx/${hash}`, '_blank'),
             },
         })
-
-        if (publicClient) {
-            try {
-                const receipt = await publicClient.getTransactionReceipt({ hash })
-                for (const log of receipt.logs) {
-                    if (log.address.toLowerCase() === PUMP_CORE_NATIVE_ADDRESS.toLowerCase()) {
-                        const tokenAddr = `0x${log.topics[1]?.slice(26)}` as `0x${string}`
-                        if (tokenAddr && tokenAddr.length === 42) {
-                            setIsCreateDialogOpen(false)
-                            router.push(`/launchpad/token/${tokenAddr}`)
-                            return
-                        }
-                    }
-                }
-            } catch {
-                // If parsing fails, fall through to close
-            }
-        }
         setIsCreateDialogOpen(false)
-    }, [hash, publicClient, router, setIsCreateDialogOpen])
+    }, [hash, setIsCreateDialogOpen])
 
     useEffect(() => {
         if (isSuccess) handleSuccess()
     }, [isSuccess, handleSuccess])
 
-    // Handle error
+    // Handle error — partial success (token created but buy failed)
     useEffect(() => {
-        if (isError && error) {
+        if (isError && error && phase === 'error') {
+            toastWarning(
+                'Token created, but upfront buy failed. You can buy manually on the token page.'
+            )
+            setIsCreateDialogOpen(false)
+        }
+    }, [isError, error, phase, setIsCreateDialogOpen])
+
+    // Handle create-phase error
+    useEffect(() => {
+        if (isError && error && phase === 'error' && !hash) {
             toastError(error, 'Token creation failed')
         }
-    }, [isError, error])
+    }, [isError, error, phase, hash])
 
     const updateField = (field: keyof CreateTokenForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }))
@@ -130,8 +130,8 @@ export function CreateTokenDialog() {
         if (!isConnected) return 'Connect Wallet'
         if (!form.name.trim() || !form.symbol.trim()) return 'Enter Name & Symbol'
         if (uploadingLogo) return 'Uploading logo...'
-        if (isExecuting) return 'Creating...'
-        if (isConfirming) return 'Confirming...'
+        if (phase === 'creating') return 'Creating token...'
+        if (phase === 'buying') return 'Buying tokens...'
         return 'Create Token'
     }
 
@@ -143,114 +143,108 @@ export function CreateTokenDialog() {
         isExecuting ||
         isConfirming
 
+    const hasUpfrontBuy = form.upfrontBuyAmount && parseFloat(form.upfrontBuyAmount) > 0
+
     return (
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogContent className="sm:max-w-lg max-h-[90vh]">
+            <DialogContent className="sm:max-w-md max-h-[90vh]">
                 <DialogHeader>
-                    <DialogTitle className="text-xl">Create Token</DialogTitle>
+                    <DialogTitle className="text-lg font-semibold">Create Token</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-5 overflow-y-auto max-h-[calc(90vh-8rem)] pr-1 sm:max-h-none sm:pr-0">
-                    {/* Token Identity */}
-                    <div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="token-name">Name *</Label>
-                                <Input
-                                    id="token-name"
-                                    placeholder="e.g. My Token"
-                                    value={form.name}
-                                    onChange={(e) => updateField('name', e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="token-symbol">Symbol *</Label>
-                                <Input
-                                    id="token-symbol"
-                                    placeholder="e.g. MTK"
-                                    value={form.symbol}
-                                    onChange={(e) =>
-                                        updateField('symbol', e.target.value.toUpperCase())
-                                    }
-                                    maxLength={10}
-                                />
-                            </div>
+                <div className="space-y-3.5 overflow-y-auto max-h-[calc(90vh-6rem)] pr-1 sm:max-h-none sm:pr-0">
+                    {/* Logo + Name/Symbol row */}
+                    <div className="flex gap-3">
+                        <LogoUpload onFileSelect={setPendingLogoFile} compact />
+                        <div className="flex-1 space-y-2">
+                            <Input
+                                placeholder="Token Name *"
+                                value={form.name}
+                                onChange={(e) => updateField('name', e.target.value)}
+                            />
+                            <Input
+                                placeholder="SYMBOL *"
+                                value={form.symbol}
+                                onChange={(e) =>
+                                    updateField('symbol', e.target.value.toUpperCase())
+                                }
+                                maxLength={10}
+                                className="uppercase"
+                            />
                         </div>
                     </div>
 
-                    {/* Logo & Description */}
-                    <div>
-                        <div className="space-y-3">
-                            <div className="space-y-1.5">
-                                <Label>Logo</Label>
-                                <LogoUpload onFileSelect={setPendingLogoFile} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="token-description">Description</Label>
-                                <Input
-                                    id="token-description"
-                                    placeholder="Describe your token..."
-                                    value={form.description}
-                                    onChange={(e) => updateField('description', e.target.value)}
-                                />
-                            </div>
+                    {/* Description */}
+                    <Input
+                        placeholder="Description (optional)"
+                        value={form.description}
+                        onChange={(e) => updateField('description', e.target.value)}
+                    />
+
+                    {/* Social links */}
+                    <div className="space-y-1.5">
+                        <div className="relative">
+                            <Globe className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Website"
+                                value={form.link1}
+                                onChange={(e) => updateField('link1', e.target.value)}
+                                className="pl-9 h-8 text-sm"
+                            />
+                        </div>
+                        <div className="relative">
+                            <Twitter className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Twitter / X"
+                                value={form.link2}
+                                onChange={(e) => updateField('link2', e.target.value)}
+                                className="pl-9 h-8 text-sm"
+                            />
+                        </div>
+                        <div className="relative">
+                            <MessageCircle className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                placeholder="Telegram"
+                                value={form.link3}
+                                onChange={(e) => updateField('link3', e.target.value)}
+                                className="pl-9 h-8 text-sm"
+                            />
                         </div>
                     </div>
 
-                    {/* Social Links */}
-                    <div>
-                        <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-                            Social Links
-                        </h3>
-                        <div className="space-y-2">
-                            <div className="relative">
-                                <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    placeholder="Website URL"
-                                    value={form.link1}
-                                    onChange={(e) => updateField('link1', e.target.value)}
-                                    className="pl-9"
-                                />
-                            </div>
-                            <div className="relative">
-                                <Twitter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    placeholder="Twitter / X URL"
-                                    value={form.link2}
-                                    onChange={(e) => updateField('link2', e.target.value)}
-                                    className="pl-9"
-                                />
-                            </div>
-                            <div className="relative">
-                                <MessageCircle className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    placeholder="Telegram URL"
-                                    value={form.link3}
-                                    onChange={(e) => updateField('link3', e.target.value)}
-                                    className="pl-9"
-                                />
-                            </div>
+                    {/* Upfront buy */}
+                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <Coins className="h-3.5 w-3.5" />
+                            Buy Upfront (Optional)
                         </div>
+                        <div className="relative">
+                            <Input
+                                type="number"
+                                placeholder="0.0"
+                                min="0"
+                                step="0.01"
+                                value={form.upfrontBuyAmount}
+                                onChange={(e) => updateField('upfrontBuyAmount', e.target.value)}
+                                className="pr-12"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+                                KUB
+                            </span>
+                        </div>
+                        {expectedTokens > 0n && (
+                            <p className="text-xs text-muted-foreground">
+                                ~{formatTokenAmount(expectedTokens)} tokens
+                            </p>
+                        )}
                     </div>
 
-                    <Separator />
-
-                    {/* Fee & Submit */}
-                    <div className="rounded-lg border bg-card">
-                        <div className="flex items-center justify-between px-4 py-2.5 border-b">
-                            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                                Creation Fee
-                            </span>
-                            <span className="text-sm font-bold">0.1 KUB</span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5">
-                            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                                Network
-                            </span>
-                            <span className="text-sm font-medium text-muted-foreground">
-                                KUB Testnet
-                            </span>
-                        </div>
+                    {/* Summary */}
+                    <div className="flex items-center justify-between text-sm px-1">
+                        <span className="text-muted-foreground">
+                            Total{hasUpfrontBuy ? ' (fee + buy)' : ''}
+                        </span>
+                        <span className="font-semibold">{formatKub(totalCost)} KUB</span>
                     </div>
 
                     <Button className="w-full" onClick={handleCreate} disabled={isButtonDisabled}>
