@@ -8,7 +8,6 @@ const features = [
             'Compare prices across multiple DEXs and automatically get the best rate. Save on every trade with smart routing.',
         icon: Repeat,
         href: '/swap',
-        comingSoon: false,
     },
     {
         name: 'Cross-Chain Bridge',
@@ -16,7 +15,6 @@ const features = [
             'Move tokens seamlessly across multiple chains. Fast, secure, and low-cost cross-chain transfers.',
         icon: GitBranch,
         href: '/bridge',
-        comingSoon: false,
     },
     {
         name: 'Memecoin Launchpad',
@@ -24,7 +22,6 @@ const features = [
             'Launch your own token in minutes. Create, deploy, and add liquidity - all from one simple interface.',
         icon: Rocket,
         href: '/launchpad',
-        comingSoon: true,
     },
 ]
 
@@ -35,7 +32,7 @@ export function Features() {
                 <div className="mx-auto max-w-2xl text-center">
                     <h2 className="text-base font-semibold leading-7 text-primary">Features</h2>
                     <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                        Everything you need to trade and launch
+                        Everything you need to trade
                     </p>
                 </div>
                 <div className="mx-auto mt-16 grid max-w-xl grid-cols-1 gap-8 sm:mt-20 lg:max-w-none lg:grid-cols-3">
@@ -49,11 +46,6 @@ export function Features() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <CardTitle>{feature.name}</CardTitle>
-                                        {feature.comingSoon && (
-                                            <span className="rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-500">
-                                                Coming Soon
-                                            </span>
-                                        )}
                                     </div>
                                 </CardHeader>
                                 <CardContent>

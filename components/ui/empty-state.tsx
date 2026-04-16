@@ -1,3 +1,6 @@
+'use client'
+
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 interface EmptyStateProps {
@@ -7,6 +10,29 @@ interface EmptyStateProps {
     action?: React.ReactNode
     className?: string
     compact?: boolean
+    variant?: 'default' | 'subtle' | 'error'
+    animated?: boolean
+}
+
+const glowColors = {
+    default: 'radial-gradient(circle, rgba(255,0,60,0.12) 0%, transparent 70%)',
+    subtle: 'radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%)',
+    error: 'radial-gradient(circle, rgba(239,68,68,0.12) 0%, transparent 70%)',
+}
+
+const ringColors = {
+    default: 'border-primary/15',
+    subtle: 'border-muted-foreground/10',
+    error: 'border-destructive/15',
+}
+
+const floatAnimation = {
+    y: [0, -6, 0],
+    transition: {
+        duration: 3,
+        repeat: Infinity,
+        ease: 'easeInOut' as const,
+    },
 }
 
 export function EmptyState({
@@ -16,31 +42,58 @@ export function EmptyState({
     action,
     className,
     compact,
+    variant = 'default',
+    animated = true,
 }: EmptyStateProps) {
     return (
         <div
             className={cn(
                 'flex flex-col items-center justify-center text-center',
-                compact ? 'gap-2 p-6' : 'gap-4 p-10',
+                compact ? 'gap-3 py-10 px-6' : 'gap-5 py-16 px-8',
                 className
             )}
         >
             {Icon && (
                 <div
                     className={cn(
-                        'flex items-center justify-center',
-                        compact ? 'mb-1 h-12 w-12' : 'mb-2 h-16 w-16'
+                        'relative mx-auto flex items-center justify-center',
+                        compact ? 'h-16 w-16' : 'h-24 w-24'
                     )}
                 >
-                    <Icon
-                        className={cn('text-primary shrink-0', compact ? 'h-5 w-5' : 'h-16 w-16')}
+                    {/* Glow background */}
+                    <div
+                        className="empty-state-glow-pulse absolute inset-0 rounded-full"
+                        style={{ background: glowColors[variant] }}
+                    />
+
+                    {/* Icon with float animation */}
+                    <motion.div
+                        animate={animated ? floatAnimation : undefined}
+                        className="relative z-10"
+                    >
+                        <Icon
+                            className={cn(
+                                'shrink-0 text-primary',
+                                compact ? 'h-7 w-7' : 'h-12 w-12'
+                            )}
+                        />
+                    </motion.div>
+
+                    {/* Decorative dashed ring */}
+                    <div
+                        className={cn(
+                            'absolute -inset-2 rounded-full border border-dashed',
+                            ringColors[variant]
+                        )}
                     />
                 </div>
             )}
             <h3
                 className={cn(
-                    'font-semibold tracking-tight text-foreground',
-                    compact ? 'text-sm' : 'text-base'
+                    'font-semibold tracking-tight',
+                    compact
+                        ? 'text-base text-foreground'
+                        : 'text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent'
                 )}
             >
                 {title}
@@ -48,8 +101,8 @@ export function EmptyState({
             {description && (
                 <p
                     className={cn(
-                        'max-w-xs leading-relaxed text-muted-foreground',
-                        compact ? 'text-xs' : 'text-sm'
+                        'leading-relaxed text-muted-foreground',
+                        compact ? 'max-w-xs text-sm' : 'max-w-md text-sm'
                     )}
                 >
                     {description}

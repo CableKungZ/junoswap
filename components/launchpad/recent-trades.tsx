@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { SwapEventData } from '@/hooks/useTokenSwapEvents'
 
@@ -168,6 +169,8 @@ export function RecentTrades({ tokenAddr, tokenSymbol, className }: RecentTrades
                 ) : trades.length === 0 ? (
                     <EmptyState
                         compact
+                        icon={Activity}
+                        variant="subtle"
                         title="No trades yet"
                         description="Trades will appear here once the token is traded"
                     />

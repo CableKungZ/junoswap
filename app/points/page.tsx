@@ -16,7 +16,7 @@ export default function PointsPage() {
                     <EmptyState
                         icon={Trophy}
                         title="Points"
-                        description="Earn points, complete quests, and climb the leaderboard. Coming soon in Phase 6."
+                        description="Earn points, complete quests, and climb the leaderboard. Coming soon."
                     />
                 </div>
             </div>

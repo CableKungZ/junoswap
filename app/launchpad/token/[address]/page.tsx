@@ -8,14 +8,20 @@ import { kubTestnet } from '@/lib/wagmi'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TokenDetailPage } from '@/components/launchpad/token-detail-page'
-import { Unplug, AlertTriangle } from 'lucide-react'
+import { Unplug, AlertTriangle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function TokenPage() {
     return (
         <Suspense
             fallback={
-                <div className="flex min-h-screen items-center justify-center">Loading...</div>
+                <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+                    <div className="relative flex h-16 w-16 items-center justify-center">
+                        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,0,60,0.10)_0%,transparent_70%)] empty-state-glow-pulse" />
+                        <Loader2 className="relative h-8 w-8 animate-spin text-primary" />
+                    </div>
+                    <span className="text-sm text-muted-foreground">Loading token...</span>
+                </div>
             }
         >
             <TokenPageContent />
@@ -31,9 +37,10 @@ function TokenPageContent() {
     if (chainId !== kubTestnet.id) {
         return (
             <div className="flex min-h-screen items-start justify-center p-4">
-                <div className="w-full max-w-md space-y-4">
+                <div className="w-full max-w-lg space-y-4">
                     <EmptyState
                         icon={Unplug}
+                        variant="error"
                         title="Chain Not Supported"
                         description="Launchpad is currently available on KUB Testnet only. Please switch your network."
                     />
@@ -45,9 +52,10 @@ function TokenPageContent() {
     if (!tokenAddr || !isAddress(tokenAddr)) {
         return (
             <div className="flex min-h-screen items-start justify-center p-4">
-                <div className="w-full max-w-md space-y-4">
+                <div className="w-full max-w-lg space-y-4">
                     <EmptyState
                         icon={AlertTriangle}
+                        variant="error"
                         title="Invalid Token"
                         description="The token address in the URL is not valid."
                         action={

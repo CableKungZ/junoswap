@@ -113,4 +113,13 @@
             transform: translateX(-50%);
         }
     }
+
+    .empty-state-glow-pulse {
+        animation: empty-state-glow-pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes empty-state-glow-pulse {
+        0%, 100% { opacity: 0.5; }
+        50% { opacity: 1; }
+    }
 }

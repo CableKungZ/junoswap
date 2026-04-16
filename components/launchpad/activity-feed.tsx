@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { formatEther } from 'viem'
 import { formatDistanceToNow } from 'date-fns'
+import { Activity } from 'lucide-react'
 
 import { useAllSwapEvents } from '@/hooks/useAllSwapEvents'
 import { formatTokenAmount, formatCompact } from '@/services/launchpad'
@@ -89,7 +90,16 @@ export function ActivityTicker() {
         )
     }
 
-    if (events.length === 0) return null
+    if (events.length === 0) {
+        return (
+            <div className="mb-4 overflow-hidden rounded-lg border border-border/40 bg-card/30 px-3 py-2">
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/50">
+                    <Activity className="h-3.5 w-3.5" />
+                    <span>No recent activity</span>
+                </div>
+            </div>
+        )
+    }
 
     // Duplicate events for seamless loop
     const tickerItems = events.length > 3 ? [...events, ...events] : events

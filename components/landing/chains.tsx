@@ -19,7 +19,13 @@ export function Chains() {
                     {liveChains.map((chain) => (
                         <div key={chain.name} className="flex flex-col items-center gap-6">
                             <div className="h-12 w-12 flex items-center justify-center shadow-lg">
-                                <Image src={chain.icon} alt={chain.name} width={128} height={128} />
+                                <Image
+                                    src={chain.icon}
+                                    alt={chain.name}
+                                    width={128}
+                                    height={128}
+                                    className="grayscale"
+                                />
                             </div>
                             <span className="text-xs text-gray-300">{chain.name}</span>
                         </div>

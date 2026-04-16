@@ -27,7 +27,7 @@ export function Header() {
         { href: '/points', label: 'Points' },
     ]
     return (
-        <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 header-border-glow">
+        <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 header-border-glow">
             <div className="flex h-16 items-center px-4 lg:px-6">
                 {/* Left group: Hamburger (mobile) + Logo + Desktop Nav */}
                 <div className="flex items-center gap-1 md:gap-6 lg:gap-8">
