@@ -7,39 +7,26 @@
 **The fastest way to trade tokens across multiple chains.**
 Get the best prices across all DEXs with one click. No registration. No KYC. Just connect and swap.
 
-[Swap →](https://v1.junoswap.xyz/swap) · [Bridge →](https://v1.junoswap.xyz/bridge) · [Earn →](https://v1.junoswap.xyz/earn) · [Launchpad →](https://v1.junoswap.xyz/launchpad) · [Documentation →](./architecture.md) · [Discord →](https://discord.gg/caE5wzQBME)
-
+[Swap →](https://junoswap.xyz/swap) · [Bridge →](https://junoswap.xyz/bridge) · [Earn →](https://junoswap.xyz/earn) · [Launchpad →](https://junoswap.xyz/launchpad)
 ---
-
-### Why Junoswap?
-
-- **Best Prices** — Aggregates quotes from 7 DEXs (JunoSwap, Uniswap, PancakeSwap, Jibswap, Udonswap, Ponder, Diamon) with smart routing
-- **6 Chains** — KUB Chain, JB Chain, Worldchain, Base, BNB Chain, and more from a single interface
-- **Non-Custodial** — Your funds never leave your wallet. Open-source, built with battle-tested smart contracts
-- **Lightning Fast** — Built on Next.js 15 with modern Web3 libraries for instant quotes and fast execution
 
 ### Features
 
 - Multi-DEX swap with auto best-rate selection
 - Cross-chain bridge via LI.FI (BSC, Base, Worldchain)
-- Liquidity management with concentrated liquidity (V3)
 - LP mining with real-time reward tracking
-- Multi-hop routing for indirect token pairs
-- Customizable slippage protection
-- Native token wrap (KUB↔WKUB, BNB↔WBNB, JBC↔WJBC)
-- Shareable swap configuration links
 - Memecoin launchpad with bonding curve (buy/sell/graduate to V3 pool)
 
 ### Supported Chains
 
-| Chain | DEXs | Bridge | Explorer |
-|-------|------|--------|----------|
-| **KUB Chain** | JunoSwap V3, Udonswap, Ponder, Diamon | | [bkcscan.com](https://www.bkcscan.com) |
-| **JB Chain** | JunoSwap V3, Jibswap V2 | | [exp-l1.jibchain.net](https://exp-l1.jibchain.net) |
-| **KUB Testnet** | JunoSwap V3 | | [testnet.bkcscan.com](https://testnet.bkcscan.com) |
-| **Worldchain** | Uniswap V3 | LI.FI | [explorer.alchemy.com](https://worldchain-mainnet.explorer.alchemy.com) |
-| **Base** | Uniswap V3 | LI.FI | [basescan.org](https://basescan.org) |
-| **BNB Chain** | PancakeSwap V3 | LI.FI | [bscscan.com](https://bscscan.com) |
+| Chain | DEXs | Bridge |
+|-------|------|--------|
+| **KUB Chain** | JunoSwap V3, Udonswap, Ponder, Diamon | |
+| **JB Chain** | JunoSwap V3, Jibswap V2 | |
+| **KUB Testnet** | JunoSwap V3 | |
+| **Worldchain** | Uniswap V3 | LI.FI |
+| **Base** | Uniswap V3 | LI.FI |
+| **BNB Chain** | PancakeSwap V3 | LI.FI |
 
 **Launchpad**: Available on KUB Testnet — create and trade memecoins via bonding curve with automatic V3 pool graduation
 
@@ -61,7 +48,7 @@ For tech stack, project structure, architecture, and code reference — see [arc
 
 ## Community
 
-[Docs](./README.md) · [Roadmap](./roadmap.md) · [Architecture](./architecture.md) · [Twitter](https://x.com/junoswaptrade) · [Discord](https://discord.gg/caE5wzQBME) · [GitHub](https://github.com/coshi190/junoswap)
+[Twitter](https://x.com/junoswaptrade) · [Discord](https://discord.gg/caE5wzQBME) · [GitHub](https://github.com/coshi190/junoswap)
 
 Contributions welcome — UI/UX, testing, docs, smart contracts. 
 
