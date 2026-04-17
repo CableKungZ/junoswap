@@ -49,7 +49,7 @@ For tech stack, project structure, architecture, and code reference — see [arc
 
 ## Community
 
-[Twitter](https://x.com/junoswaptrade) · [Discord](https://discord.gg/caE5wzQBME) · [GitHub](https://github.com/coshi190/junoswap)
+[Twitter](https://x.com/junoswaptrade) · [Discord](https://discord.gg/caE5wzQBME)
 
 Contributions welcome — UI/UX, testing, docs, smart contracts. 
 
