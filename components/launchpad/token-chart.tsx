@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import {
     createChart,
     CandlestickSeries,
@@ -17,6 +17,7 @@ import type {
     Time as LWTime,
 } from 'lightweight-charts'
 import type { Address } from 'viem'
+import { useTheme } from 'next-themes'
 import { useTokenPriceHistory, TIMEFRAMES } from '@/hooks/useTokenPriceHistory'
 import type { ChartMode } from '@/types/chart'
 import { cn } from '@/lib/utils'
@@ -47,6 +48,27 @@ function formatChartValue(value: number, mode: ChartMode): string {
     return mode === 'mcap' ? formatMcap(value) : formatPrice(value)
 }
 
+function useChartColors() {
+    const { resolvedTheme } = useTheme()
+    const isDark = resolvedTheme === 'dark'
+
+    return useMemo(
+        () => ({
+            background: isDark ? 'hsl(232, 14%, 4%)' : 'hsl(0, 0%, 100%)',
+            textColor: isDark ? 'hsl(220, 8%, 40%)' : 'hsl(220, 8%, 46%)',
+            gridColor: isDark ? 'hsl(228, 12%, 15%)' : 'hsl(220, 12%, 90%)',
+            crosshairColor: isDark ? 'hsl(228, 12%, 25%)' : 'hsl(220, 12%, 70%)',
+            crosshairLabelBg: isDark ? 'hsl(232, 14%, 14%)' : 'hsl(220, 12%, 92%)',
+            borderColor: isDark ? 'hsl(228, 12%, 10%)' : 'hsl(220, 12%, 88%)',
+            volumeUp: isDark ? 'rgba(34, 197, 94, 0.25)' : 'rgba(34, 197, 94, 0.3)',
+            volumeDown: isDark ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.3)',
+            ohlcvUp: isDark ? 'text-emerald-400' : 'text-emerald-600',
+            ohlcvDown: isDark ? 'text-red-400' : 'text-red-600',
+        }),
+        [isDark]
+    )
+}
+
 export function TokenChart({ tokenAddr, className }: TokenChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<IChartApi | null>(null)
@@ -58,6 +80,7 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
 
     const { data, isLoading, timeframe, setTimeframe, chartMode, setChartMode } =
         useTokenPriceHistory(tokenAddr)
+    const chartColors = useChartColors()
 
     // OHLCV overlay state
     const [ohlcvData, setOhlcvData] = useState<{
@@ -76,44 +99,44 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { type: ColorType.Solid, color: 'hsl(232, 14%, 4%)' },
-                textColor: 'hsl(220, 8%, 40%)',
+                background: { type: ColorType.Solid, color: chartColors.background },
+                textColor: chartColors.textColor,
                 fontFamily: "'Inter', system-ui, sans-serif",
                 fontSize: 11,
             },
             grid: {
                 vertLines: {
-                    color: 'hsl(228, 12%, 15%)',
+                    color: chartColors.gridColor,
                     style: LineStyle.Dotted,
                 },
                 horzLines: {
-                    color: 'hsl(228, 12%, 15%)',
+                    color: chartColors.gridColor,
                     style: LineStyle.Dotted,
                 },
             },
             crosshair: {
                 mode: CrosshairMode.Magnet,
                 vertLine: {
-                    color: 'hsl(228, 12%, 25%)',
+                    color: chartColors.crosshairColor,
                     width: 1,
                     style: LineStyle.Dashed,
                     labelVisible: true,
-                    labelBackgroundColor: 'hsl(232, 14%, 14%)',
+                    labelBackgroundColor: chartColors.crosshairLabelBg,
                 },
                 horzLine: {
-                    color: 'hsl(228, 12%, 25%)',
+                    color: chartColors.crosshairColor,
                     width: 1,
                     style: LineStyle.Dashed,
                     labelVisible: true,
-                    labelBackgroundColor: 'hsl(232, 14%, 14%)',
+                    labelBackgroundColor: chartColors.crosshairLabelBg,
                 },
             },
             rightPriceScale: {
-                borderColor: 'hsl(228, 12%, 10%)',
+                borderColor: chartColors.borderColor,
                 scaleMargins: { top: 0.05, bottom: 0.25 },
             },
             timeScale: {
-                borderColor: 'hsl(228, 12%, 10%)',
+                borderColor: chartColors.borderColor,
                 timeVisible: true,
                 secondsVisible: false,
                 rightOffset: 5,
@@ -194,7 +217,7 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
             volumeSeriesRef.current = null
             priceLineRef.current = null
         }
-    }, [])
+    }, [chartColors])
 
     // Update data
     useEffect(() => {
@@ -214,7 +237,7 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
             data.map((d) => ({
                 time: d.time as LWTime,
                 value: d.volume,
-                color: d.close >= d.open ? 'rgba(34, 197, 94, 0.25)' : 'rgba(239, 68, 68, 0.25)',
+                color: d.close >= d.open ? chartColors.volumeUp : chartColors.volumeDown,
             })) as LWHistogramData<LWTime>[]
         )
 
@@ -255,12 +278,7 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
     }, [data])
 
     return (
-        <div
-            className={cn(
-                'relative rounded-lg border border-border/60 bg-[hsl(232,14%,4%)]',
-                className
-            )}
-        >
+        <div className={cn('relative rounded-lg border border-border/60 bg-card', className)}>
             {/* Enhanced toolbar */}
             <div className="flex min-h-11 flex-wrap items-center gap-1.5 border-b border-border/50 px-2 py-1.5 sm:gap-2 sm:px-3 sm:py-0">
                 {/* Mcap / Price toggle */}
@@ -329,8 +347,8 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
                             <span
                                 className={
                                     ohlcvData.open <= ohlcvData.close
-                                        ? 'text-emerald-400'
-                                        : 'text-red-400'
+                                        ? chartColors.ohlcvUp
+                                        : chartColors.ohlcvDown
                                 }
                             >
                                 {formatChartValue(ohlcvData.open, chartMode)}
@@ -341,8 +359,8 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
                             <span
                                 className={
                                     ohlcvData.high >= ohlcvData.close
-                                        ? 'text-emerald-400'
-                                        : 'text-red-400'
+                                        ? chartColors.ohlcvUp
+                                        : chartColors.ohlcvDown
                                 }
                             >
                                 {formatChartValue(ohlcvData.high, chartMode)}
@@ -353,8 +371,8 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
                             <span
                                 className={
                                     ohlcvData.low <= ohlcvData.close
-                                        ? 'text-emerald-400'
-                                        : 'text-red-400'
+                                        ? chartColors.ohlcvUp
+                                        : chartColors.ohlcvDown
                                 }
                             >
                                 {formatChartValue(ohlcvData.low, chartMode)}
@@ -364,7 +382,9 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
                             C{' '}
                             <span
                                 className={
-                                    ohlcvData.change >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                    ohlcvData.change >= 0
+                                        ? chartColors.ohlcvUp
+                                        : chartColors.ohlcvDown
                                 }
                             >
                                 {formatChartValue(ohlcvData.close, chartMode)}
@@ -373,7 +393,7 @@ export function TokenChart({ tokenAddr, className }: TokenChartProps) {
                         <span
                             className={cn(
                                 'font-semibold',
-                                ohlcvData.change >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                ohlcvData.change >= 0 ? chartColors.ohlcvUp : chartColors.ohlcvDown
                             )}
                         >
                             {ohlcvData.change >= 0 ? '+' : ''}

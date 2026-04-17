@@ -14,9 +14,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ChevronDown, Search, Copy, SearchX } from 'lucide-react'
+import { ChevronDown, Search, Copy, SearchX, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBalance } from '@/services/tokens'
 import { toastSuccess } from '@/lib/toast'
@@ -80,24 +79,44 @@ function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
                         <EmptyState icon={SearchX} title="No tokens found" compact />
                     ) : (
                         <div className="space-y-1">
-                            {filteredTokens.map((token) => (
-                                <Card
-                                    key={token.address}
-                                    onClick={() => onSelect(token)}
-                                    className={cn(
-                                        'cursor-pointer border-none bg-transparent hover:bg-accent',
-                                        selectedToken?.address === token.address && 'bg-accent'
-                                    )}
-                                >
-                                    <CardContent className="flex w-full items-center gap-3 px-3 py-2">
-                                        <Avatar className="h-8 w-8 shrink-0">
-                                            <AvatarImage src={token.logo} alt={token.symbol} />
-                                            <AvatarFallback className="bg-primary/10 text-primary">
-                                                {token.symbol.charAt(0)}
-                                            </AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex flex-1 flex-col">
-                                            <span className="font-medium">{token.symbol}</span>
+                            {filteredTokens.map((token) => {
+                                const isSelected = selectedToken?.address === token.address
+                                return (
+                                    <button
+                                        key={token.address}
+                                        onClick={() => onSelect(token)}
+                                        disabled={isSelected}
+                                        className={cn(
+                                            'flex items-center gap-3 w-full p-2 rounded-xl transition-all duration-150',
+                                            isSelected
+                                                ? 'bg-muted/40 border border-border'
+                                                : 'border border-transparent hover:bg-muted/50'
+                                        )}
+                                    >
+                                        <div
+                                            className={cn(
+                                                'relative h-8 w-8 flex-shrink-0 rounded-full',
+                                                isSelected && 'ring-2 ring-border'
+                                            )}
+                                        >
+                                            <Avatar className="h-8 w-8">
+                                                <AvatarImage src={token.logo} alt={token.symbol} />
+                                                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                                    {token.symbol.charAt(0)}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                        </div>
+                                        <div className="flex-1 text-left">
+                                            <div
+                                                className={cn(
+                                                    'text-sm',
+                                                    isSelected
+                                                        ? 'font-semibold text-foreground'
+                                                        : 'font-medium'
+                                                )}
+                                            >
+                                                {token.symbol}
+                                            </div>
                                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                 <span className="font-mono">
                                                     {truncateAddress(token.address)}
@@ -115,9 +134,14 @@ function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
                                         <span className="text-sm text-muted-foreground">
                                             {getBalance(token.address)}
                                         </span>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                        {isSelected && (
+                                            <div className="flex items-center justify-center h-5 w-5 rounded-full bg-foreground/10">
+                                                <Check className="h-3 w-3 text-foreground" />
+                                            </div>
+                                        )}
+                                    </button>
+                                )
+                            })}
                         </div>
                     )}
                 </div>

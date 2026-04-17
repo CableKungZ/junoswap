@@ -72,9 +72,9 @@
 @layer components {
     .card-glow {
         box-shadow:
-            0 0 0 1px hsl(230 15% 5% / 0.3),
-            0 2px 8px hsl(230 25% 3% / 0.2),
-            inset 0 1px 0 hsl(230 15% 12% / 0.05);
+            0 0 0 1px hsl(var(--border) / 0.3),
+            0 2px 8px hsl(var(--background) / 0.8),
+            inset 0 1px 0 hsl(var(--accent) / 0.1);
     }
 
     .btn-primary-glow {
@@ -86,15 +86,11 @@
     }
 
     .position-card-hover:hover {
-        border-color: hsl(0 100% 60% / 0.15);
+        border-color: hsl(var(--primary) / 0.15);
         box-shadow:
-            0 0 0 1px hsl(230 15% 5% / 0.3),
-            0 4px 16px hsl(230 25% 3% / 0.3),
-            inset 0 1px 0 hsl(230 15% 12% / 0.08);
-    }
-
-    .header-border-glow {
-        box-shadow: 0 1px 0 hsl(0 100% 60% / 0.06);
+            0 0 0 1px hsl(var(--border) / 0.3),
+            0 4px 16px hsl(var(--background) / 0.9),
+            inset 0 1px 0 hsl(var(--accent) / 0.12);
     }
 
     .ticker-scroll {
@@ -112,6 +108,18 @@
         100% {
             transform: translateX(-50%);
         }
+    }
+
+    .theme-logo {
+        filter: brightness(0) invert(1);
+    }
+
+    :root .theme-logo {
+        filter: brightness(0);
+    }
+
+    .dark .theme-logo {
+        filter: brightness(0) invert(1);
     }
 
     .empty-state-glow-pulse {

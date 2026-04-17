@@ -44,7 +44,12 @@ export function ChainSelect({
                             <img
                                 src={selectedMeta.icon}
                                 alt={selectedMeta.name}
-                                className="h-5 w-5 rounded-full object-cover"
+                                className={cn(
+                                    'h-5 w-5 rounded-full object-cover',
+                                    'invertInLight' in selectedMeta &&
+                                        selectedMeta.invertInLight &&
+                                        'invert dark:invert-0'
+                                )}
                             />
                             <span className="font-medium">{selectedMeta.name}</span>
                         </div>
@@ -72,7 +77,12 @@ export function ChainSelect({
                                 <img
                                     src={meta.icon}
                                     alt={meta.name}
-                                    className="h-5 w-5 rounded-full object-cover"
+                                    className={cn(
+                                        'h-5 w-5 rounded-full object-cover',
+                                        'invertInLight' in meta &&
+                                            meta.invertInLight &&
+                                            'invert dark:invert-0'
+                                    )}
                                 />
                                 <span>{meta.name}</span>
                             </div>

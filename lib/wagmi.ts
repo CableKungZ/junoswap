@@ -98,7 +98,8 @@ export const chainMetadata = {
         name: 'Worldchain',
         symbol: 'ETH',
         icon: '/chains/worldchain.svg',
-        explorer: 'https://worldchain-mainnet.explorer.alchemy.com',
+        invertInLight: true as const,
+        explorer: 'https://worldchain-mainnet.g.alchemy.com',
     },
 } as const
 

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { ConnectButton } from '@/components/web3/connect-button'
 import { NetworkSwitcher } from '@/components/web3/network-switcher'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import {
     NavigationMenu,
     NavigationMenuItem,
@@ -27,7 +28,7 @@ export function Header() {
         { href: '/points', label: 'Points' },
     ]
     return (
-        <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 header-border-glow">
+        <header className="sticky top-0 z-50 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="flex h-16 items-center px-4 lg:px-6">
                 {/* Left group: Hamburger (mobile) + Logo + Desktop Nav */}
                 <div className="flex items-center gap-1 md:gap-6 lg:gap-8">
@@ -45,7 +46,13 @@ export function Header() {
                         >
                             {/* Drawer header */}
                             <div className="flex items-center space-x-2 mt-2 mb-6">
-                                <Image src="/logo.svg" alt="junoswap" width={24} height={24} />
+                                <Image
+                                    src="/logo.svg"
+                                    alt="junoswap"
+                                    width={24}
+                                    height={24}
+                                    className="theme-logo"
+                                />
                                 <span className="text-lg font-bold">Junoswap</span>
                             </div>
 
@@ -59,8 +66,8 @@ export function Header() {
                                             href={link.href}
                                             className={`flex items-center min-h-[48px] px-4 py-3 text-[15px] font-medium transition-all duration-150 ${
                                                 isActive
-                                                    ? 'text-white'
-                                                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent'
+                                                    ? 'text-foreground'
+                                                    : 'text-muted-foreground border-transparent'
                                             }`}
                                             onClick={() => setIsMobileMenuOpen(false)}
                                         >
@@ -74,7 +81,13 @@ export function Header() {
 
                     {/* Logo */}
                     <Link href="/" className="flex items-center space-x-2">
-                        <Image src="/logo.svg" alt="junoswap" width={28} height={28} />
+                        <Image
+                            src="/logo.svg"
+                            alt="junoswap"
+                            width={28}
+                            height={28}
+                            className="theme-logo"
+                        />
                         <span className="hidden md:inline text-xl font-bold">Junoswap</span>
                     </Link>
 
@@ -91,7 +104,7 @@ export function Header() {
                                                 className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ease-out ${
                                                     isActive
                                                         ? 'text-foreground'
-                                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                                                        : 'text-muted-foreground'
                                                 }`}
                                             >
                                                 {link.label}
@@ -109,6 +122,7 @@ export function Header() {
                 {/* Right controls */}
                 <div className="flex items-center gap-2">
                     <NetworkSwitcher />
+                    <ThemeToggle />
                     <ConnectButton />
                 </div>
             </div>

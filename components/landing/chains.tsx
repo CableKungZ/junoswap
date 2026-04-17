@@ -10,26 +10,28 @@ const liveChains = [
 
 export function Chains() {
     return (
-        <section className="bg-gray-900/30 py-16">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
-                <div className="mx-auto max-w-2xl text-center text-2xl font-bold sm:text-3xl">
-                    Multi-Chain Support
-                </div>
-                <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-6 sm:grid-cols-5">
-                    {liveChains.map((chain) => (
-                        <div key={chain.name} className="flex flex-col items-center gap-6">
-                            <div className="h-12 w-12 flex items-center justify-center shadow-lg">
-                                <Image
-                                    src={chain.icon}
-                                    alt={chain.name}
-                                    width={128}
-                                    height={128}
-                                    className="grayscale"
-                                />
+        <section className="dark">
+            <div className="mx-6 bg-background py-16">
+                <div className="mx-auto max-w-7xl px-6 lg:px-8">
+                    <div className="mx-auto max-w-2xl text-center text-2xl font-bold text-foreground sm:text-3xl">
+                        Multi-Chain Support
+                    </div>
+                    <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-6 sm:grid-cols-5">
+                        {liveChains.map((chain) => (
+                            <div key={chain.name} className="flex flex-col items-center gap-6">
+                                <div className="h-12 w-12 flex items-center justify-center shadow-lg">
+                                    <Image
+                                        src={chain.icon}
+                                        alt={chain.name}
+                                        width={128}
+                                        height={128}
+                                        className="grayscale"
+                                    />
+                                </div>
+                                <span className="text-xs text-muted-foreground">{chain.name}</span>
                             </div>
-                            <span className="text-xs text-gray-300">{chain.name}</span>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
         </section>

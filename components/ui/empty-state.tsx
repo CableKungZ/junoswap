@@ -15,9 +15,9 @@ interface EmptyStateProps {
 }
 
 const glowColors = {
-    default: 'radial-gradient(circle, rgba(255,0,60,0.12) 0%, transparent 70%)',
-    subtle: 'radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%)',
-    error: 'radial-gradient(circle, rgba(239,68,68,0.12) 0%, transparent 70%)',
+    default: 'radial-gradient(circle, hsl(0 100% 60% / 0.12) 0%, transparent 70%)',
+    subtle: 'radial-gradient(circle, hsl(0 0% 50% / 0.06) 0%, transparent 70%)',
+    error: 'radial-gradient(circle, hsl(0 84% 60% / 0.12) 0%, transparent 70%)',
 }
 
 const ringColors = {

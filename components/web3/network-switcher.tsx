@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Loader2, ChevronDown, Search, Check } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { cn } from '@/lib/utils'
 
 const TESTNET_IDS: Set<number> = new Set([kubTestnet.id])
 
@@ -167,7 +168,15 @@ function ChainItem({ chainId, currentChainId, pendingChainId, onSelect }: ChainI
             <div
                 className={`relative h-8 w-8 flex-shrink-0 rounded-full ${isActive ? 'ring-2 ring-border' : ''}`}
             >
-                <Image src={meta.icon} alt={meta.name} fill className="rounded-full object-cover" />
+                <Image
+                    src={meta.icon}
+                    alt={meta.name}
+                    fill
+                    className={cn(
+                        'rounded-full object-cover',
+                        'invertInLight' in meta && meta.invertInLight && 'invert dark:invert-0'
+                    )}
+                />
             </div>
             <div className="flex-1 text-left">
                 <div
@@ -197,7 +206,7 @@ export function NetworkSwitcher({ className = '' }: { className?: string }) {
             <button
                 onClick={() => setIsModalOpen(true)}
                 aria-label="Select network"
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors ${className}`}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${className}`}
             >
                 {currentChain && (
                     <>
@@ -206,7 +215,12 @@ export function NetworkSwitcher({ className = '' }: { className?: string }) {
                                 src={currentChain.icon}
                                 alt={currentChain.name}
                                 fill
-                                className="rounded-full object-cover"
+                                className={cn(
+                                    'rounded-full object-cover',
+                                    'invertInLight' in currentChain &&
+                                        currentChain.invertInLight &&
+                                        'invert dark:invert-0'
+                                )}
                             />
                         </div>
                         {isPending ? (
