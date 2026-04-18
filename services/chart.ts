@@ -66,5 +66,34 @@ export function aggregateCandlesticks(
         }
     }
 
-    return Array.from(candles.values()).sort((a, b) => a.time - b.time)
+    // Forward-fill missing time buckets for continuous candles
+    const times = Array.from(candles.keys()).sort((a, b) => a - b)
+    const firstTime = times[0]
+    const lastTime = times[times.length - 1]
+
+    let prevClose = candles.get(firstTime)!.close
+    for (let t = firstTime + duration; t <= lastTime; t += duration) {
+        if (!candles.has(t)) {
+            candles.set(t, {
+                time: t,
+                open: prevClose,
+                high: prevClose,
+                low: prevClose,
+                close: prevClose,
+                volume: 0,
+            })
+        } else {
+            prevClose = candles.get(t)!.close
+        }
+    }
+
+    // Link each candle's open to the previous candle's close
+    const sorted = Array.from(candles.values()).sort((a, b) => a.time - b.time)
+    for (let i = 1; i < sorted.length; i++) {
+        sorted[i].open = sorted[i - 1].close
+        sorted[i].high = Math.max(sorted[i].open, sorted[i].high)
+        sorted[i].low = Math.min(sorted[i].open, sorted[i].low)
+    }
+
+    return sorted
 }
