@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Layers, Plus } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ import { ConnectModal } from '@/components/web3/connect-modal'
 import { TOKEN_LISTS, getDefaultPairTokens } from '@/lib/tokens'
 import { usePoolsForPair } from '@/hooks/usePools'
 import { usePoolTvl } from '@/hooks/usePoolTvl'
+import { usePoolVolume } from '@/hooks/usePoolVolume'
 import { useEarnStore } from '@/store/earn-store'
 import { formatFeeTier } from '@/lib/liquidity-helpers'
 import type { V3PoolData } from '@/types/earn'
@@ -32,15 +33,85 @@ function formatTvl(tvlUsd: number): string {
     return `$${tvlUsd.toFixed(2)}`
 }
 
+function formatApr(apr: number | null, isLoading: boolean): React.ReactNode {
+    if (isLoading) {
+        return <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+    }
+    if (apr === null || apr === 0) {
+        return <span className="text-sm text-muted-foreground">--</span>
+    }
+    if (apr >= 100) {
+        return (
+            <span className="text-sm font-medium">
+                {apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%
+            </span>
+        )
+    }
+    if (apr >= 0.01) {
+        return <span className="text-sm font-medium">{apr.toFixed(2)}%</span>
+    }
+    return <span className="text-sm font-medium">&lt;0.01%</span>
+}
+
+type SortKey = 'tvl' | 'apr' | 'vol1d' | 'vol30d'
+type SortDir = 'asc' | 'desc'
+
+function SortableHeader({
+    label,
+    columnKey,
+    sortKey,
+    sortDir,
+    onSort,
+    className,
+}: {
+    label: string
+    columnKey: SortKey
+    sortKey: SortKey
+    sortDir: SortDir
+    onSort: (key: SortKey) => void
+    className?: string
+}) {
+    const isActive = sortKey === columnKey
+    return (
+        <TableHead
+            className={`cursor-pointer select-none hover:bg-muted/50 transition-colors ${className ?? ''}`}
+        >
+            <button
+                className="flex items-center gap-1 bg-transparent border-0 p-0 font-medium text-inherit cursor-pointer"
+                onClick={() => onSort(columnKey)}
+            >
+                {label}
+                {isActive ? (
+                    sortDir === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5" />
+                    ) : (
+                        <ArrowDown className="h-3.5 w-3.5" />
+                    )
+                ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                )}
+            </button>
+        </TableHead>
+    )
+}
+
 function PoolRow({
     pool,
     tvlUsd,
     isLoadingTvl,
+    volume,
+    isLoadingVolume,
+    apr,
+    isLoadingApr,
     onConnect,
 }: {
     pool: V3PoolData
     tvlUsd: number | null
     isLoadingTvl: boolean
+    volume: { volume1d: number; volume30d: number } | null
+    isLoadingVolume: boolean
+    apr: number | null
+    isLoadingApr: boolean
     onConnect: () => void
 }) {
     const { isConnected } = useAccount()
@@ -99,6 +170,25 @@ function PoolRow({
                     <span className="text-sm text-muted-foreground">--</span>
                 )}
             </TableCell>
+            <TableCell className="p-3">{formatApr(apr, isLoadingApr)}</TableCell>
+            <TableCell className="p-3">
+                {isLoadingVolume ? (
+                    <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+                ) : volume?.volume1d ? (
+                    <span className="text-sm font-medium">{formatTvl(volume.volume1d)}</span>
+                ) : (
+                    <span className="text-sm text-muted-foreground">--</span>
+                )}
+            </TableCell>
+            <TableCell className="p-3">
+                {isLoadingVolume ? (
+                    <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+                ) : volume?.volume30d ? (
+                    <span className="text-sm font-medium">{formatTvl(volume.volume30d)}</span>
+                ) : (
+                    <span className="text-sm text-muted-foreground">--</span>
+                )}
+            </TableCell>
             <TableCell className="p-3 text-right">
                 <Button
                     size="sm"
@@ -135,6 +225,18 @@ function LoadingState() {
                     </TableCell>
                     <TableCell className="p-3">
                         <div className="h-5 w-14 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell className="p-3">
+                        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell className="p-3">
+                        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell className="p-3">
+                        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+                    </TableCell>
+                    <TableCell className="p-3">
+                        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
                     </TableCell>
                     <TableCell className="p-3">
                         <div className="h-4 w-12 bg-muted rounded animate-pulse" />
@@ -199,13 +301,59 @@ export function PoolsList() {
     const chainId = useChainId()
     const { pools, isLoading } = useCommonPools(chainId)
     const { tvlByAddress, isLoading: isLoadingTvl } = usePoolTvl(pools, chainId)
+    const { volumeByAddress, isLoading: isLoadingVol } = usePoolVolume(pools, chainId)
+    const aprByAddress = useMemo(() => {
+        const result: Record<string, number | null> = {}
+        for (const pool of pools) {
+            const addr = pool.address.toLowerCase()
+            const tvl = tvlByAddress[addr]
+            const volume = volumeByAddress[addr]
+            if (!tvl || tvl <= 0 || !volume?.volume30d || volume.volume30d <= 0) {
+                result[addr] = null
+                continue
+            }
+            const dailyAvgVolume = volume.volume30d / 30
+            result[addr] = ((dailyAvgVolume * (pool.fee / 1_000_000)) / tvl) * 365 * 100
+        }
+        return result
+    }, [pools, tvlByAddress, volumeByAddress])
+    const isLoadingApr = isLoadingTvl || isLoadingVol
+    const [sortKey, setSortKey] = useState<SortKey>('tvl')
+    const [sortDir, setSortDir] = useState<SortDir>('desc')
+    const handleSort = (key: SortKey) => {
+        if (key === sortKey) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+        } else {
+            setSortKey(key)
+            setSortDir('desc')
+        }
+    }
     const sortedPools = useMemo(() => {
         return [...pools].sort((a, b) => {
-            const aTvl = tvlByAddress[a.address.toLowerCase()] ?? 0
-            const bTvl = tvlByAddress[b.address.toLowerCase()] ?? 0
-            return bTvl - aTvl
+            const aAddr = a.address.toLowerCase()
+            const bAddr = b.address.toLowerCase()
+            let cmp = 0
+            switch (sortKey) {
+                case 'tvl':
+                    cmp = (tvlByAddress[aAddr] ?? 0) - (tvlByAddress[bAddr] ?? 0)
+                    break
+                case 'apr':
+                    cmp = (aprByAddress[aAddr] ?? 0) - (aprByAddress[bAddr] ?? 0)
+                    break
+                case 'vol1d':
+                    cmp =
+                        (volumeByAddress[aAddr]?.volume1d ?? 0) -
+                        (volumeByAddress[bAddr]?.volume1d ?? 0)
+                    break
+                case 'vol30d':
+                    cmp =
+                        (volumeByAddress[aAddr]?.volume30d ?? 0) -
+                        (volumeByAddress[bAddr]?.volume30d ?? 0)
+                    break
+            }
+            return sortDir === 'asc' ? cmp : -cmp
         })
-    }, [pools, tvlByAddress])
+    }, [pools, sortKey, sortDir, tvlByAddress, aprByAddress, volumeByAddress])
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     if (isLoading) {
         return (
@@ -216,6 +364,9 @@ export function PoolsList() {
                             <TableHead className="py-3 px-4">Pool</TableHead>
                             <TableHead className="py-3 px-4">Fee Tier</TableHead>
                             <TableHead className="py-3 px-4">TVL</TableHead>
+                            <TableHead className="py-3 px-4">APR</TableHead>
+                            <TableHead className="py-3 px-4">1D Vol</TableHead>
+                            <TableHead className="py-3 px-4">30D Vol</TableHead>
                             <TableHead className="py-3 px-4 text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -241,7 +392,38 @@ export function PoolsList() {
                         <TableRow>
                             <TableHead className="py-3 px-4">Pool</TableHead>
                             <TableHead className="py-3 px-4">Fee Tier</TableHead>
-                            <TableHead className="py-3 px-4">TVL</TableHead>
+                            <SortableHeader
+                                label="TVL"
+                                columnKey="tvl"
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={handleSort}
+                                className="py-3 px-4"
+                            />
+                            <SortableHeader
+                                label="APR"
+                                columnKey="apr"
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={handleSort}
+                                className="py-3 px-4"
+                            />
+                            <SortableHeader
+                                label="1D Vol"
+                                columnKey="vol1d"
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={handleSort}
+                                className="py-3 px-4"
+                            />
+                            <SortableHeader
+                                label="30D Vol"
+                                columnKey="vol30d"
+                                sortKey={sortKey}
+                                sortDir={sortDir}
+                                onSort={handleSort}
+                                className="py-3 px-4"
+                            />
                             <TableHead className="py-3 px-4 text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -252,6 +434,10 @@ export function PoolsList() {
                                 pool={pool}
                                 tvlUsd={tvlByAddress[pool.address.toLowerCase()] ?? null}
                                 isLoadingTvl={isLoadingTvl}
+                                volume={volumeByAddress[pool.address.toLowerCase()] ?? null}
+                                isLoadingVolume={isLoadingVol}
+                                apr={aprByAddress[pool.address.toLowerCase()] ?? null}
+                                isLoadingApr={isLoadingApr}
                                 onConnect={() => setIsConnectModalOpen(true)}
                             />
                         ))}
