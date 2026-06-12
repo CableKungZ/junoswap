@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
-import { Wallet } from 'lucide-react'
 import { useNativeUsdPriceContext } from '@/components/launchpad/native-usd-price-provider'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -17,7 +16,6 @@ import { useUserSwapEvents } from '@/hooks/useUserSwapEvents'
 import { usePortfolioPnl } from '@/hooks/usePortfolioPnl'
 import { usePortfolioStore } from '@/store/portfolio-store'
 import { ConnectModal } from '@/components/web3/connect-modal'
-import { getChainMetadata } from '@/lib/wagmi'
 import type { PortfolioToken, PortfolioSummary as Summary } from '@/types/portfolio'
 
 export function PortfolioContent() {
@@ -32,8 +30,6 @@ export function PortfolioContent() {
     const prices = usePortfolioPrices(holdings, nativeUsdPrice, chainId, getTokenType)
     const { data: swapEvents } = useUserSwapEvents(address, chainId)
     const pnlMap = usePortfolioPnl(swapEvents, holdings, prices, nativeUsdPrice)
-
-    const chainMeta = getChainMetadata(chainId)
 
     const portfolioTokens = useMemo<PortfolioToken[]>(() => {
         const result: PortfolioToken[] = []
@@ -85,7 +81,6 @@ export function PortfolioContent() {
             <div className="flex min-h-screen items-start justify-center p-4">
                 <div className="w-full max-w-md space-y-4">
                     <EmptyState
-                        icon={Wallet}
                         title="Connect Wallet"
                         description="Connect your wallet to view your portfolio, track net worth, and monitor PNL."
                     />
@@ -101,21 +96,7 @@ export function PortfolioContent() {
     return (
         <div className="flex min-h-screen items-start justify-center p-4 pt-8">
             <div className="w-full max-w-5xl space-y-6">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Portfolio</h1>
-                    {chainMeta && (
-                        <div className="flex items-center gap-2">
-                            <img
-                                src={chainMeta.icon}
-                                alt={chainMeta.name}
-                                className="h-5 w-5 rounded-full"
-                            />
-                            <span className="text-sm text-muted-foreground font-mono">
-                                {chainMeta.name}
-                            </span>
-                        </div>
-                    )}
-                </div>
+                <h1 className="text-2xl font-bold">Portfolio</h1>
 
                 <PortfolioSummary summary={summary} isLoading={isLoading} />
 
