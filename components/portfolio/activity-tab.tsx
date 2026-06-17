@@ -22,8 +22,6 @@ import type { ActivityEvent } from '@/types/portfolio'
 const PAGE_SIZE = 20
 const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
-// ── Date grouping ───────────────────────────────────────────────────
-
 function groupByDate(events: ActivityEvent[]): { label: string; events: ActivityEvent[] }[] {
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000
@@ -45,8 +43,6 @@ function groupByDate(events: ActivityEvent[]): { label: string; events: Activity
     }
     return Array.from(groups.entries()).map(([label, events]) => ({ label, events }))
 }
-
-// ── Shared row pieces ───────────────────────────────────────────────
 
 function TypeChip({ children, className }: { children: ReactNode; className?: string }) {
     return (
@@ -85,8 +81,6 @@ function AmountLeg({
         </span>
     )
 }
-
-// ── Unified activity row (trade + transfer branches) ────────────────
 
 function ActivityRow({
     event,
@@ -136,7 +130,14 @@ function ActivityRow({
             </TypeChip>
 
             {/* Token icon(s) sit directly in front of each amount */}
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+            <div
+                className={cn(
+                    'flex min-w-0 flex-1 gap-x-3 gap-y-1',
+                    isTransfer
+                        ? 'flex-wrap items-center'
+                        : 'flex-col items-start sm:flex-row sm:flex-wrap sm:items-center'
+                )}
+            >
                 {isTransfer ? (
                     <>
                         <AmountLeg
@@ -197,7 +198,7 @@ function ActivityRow({
     )
 }
 
-// ── Loading skeleton (mirrors the row layout) ───────────────────────
+// Loading skeleton mirrors the row layout
 
 function LoadingSkeleton() {
     return (
@@ -224,8 +225,6 @@ function LoadingSkeleton() {
         </div>
     )
 }
-
-// ── Main component ──────────────────────────────────────────────────
 
 interface ActivityTabProps {
     address: Address
