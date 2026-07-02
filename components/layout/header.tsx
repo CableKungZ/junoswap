@@ -139,7 +139,7 @@ export function Header() {
                                 maskRepeat: 'no-repeat',
                             }}
                         />
-                        <span className="hidden md:inline text-xl font-bold bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent">
+                        <span className="relative -top-px hidden md:inline text-xl font-bold leading-none bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent">
                             Junoswap
                         </span>
                     </Link>

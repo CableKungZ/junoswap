@@ -5,12 +5,14 @@ import warpVert from '@/shaders/warp.vert'
 import warpFrag from '@/shaders/warp.frag'
 
 const BG_COLOR = { r: 0.016, g: 0.02, b: 0.043 } // near-black void #04050B
-const ACCENT1 = { r: 1.0, g: 0.302, b: 0.0 } // #FF4D00 — unused, kept for uniform plumbing
-const ACCENT2 = { r: 1.0, g: 0.569, b: 0.302 } // #FF914D — orange (glow halo)
-const ACCENT3 = { r: 1.0, g: 0.843, b: 0.0 } // #FFD700 — gold (glow core)
+const ACCENT1 = { r: 1.0, g: 0.302, b: 0.0 } // #FF4D00 — deep orange-red (limb edges)
+const ACCENT2 = { r: 1.0, g: 0.569, b: 0.302 } // #FF914D — orange (mid-limb / atmosphere)
+const ACCENT3 = { r: 1.0, g: 0.843, b: 0.0 } // #FFD700 — gold (crest rim light)
 
 const ENTRANCE_DURATION = 3.0
 const MOUSE_LERP = 0.05
+// Reduced-motion static frame: sin(2.0 * 0.785) ≈ 1 puts the rim breathe at peak
+const STATIC_TIME = 2.0
 
 interface Vec2 {
     x: number
@@ -131,6 +133,14 @@ export function HeroBackground() {
         gl.uniform3f(u.uAccentColor2, ACCENT2.r, ACCENT2.g, ACCENT2.b)
         gl.uniform3f(u.uAccentColor3, ACCENT3.r, ACCENT3.g, ACCENT3.b)
 
+        // After a context restore the canvas keeps its size, so resize()'s
+        // size-changed guard would skip re-uploading uResolution/viewport
+        // into the fresh program — set them here when the size is known.
+        if (canvas.width > 0) {
+            gl.viewport(0, 0, canvas.width, canvas.height)
+            gl.uniform2f(u.uResolution, canvas.width, canvas.height)
+        }
+
         return true
     }, [])
 
@@ -161,20 +171,40 @@ export function HeroBackground() {
         if (!setupWebGL()) return
 
         startTimeRef.current = performance.now() / 1000
+
+        const gl = glRef.current!
+        const u = uniformsRef.current
+        const mobile = isMobile()
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+        // Reduced motion: no RAF loop — render one finished frame (entrance
+        // complete, breathe at peak) and re-render only on resize.
+        const drawStatic = () => {
+            if (!glRef.current) return
+            gl.uniform1f(u.uTime, STATIC_TIME)
+            gl.uniform2f(u.uMouse, 0.5, 0.5)
+            gl.uniform1f(u.uIntensity, 1.0)
+            gl.drawArrays(gl.TRIANGLES, 0, 6)
+        }
+
         // Defer initial resize — parent may not have layout dimensions yet
         requestAnimationFrame(() => {
             resize()
             // Safety net: if still 0, try again next frame
             if (canvasRef.current?.width === 0) {
-                requestAnimationFrame(() => resize())
+                requestAnimationFrame(() => {
+                    resize()
+                    if (reducedMotion) drawStatic()
+                })
+            } else if (reducedMotion) {
+                drawStatic()
             }
         })
 
-        const gl = glRef.current!
-        const u = uniformsRef.current
-        const mobile = isMobile()
-
-        const resizeObserver = new ResizeObserver(() => resize())
+        const resizeObserver = new ResizeObserver(() => {
+            resize()
+            if (reducedMotion) drawStatic()
+        })
         if (canvasRef.current?.parentElement) {
             resizeObserver.observe(canvasRef.current.parentElement)
         }
@@ -205,8 +235,10 @@ export function HeroBackground() {
                 }
             }
         }
-        window.addEventListener('mousemove', onMouseMove, { passive: true })
-        window.addEventListener('touchmove', onTouchMove, { passive: true })
+        if (!reducedMotion) {
+            window.addEventListener('mousemove', onMouseMove, { passive: true })
+            window.addEventListener('touchmove', onTouchMove, { passive: true })
+        }
 
         const render = () => {
             rafRef.current = requestAnimationFrame(render)
@@ -240,7 +272,29 @@ export function HeroBackground() {
             gl.drawArrays(gl.TRIANGLES, 0, 6)
         }
 
-        rafRef.current = requestAnimationFrame(render)
+        // preventDefault on loss marks the context restorable; on restore the
+        // same context object becomes valid again, so re-running setupWebGL
+        // rebuilds the program/buffer and re-uploads uniforms. startTimeRef
+        // is kept so a mid-session restore doesn't replay the entrance.
+        const onContextLost = (e: Event) => {
+            e.preventDefault()
+            cancelAnimationFrame(rafRef.current)
+        }
+        const onContextRestored = () => {
+            if (!setupWebGL()) return
+            if (reducedMotion) {
+                drawStatic()
+            } else {
+                rafRef.current = requestAnimationFrame(render)
+            }
+        }
+        const canvasEl = canvasRef.current
+        canvasEl?.addEventListener('webglcontextlost', onContextLost)
+        canvasEl?.addEventListener('webglcontextrestored', onContextRestored)
+
+        if (!reducedMotion) {
+            rafRef.current = requestAnimationFrame(render)
+        }
 
         return () => {
             cancelAnimationFrame(rafRef.current)
@@ -248,6 +302,8 @@ export function HeroBackground() {
             intersectionObserver.disconnect()
             window.removeEventListener('mousemove', onMouseMove)
             window.removeEventListener('touchmove', onTouchMove)
+            canvasEl?.removeEventListener('webglcontextlost', onContextLost)
+            canvasEl?.removeEventListener('webglcontextrestored', onContextRestored)
 
             const glCleanup = glRef.current
             if (glCleanup) {
