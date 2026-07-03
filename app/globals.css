@@ -108,20 +108,458 @@
 }
 
 @layer utilities {
-    @keyframes transfer-dot {
-        0%,
-        100% {
-            left: 15%;
-            opacity: 0.3;
+    /* Route-finding cycle — all four keyframes share one 6s timeline:
+       0–55% pulses probe the routes, 55–85% winner glows + badge, 85–100% reset.
+       Pulse paths use pathLength=1 with dasharray "0.15 1.15": the dash period (1.3)
+       exceeds the path length so only one pulse is ever on the path; offset 0.15→-1
+       carries the dash from fully-before to fully-past the path. */
+    @keyframes route-pulse {
+        0% {
+            stroke-dashoffset: 0.15;
+            opacity: 1;
         }
         50% {
-            left: 80%;
+            stroke-dashoffset: -1;
+            opacity: 1;
+        }
+        55%,
+        100% {
+            stroke-dashoffset: -1;
+            opacity: 0;
+        }
+    }
+
+    .animate-route-pulse {
+        opacity: 0;
+        animation: route-pulse 6s ease-in-out infinite;
+    }
+
+    @keyframes route-best {
+        0%,
+        55% {
+            opacity: 0;
+        }
+        62%,
+        85% {
+            opacity: 1;
+        }
+        95%,
+        100% {
+            opacity: 0;
+        }
+    }
+
+    .animate-route-best {
+        filter: drop-shadow(0 0 4px hsl(0 100% 60% / 0.5));
+        animation: route-best 6s ease-in-out infinite;
+    }
+
+    @keyframes route-dim {
+        0%,
+        55% {
+            opacity: 1;
+        }
+        62%,
+        85% {
+            opacity: 0.3;
+        }
+        95%,
+        100% {
             opacity: 1;
         }
     }
 
-    .animate-transfer-dot {
-        animation: transfer-dot 3s ease-in-out infinite;
+    .animate-route-dim {
+        animation: route-dim 6s ease-in-out infinite;
+    }
+
+    @keyframes best-badge {
+        0%,
+        55% {
+            opacity: 0;
+            transform: scale(0.85) translateY(4px);
+        }
+        62%,
+        85% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+        95%,
+        100% {
+            opacity: 0;
+            transform: scale(0.85) translateY(4px);
+        }
+    }
+
+    .animate-best-badge {
+        animation: best-badge 6s ease-in-out infinite;
+    }
+
+    /* Bridge mesh — all packet legs share one 6s timeline. Each leg travels during
+       the first 18% (1.08s) of its element's cycle and hides for the rest; inline
+       animation-delay places legs on the global clock so an in-leg hands off to its
+       out-leg at the hub (handoffs at 18%, 40%, 80%). Same dash trick as
+       route-pulse; out-legs run the dash backwards (hub → node) on the same path.
+       Timing is linear overall so delays stay on schedule; the 0% frame's
+       ease-in-out applies only within each leg's travel segment. */
+    @keyframes bridge-pulse-in {
+        0% {
+            stroke-dashoffset: 0.15;
+            opacity: 1;
+            animation-timing-function: ease-in-out;
+        }
+        18% {
+            stroke-dashoffset: -1;
+            opacity: 1;
+        }
+        19%,
+        100% {
+            stroke-dashoffset: -1;
+            opacity: 0;
+        }
+    }
+
+    .animate-bridge-pulse-in {
+        opacity: 0;
+        animation: bridge-pulse-in 6s linear infinite;
+    }
+
+    @keyframes bridge-pulse-out {
+        0% {
+            stroke-dashoffset: -1;
+            opacity: 1;
+            animation-timing-function: ease-in-out;
+        }
+        18% {
+            stroke-dashoffset: 0.15;
+            opacity: 1;
+        }
+        19%,
+        100% {
+            stroke-dashoffset: 0.15;
+            opacity: 0;
+        }
+    }
+
+    .animate-bridge-pulse-out {
+        opacity: 0;
+        animation: bridge-pulse-out 6s linear infinite;
+    }
+
+    /* Hub bumps each time a packet arrives (global 18%, 40%, 80%) */
+    @keyframes bridge-hub {
+        0%,
+        15%,
+        21%,
+        37%,
+        43%,
+        77%,
+        83%,
+        100% {
+            transform: scale(1);
+        }
+        18%,
+        40%,
+        80% {
+            transform: scale(1.06);
+        }
+    }
+
+    .animate-bridge-hub {
+        animation: bridge-hub 6s ease-in-out infinite;
+    }
+
+    /* Launchpad pump — every piece below rides one shared 6s timeline. 0–50%
+       the price line draws (dashoffset 1→0 over pathLength 1) while a
+       soft-edged mask rect sweeps the area + volume bars open and the tip dot
+       rides offset-path; draw, sweep, and dot all use the same accelerating
+       cubic-bezier so the pump speeds up into the breakout and the dot stays
+       glued to the tip. 50% arrival wakes the faint rocket card and fires the
+       firework burst + aura; the card holds a glowing lift through the ~62–85%
+       badge window; 88–96% the scene group fades so the loop restarts from a
+       blank chart. Base (un-animated) styles are the finished chart — that's
+       what reduced motion freezes to. */
+    @keyframes chart-draw {
+        0% {
+            stroke-dashoffset: 1;
+        }
+        50%,
+        100% {
+            stroke-dashoffset: 0;
+        }
+    }
+
+    .animate-chart-draw {
+        stroke-dasharray: 1 1;
+        animation: chart-draw 6s cubic-bezier(0.55, 0, 0.75, 0.5) infinite;
+    }
+
+    /* Sweep rect is 460 wide with a feathered right edge; -460px parks it
+       fully off-canvas so the scene starts hidden */
+    @keyframes chart-sweep {
+        0% {
+            transform: translateX(-460px);
+        }
+        50%,
+        100% {
+            transform: translateX(0);
+        }
+    }
+
+    .animate-chart-sweep {
+        animation: chart-sweep 6s cubic-bezier(0.55, 0, 0.75, 0.5) infinite;
+    }
+
+    @keyframes chart-dot {
+        0% {
+            offset-distance: 0%;
+            transform: scale(1);
+        }
+        50% {
+            offset-distance: 100%;
+            transform: scale(1);
+        }
+        56% {
+            transform: scale(1.8);
+        }
+        64%,
+        100% {
+            offset-distance: 100%;
+            transform: scale(1);
+        }
+    }
+
+    .animate-chart-dot {
+        offset-distance: 100%;
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: chart-dot 6s cubic-bezier(0.55, 0, 0.75, 0.5) infinite;
+    }
+
+    /* Fades the price group to 0 at BOTH ends of the loop so the dashoffset /
+       sweep / dot all snap back to their start values while invisible — no
+       blink from the undrawn line or the dot jumping to the baseline. The
+       fade-in overlaps the draw's slow ease-in start, so the chart is already
+       opaque by the time the line meaningfully advances. */
+    @keyframes chart-cycle {
+        0% {
+            opacity: 0;
+        }
+        6%,
+        88% {
+            opacity: 1;
+        }
+        96%,
+        100% {
+            opacity: 0;
+        }
+    }
+
+    .animate-chart-cycle {
+        animation: chart-cycle 6s linear infinite;
+    }
+
+    /* The rocket card idles faint and slightly shrunken while the line draws,
+       wakes with an overshoot pop at the 50% arrival, holds a glowing hover
+       through the badge window, then dims back for the reset — faint at both
+       ends of the loop so the wrap is seamless. Base opacity is 1, so reduced
+       motion shows the card full-bright. */
+    @keyframes launchpad-lift {
+        0%,
+        46% {
+            transform: translateY(0) scale(0.97);
+            box-shadow: 0 0 0 0 rgb(255 145 77 / 0);
+            opacity: 0.45;
+        }
+        51% {
+            transform: translateY(-4px) scale(1.09);
+            opacity: 1;
+        }
+        56% {
+            transform: translateY(-5px) scale(1.01);
+        }
+        62%,
+        84% {
+            transform: translateY(-6px) scale(1.04);
+            box-shadow: 0 6px 30px -4px rgb(255 145 77 / 0.55);
+            opacity: 1;
+        }
+        95%,
+        100% {
+            transform: translateY(0) scale(0.97);
+            box-shadow: 0 0 0 0 rgb(255 145 77 / 0);
+            opacity: 0.45;
+        }
+    }
+
+    .animate-launchpad-lift {
+        animation: launchpad-lift 6s ease-in-out infinite;
+    }
+
+    /* Graduation firework, fired by the same 50% arrival: diamond sparks fly
+       out along per-element --fw-x/--fw-y vectors while tumbling from their
+       45° rest pose, and ring shockwaves expand — all with a decelerating
+       burst curve, hidden outside the 50–74% window so the loop wraps clean.
+       Base opacity 0 keeps the burst out of the reduced-motion freeze frame. */
+    @keyframes firework-spark {
+        0%,
+        50% {
+            transform: translate(0, 0) rotate(45deg) scale(0.2);
+            opacity: 0;
+        }
+        53%,
+        64% {
+            opacity: 1;
+        }
+        74%,
+        100% {
+            transform: translate(var(--fw-x), var(--fw-y)) rotate(225deg) scale(1);
+            opacity: 0;
+        }
+    }
+
+    .animate-firework-spark {
+        opacity: 0;
+        animation: firework-spark 6s cubic-bezier(0.1, 0.65, 0.3, 1) infinite;
+    }
+
+    @keyframes firework-ring {
+        0%,
+        50% {
+            transform: scale(0.25);
+            opacity: 0;
+        }
+        54% {
+            opacity: 0.8;
+        }
+        72%,
+        100% {
+            transform: scale(1);
+            opacity: 0;
+        }
+    }
+
+    .animate-firework-ring {
+        opacity: 0;
+        animation: firework-ring 6s cubic-bezier(0.1, 0.65, 0.3, 1) infinite;
+    }
+
+    /* Graduation state dressing, all on the same 6s clock: a radial aura
+       blooms behind the rocket card right after the 51% wake-up pop and
+       breathes while graduated; a warm wash tints the card interior and the
+       rocket itself shifts gold. Base opacity 0 (and base icon color) keep
+       the reduced-motion freeze frame calm. */
+    @keyframes rocket-aura {
+        0%,
+        46% {
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        54% {
+            opacity: 0.9;
+            transform: scale(1);
+        }
+        68% {
+            opacity: 0.65;
+            transform: scale(1.1);
+        }
+        82% {
+            opacity: 0.9;
+            transform: scale(1);
+        }
+        95%,
+        100% {
+            opacity: 0;
+            transform: scale(0.5);
+        }
+    }
+
+    .animate-rocket-aura {
+        opacity: 0;
+        animation: rocket-aura 6s ease-in-out infinite;
+    }
+
+    @keyframes rocket-core {
+        0%,
+        48% {
+            opacity: 0;
+        }
+        56%,
+        84% {
+            opacity: 1;
+        }
+        95%,
+        100% {
+            opacity: 0;
+        }
+    }
+
+    .animate-rocket-core {
+        opacity: 0;
+        animation: rocket-core 6s ease-in-out infinite;
+    }
+
+    @keyframes rocket-icon {
+        0%,
+        48% {
+            color: hsl(0 100% 60%);
+        }
+        56%,
+        84% {
+            color: #ffb700;
+        }
+        95%,
+        100% {
+            color: hsl(0 100% 60%);
+        }
+    }
+
+    .animate-rocket-icon {
+        animation: rocket-icon 6s ease-in-out infinite;
+    }
+
+    /* Graduated badge: springy pop-in on the badge beat with a one-shot
+       shimmer strip sweeping the pill right after it lands. Shimmer travel
+       is in strip-widths (w-1/3 of the pill), so 350% clears the far edge. */
+    @keyframes graduated-badge {
+        0%,
+        55% {
+            opacity: 0;
+            transform: scale(0.8) translateY(6px);
+        }
+        63% {
+            opacity: 1;
+            transform: scale(1.07) translateY(-1px);
+        }
+        67%,
+        85% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+        95%,
+        100% {
+            opacity: 0;
+            transform: scale(0.8) translateY(6px);
+        }
+    }
+
+    .animate-graduated-badge {
+        animation: graduated-badge 6s ease-in-out infinite;
+    }
+
+    @keyframes badge-shimmer {
+        0%,
+        64% {
+            transform: translateX(-150%) skewX(-15deg);
+        }
+        78%,
+        100% {
+            transform: translateX(350%) skewX(-15deg);
+        }
+    }
+
+    .animate-badge-shimmer {
+        animation: badge-shimmer 6s ease-in-out infinite;
     }
 
     @keyframes gradient-shift {
@@ -229,5 +667,38 @@
         transform: none !important;
         filter: none !important;
         animation: none !important;
+    }
+
+    /* Freeze the route-finding scene on its "best route found" state:
+       pulses stay hidden (base opacity 0), winner + badge stay visible.
+       Bridge mesh freezes to a static network diagram the same way —
+       packets rest at base opacity 0, hub rests at scale 1.
+       Launchpad chart freezes fully drawn: natural dashoffset 0, identity
+       clip, dot resting at offset-distance 100%, badge visible */
+    .animate-route-pulse,
+    .animate-route-best,
+    .animate-route-dim,
+    .animate-best-badge,
+    .animate-bridge-pulse-in,
+    .animate-bridge-pulse-out,
+    .animate-bridge-hub,
+    .animate-chart-draw,
+    .animate-chart-sweep,
+    .animate-chart-dot,
+    .animate-chart-cycle,
+    .animate-launchpad-lift,
+    .animate-firework-spark,
+    .animate-firework-ring,
+    .animate-rocket-aura,
+    .animate-rocket-core,
+    .animate-rocket-icon,
+    .animate-graduated-badge {
+        animation: none !important;
+    }
+
+    /* Frozen shimmer would park its strip mid-badge — hide it outright */
+    .animate-badge-shimmer {
+        animation: none !important;
+        opacity: 0 !important;
     }
 }
