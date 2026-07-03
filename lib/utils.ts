@@ -1,8 +1,19 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { parseUnits } from 'viem'
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
+}
+
+/** parseUnits that returns 0n instead of throwing on empty/partial input (e.g. "", "1.") while typing. */
+export function safeParseUnits(amount: string, decimals: number | undefined): bigint {
+    if (!amount || decimals === undefined) return 0n
+    try {
+        return parseUnits(amount, decimals)
+    } catch {
+        return 0n
+    }
 }
 
 export function formatAddress(address: string, startChars = 6, endChars = 4): string {

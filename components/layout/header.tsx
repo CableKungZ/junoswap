@@ -100,6 +100,7 @@ export function Header() {
     const transparent = isLanding && !scrolled
     const navLinks = [
         { href: '/swap', label: 'Swap' },
+        { href: '/aggregator', label: 'Aggregator' },
         { href: '/earn', label: 'Earn' },
         { href: '/bridge', label: 'Bridge' },
         { href: '/launchpad', label: 'Launchpad' },

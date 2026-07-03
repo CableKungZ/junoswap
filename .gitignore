@@ -57,3 +57,4 @@ contracts/broadcast
 # playwright
 playwright-report
 test-results
+*.md
