@@ -11,6 +11,8 @@ import { UNISWAP_V3_QUOTER_V2_ABI } from '@/lib/abis/uniswap-v3-quoter'
 import { UNISWAP_V3_SWAP_ROUTER_ABI } from '@/lib/abis/uniswap-v3-swap-router'
 import { buildQuoteParams, buildMulticallSwapToNative } from '@/services/dex/uniswap-v3'
 import { calculateMinOutput } from '@/services/launchpad'
+import { ERC20_ABI } from '@/lib/abis/erc20'
+import { getAllowanceFunctionName } from '@/lib/tokens'
 import { useSwapStore } from '@/store/swap-store'
 import type { SwapParams } from '@/types/swap'
 
@@ -24,6 +26,7 @@ interface UseV3PoolSellParams {
 
 interface UseV3PoolSellResult {
     sell: () => void
+    canSell: boolean
     expectedOut: bigint
     minNativeOut: bigint
     isPreparing: boolean
@@ -48,6 +51,19 @@ export function useV3PoolSell({
     const chainId = useLaunchpadChainId()
     const publicClient = usePublicClient({ chainId })
     const v3Config = getV3Config(chainId)
+
+    // Gate the swap simulation on allowance so it re-runs after approval: the router
+    // multicall does a transferFrom that reverts in simulation while allowance is 0, and the
+    // simulation's query key never changes on approval. Sharing this read's cache with
+    // useTokenApproval means its post-approval refetch flips `enabled` and re-simulates.
+    const { data: allowance = 0n } = useReadContract({
+        address: tokenAddr ?? undefined,
+        abi: ERC20_ABI,
+        functionName: tokenAddr ? getAllowanceFunctionName(tokenAddr) : 'allowance',
+        args: [address ?? '0x0', v3Config?.swapRouter ?? '0x0'],
+        chainId,
+        query: { enabled: !!tokenAddr && !!address && !!v3Config?.swapRouter },
+    })
 
     // Quote from V3 quoter
     const quoteParams =
@@ -105,6 +121,7 @@ export function useV3PoolSell({
                 !!tokenAddr &&
                 !!address &&
                 tokenAmount > 0n &&
+                allowance >= tokenAmount &&
                 !!v3Config &&
                 !!multicallData,
         },
@@ -138,6 +155,8 @@ export function useV3PoolSell({
         writeError ||
         (isError && receipt?.status === 'reverted' ? new Error('Transaction reverted') : null)
 
+    const canSell = !!simulationData?.request
+
     const sell = () => {
         if (!simulationData?.request) return
         writeContract(simulationData.request)
@@ -145,6 +164,7 @@ export function useV3PoolSell({
 
     return {
         sell,
+        canSell,
         expectedOut,
         minNativeOut,
         isPreparing,

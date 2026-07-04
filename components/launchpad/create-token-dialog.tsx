@@ -96,8 +96,8 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
     // Redirect to the new token's detail page after creation settles
     useEffect(() => {
         if (!createdTokenAddress || !isSuccess) return
-        router.push(`/launchpad/token/${createdTokenAddress}`)
-    }, [createdTokenAddress, isSuccess, router])
+        router.push(`/launchpad/token/${createdTokenAddress}?chain=${chainId}`)
+    }, [createdTokenAddress, isSuccess, router, chainId])
 
     // Handle error — partial success (token created but buy failed)
     useEffect(() => {

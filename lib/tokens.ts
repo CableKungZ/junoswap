@@ -19,7 +19,7 @@ const KUB_TESTNET_TOKENS: Token[] = [
         name: 'tKUB',
         decimals: 18,
         chainId: kubTestnet.id,
-        logo: 'https://cmswap.mypinata.cloud/ipfs/bafkreifelq2ktrxybwnkyabw7veqzec3p4v47aoco7acnzdwj34sn7q56u',
+        logo: '/tokens/kub.png',
     },
     {
         address: '0x700D3ba307E1256e509eD3E45D6f9dff441d6907' as const,
@@ -27,7 +27,7 @@ const KUB_TESTNET_TOKENS: Token[] = [
         name: 'Wrapped KUB',
         decimals: 18,
         chainId: kubTestnet.id,
-        logo: 'https://cmswap.mypinata.cloud/ipfs/bafkreifelq2ktrxybwnkyabw7veqzec3p4v47aoco7acnzdwj34sn7q56u',
+        logo: '/tokens/kub.png',
     },
     {
         address: '0xE7f64C5fEFC61F85A8b851d8B16C4E21F91e60c0' as const,
@@ -94,7 +94,7 @@ const JB_CHAIN_TOKENS: Token[] = [
         name: 'USDT',
         decimals: 18,
         chainId: jbc.id,
-        logo: 'https://jibswap.com/images/tokens/USDT.png',
+        logo: '/tokens/usdt.png',
     },
     {
         address: '0xE67E280f5a354B4AcA15fA7f0ccbF667CF74F97b' as const,
@@ -129,7 +129,7 @@ const KUB_MAINNET_TOKENS: Token[] = [
         name: 'KUB',
         decimals: 18,
         chainId: bitkub.id,
-        logo: 'https://cmswap.mypinata.cloud/ipfs/bafkreifelq2ktrxybwnkyabw7veqzec3p4v47aoco7acnzdwj34sn7q56u',
+        logo: '/tokens/kub.png',
     },
     {
         address: '0x67eBD850304c70d983B2d1b93ea79c7CD6c3F6b5' as const,
@@ -137,7 +137,7 @@ const KUB_MAINNET_TOKENS: Token[] = [
         name: 'Wrapped KUB',
         decimals: 18,
         chainId: bitkub.id,
-        logo: 'https://cmswap.mypinata.cloud/ipfs/bafkreifelq2ktrxybwnkyabw7veqzec3p4v47aoco7acnzdwj34sn7q56u',
+        logo: '/tokens/kub.png',
     },
     {
         address: '0x7d984C24d2499D840eB3b7016077164e15E5faA6' as const,
@@ -153,7 +153,7 @@ const KUB_MAINNET_TOKENS: Token[] = [
         name: 'Tether USD',
         decimals: 6,
         chainId: bitkub.id,
-        logo: 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
+        logo: '/tokens/usdt.png',
     },
     {
         address: '0x31929a0fd776F971C5dd14bF03e1F9fF69D9c91c' as const,
@@ -161,7 +161,7 @@ const KUB_MAINNET_TOKENS: Token[] = [
         name: 'USD Coin (Bridged)',
         decimals: 6,
         chainId: bitkub.id,
-        logo: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
+        logo: '/tokens/usdc.png',
     },
     {
         address: '0x9B005000A10Ac871947D99001345b01C1cEf2790' as const,
@@ -236,7 +236,7 @@ const WORLDCHAIN_TOKENS: Token[] = [
         name: 'USDC',
         decimals: 6,
         chainId: worldchain.id,
-        logo: 'https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694',
+        logo: '/tokens/usdc.png',
     },
     {
         address: '0x2cFc85d8E48F8EAB294be644d9E25C3030863003' as const,
@@ -303,7 +303,7 @@ const BASE_TOKENS: Token[] = [
         name: 'USDC',
         decimals: 6,
         chainId: base.id,
-        logo: 'https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694',
+        logo: '/tokens/usdc.png',
     },
     {
         address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf' as const,
@@ -378,7 +378,7 @@ const BSC_TOKENS: Token[] = [
         name: 'USDT',
         decimals: 18,
         chainId: bsc.id,
-        logo: 'https://cmswap.mypinata.cloud/ipfs/bafkreieg7yf6iwx7obygg62hz252bwnaddedanvlizonaawagk7eze4qcu',
+        logo: '/tokens/usdt.png',
     },
     {
         address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c' as const,

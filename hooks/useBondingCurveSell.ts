@@ -1,10 +1,18 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useSimulateContract, useWriteContract, usePublicClient } from 'wagmi'
+import {
+    useAccount,
+    useReadContract,
+    useSimulateContract,
+    useWriteContract,
+    usePublicClient,
+} from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import { BONDING_CURVE_JUNOSWAP_ABI } from '@/lib/abis/bonding-curve-junoswap'
+import { ERC20_ABI } from '@/lib/abis/erc20'
+import { getAllowanceFunctionName } from '@/lib/tokens'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
 import { calculateSellOutput, calculateMinOutput } from '@/services/launchpad'
 import { useSwapStore } from '@/store/swap-store'
@@ -20,6 +28,7 @@ interface UseBondingCurveSellParams {
 
 interface UseBondingCurveSellResult {
     sell: () => void
+    canSell: boolean
     expectedOut: bigint
     minNativeOut: bigint
     isPreparing: boolean
@@ -41,8 +50,22 @@ export function useBondingCurveSell({
 }: UseBondingCurveSellParams): UseBondingCurveSellResult {
     const { settings } = useSwapStore()
     const slippageBps = Math.round(settings.slippage * 100)
+    const { address } = useAccount()
     const { chainId, address: bondingCurveAddress } = useLaunchpadContract()
     const publicClient = usePublicClient({ chainId })
+
+    // Gate the sell simulation on allowance so it re-runs after approval: the bonding curve's
+    // sell() does a transferFrom that reverts in simulation while allowance is 0, and the
+    // simulation's query key never changes on approval. Sharing this read's cache with
+    // useTokenApproval means its post-approval refetch flips `enabled` and re-simulates.
+    const { data: allowance = 0n } = useReadContract({
+        address: tokenAddr ?? undefined,
+        abi: ERC20_ABI,
+        functionName: tokenAddr ? getAllowanceFunctionName(tokenAddr) : 'allowance',
+        args: [address ?? '0x0', bondingCurveAddress ?? '0x0'],
+        chainId,
+        query: { enabled: !!tokenAddr && !!address && !!bondingCurveAddress },
+    })
 
     const expectedOut = useMemo(
         () => calculateSellOutput(tokenAmount, nativeReserve, tokenReserve, virtualAmount),
@@ -61,7 +84,12 @@ export function useBondingCurveSell({
         args: tokenAddr ? [tokenAddr, tokenAmount, minNativeOut] : undefined,
         chainId,
         query: {
-            enabled: !!tokenAddr && !!bondingCurveAddress && tokenAmount > 0n && enabled,
+            enabled:
+                !!tokenAddr &&
+                !!bondingCurveAddress &&
+                tokenAmount > 0n &&
+                allowance >= tokenAmount &&
+                enabled,
         },
     })
 
@@ -94,6 +122,8 @@ export function useBondingCurveSell({
         writeError ||
         (isError && receipt?.status === 'reverted' ? new Error('Transaction reverted') : null)
 
+    const canSell = !!simulationData?.request
+
     const sell = () => {
         if (!simulationData?.request) return
         writeContract(simulationData.request)
@@ -101,6 +131,7 @@ export function useBondingCurveSell({
 
     return {
         sell,
+        canSell,
         expectedOut,
         minNativeOut,
         isPreparing,

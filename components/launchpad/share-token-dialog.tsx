@@ -9,6 +9,7 @@ import { formatCompact } from '@/services/launchpad'
 import { cn } from '@/lib/utils'
 import { toastSuccess } from '@/lib/toast'
 import { useShareableImage } from '@/hooks/useShareableImage'
+import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 import { Check, Copy, ArrowRight, Download } from 'lucide-react'
 
@@ -107,8 +108,9 @@ export function ShareTokenDialog({
     }, [logo])
 
     const { nativeUsdPrice } = useNativeUsdPriceContext()
+    const chainId = useLaunchpadChainId()
 
-    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://junoswap.trade'}/launchpad/token/${tokenAddr}`
+    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://junoswap.trade'}/launchpad/token/${tokenAddr}?chain=${chainId}`
 
     const mcapNum = parseFloat(marketCap)
     const mcapDisplay =

@@ -72,7 +72,7 @@ function validateAmountString(amount: string | undefined): string {
     return trimmed
 }
 
-function parseChainId(chainParam: string | undefined): number | null {
+export function parseChainId(chainParam: string | undefined): number | null {
     if (!chainParam) return null
     const parsed = parseInt(chainParam, 10)
     return isNaN(parsed) ? null : parsed

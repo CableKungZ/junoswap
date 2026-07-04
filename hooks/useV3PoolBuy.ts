@@ -23,6 +23,7 @@ interface UseV3PoolBuyParams {
 
 interface UseV3PoolBuyResult {
     buy: () => void
+    canBuy: boolean
     expectedOut: bigint
     minTokenOut: bigint
     isPreparing: boolean
@@ -130,6 +131,8 @@ export function useV3PoolBuy({
         writeError ||
         (isError && receipt?.status === 'reverted' ? new Error('Transaction reverted') : null)
 
+    const canBuy = !!simulationData?.request
+
     const buy = () => {
         if (!simulationData?.request) return
         writeContract(simulationData.request)
@@ -137,6 +140,7 @@ export function useV3PoolBuy({
 
     return {
         buy,
+        canBuy,
         expectedOut,
         minTokenOut,
         isPreparing,

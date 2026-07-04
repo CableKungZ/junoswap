@@ -33,7 +33,10 @@ export function TokenCard({
     const name = tokenName || token.name || ''
 
     return (
-        <Link href={`/launchpad/token/${token.address}`} className="group relative block">
+        <Link
+            href={`/launchpad/token/${token.address}?chain=${token.chainId}`}
+            className="group relative block"
+        >
             <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-r from-primary to-[#FF914D] opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-40" />
             <Card className="relative transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1">
                 <CardContent className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">

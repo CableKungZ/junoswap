@@ -1,11 +1,14 @@
 'use client'
 
-import { Suspense } from 'react'
-import { useParams } from 'next/navigation'
+import { Suspense, useEffect, useRef } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useChainId, useSwitchChain } from 'wagmi'
 import { isAddress } from 'viem'
-import { bitkub } from '@/lib/wagmi'
+import { toast } from 'sonner'
+import { getChainMetadata } from '@/lib/wagmi'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
+import { parseChainId } from '@/lib/swap-params'
+import { LaunchpadChainProvider, useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TokenDetailPage } from '@/components/launchpad/token-detail-page'
@@ -32,27 +35,35 @@ export default function TokenPage() {
 
 function TokenPageContent() {
     const params = useParams()
-    const chainId = useChainId()
-    const { switchChain } = useSwitchChain()
+    const searchParams = useSearchParams()
+    const walletChainId = useChainId()
     const tokenAddr = params.address as string
 
-    if (!isLaunchpadChain(chainId)) {
-        return (
-            <div className="flex min-h-screen items-start justify-center p-4">
-                <div className="w-full max-w-lg space-y-4">
-                    <EmptyState
-                        title="Chain Not Supported"
-                        description="The launchpad is available on supported KUB networks. Please switch your network."
-                        action={
-                            <Button onClick={() => switchChain({ chainId: bitkub.id })}>
-                                Switch Network
-                            </Button>
-                        }
-                    />
-                </div>
-            </div>
-        )
-    }
+    // The token's chain comes from the URL (?chain=). Old param-less links fall back to
+    // the wallet-derived launchpad chain so they keep resolving.
+    const urlChain = parseChainId(searchParams.get('chain') ?? undefined)
+    const fallbackChainId = useLaunchpadChainId()
+    const activeChainId =
+        urlChain !== null && isLaunchpadChain(urlChain) ? urlChain : fallbackChainId
+
+    // Prompt (once) to switch the wallet to the token's chain so trading is ready; reads
+    // work regardless since they target activeChainId directly.
+    const { switchChain } = useSwitchChain()
+    const promptedRef = useRef(false)
+    useEffect(() => {
+        if (promptedRef.current) return
+        if (!walletChainId || walletChainId === activeChainId) return
+        promptedRef.current = true
+        const chainName = getChainMetadata(activeChainId)?.name || `Chain ${activeChainId}`
+        toast.info(`Switch to ${chainName}?`, {
+            description: 'This token trades on a different network.',
+            action: {
+                label: 'Switch',
+                onClick: () => switchChain({ chainId: activeChainId }),
+            },
+            duration: 10000,
+        })
+    }, [walletChainId, activeChainId, switchChain])
 
     if (!tokenAddr || !isAddress(tokenAddr)) {
         return (
@@ -73,8 +84,10 @@ function TokenPageContent() {
     }
 
     return (
-        <div className="mx-auto max-w-7xl px-4 py-6">
-            <TokenDetailPage tokenAddr={tokenAddr as `0x${string}`} />
-        </div>
+        <LaunchpadChainProvider chainId={activeChainId}>
+            <div className="mx-auto max-w-7xl px-4 py-6">
+                <TokenDetailPage tokenAddr={tokenAddr as `0x${string}`} />
+            </div>
+        </LaunchpadChainProvider>
     )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useAccount, useBalance, useReadContract } from 'wagmi'
+import { useAccount, useBalance, useChainId, useReadContract, useSwitchChain } from 'wagmi'
 import { parseUnits, formatEther, parseEther } from 'viem'
 import type { Address } from 'viem'
 import { Card, CardContent } from '@/components/ui/card'
@@ -96,6 +96,14 @@ export function TokenTradeCard({
     const bondingCurveAddress = getBondingCurveAddress(chainId)
     const wrappedNative = INTERMEDIARY_TOKENS[chainId]?.wrappedNative as Address | undefined
 
+    // The token's chain (chainId) comes from the URL and may differ from the connected
+    // wallet chain. Reads target chainId, but writes (buy/sell/approve) require the wallet
+    // to be on that chain — otherwise prompt a switch instead of firing a doomed tx.
+    const walletChainId = useChainId()
+    const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
+    const wrongChain = isConnected && walletChainId !== chainId
+    const activeChainName = getChainMetadata(chainId)?.name || `Chain ${chainId}`
+
     const {
         nativeReserve,
         tokenReserve,
@@ -167,6 +175,7 @@ export function TokenTradeCard({
     // Bonding curve buy hook
     const {
         buy: bcBuy,
+        canBuy: canBuyBC,
         expectedOut: bcBuyExpectedOut,
         minTokenOut: bcMinTokenOut,
         isPreparing: isBuyPreparingBC,
@@ -188,6 +197,7 @@ export function TokenTradeCard({
     // V3 pool buy hook
     const {
         buy: v3Buy,
+        canBuy: canBuyV3,
         expectedOut: v3BuyExpectedOut,
         minTokenOut: v3MinTokenOut,
         isPreparing: isBuyPreparingV3,
@@ -208,6 +218,7 @@ export function TokenTradeCard({
     // Bonding curve sell hook
     const {
         sell: bcSell,
+        canSell: canSellBC,
         expectedOut: bcSellExpectedOut,
         minNativeOut: bcMinNativeOut,
         isPreparing: isSellPreparingBC,
@@ -229,6 +240,7 @@ export function TokenTradeCard({
     // V3 pool sell hook
     const {
         sell: v3Sell,
+        canSell: canSellV3,
         expectedOut: v3SellExpectedOut,
         minNativeOut: v3MinNativeOut,
         isPreparing: isSellPreparingV3,
@@ -247,6 +259,8 @@ export function TokenTradeCard({
     })
 
     // Resolve active hook values
+    const canBuy = isGraduated ? canBuyV3 : canBuyBC
+    const canSell = isGraduated ? canSellV3 : canSellBC
     const buyExpectedOut = isGraduated ? v3BuyExpectedOut : bcBuyExpectedOut
     const minTokenOut = isGraduated ? v3MinTokenOut : bcMinTokenOut
     const isBuyPreparing = isGraduated ? isBuyPreparingV3 : isBuyPreparingBC
@@ -369,6 +383,10 @@ export function TokenTradeCard({
             setIsConnectModalOpen(true)
             return
         }
+        if (wrongChain) {
+            switchChain({ chainId })
+            return
+        }
         if (isGraduated) {
             v3Buy()
         } else {
@@ -379,6 +397,10 @@ export function TokenTradeCard({
     const handleSell = () => {
         if (!isConnected) {
             setIsConnectModalOpen(true)
+            return
+        }
+        if (wrongChain) {
+            switchChain({ chainId })
             return
         }
         if (needsSellApproval) {
@@ -395,6 +417,10 @@ export function TokenTradeCard({
     const handleGraduate = () => {
         if (!isConnected) {
             setIsConnectModalOpen(true)
+            return
+        }
+        if (wrongChain) {
+            switchChain({ chainId })
             return
         }
         graduate()
@@ -433,18 +459,24 @@ export function TokenTradeCard({
                                 className="w-full"
                                 onClick={handleGraduate}
                                 disabled={
-                                    isGraduatePreparing ||
-                                    isGraduateExecuting ||
-                                    graduateStep === 'done'
+                                    wrongChain
+                                        ? isSwitchingChain
+                                        : isGraduatePreparing ||
+                                          isGraduateExecuting ||
+                                          graduateStep === 'done'
                                 }
                             >
-                                {isGraduateExecuting
-                                    ? graduateStepLabel || 'Processing...'
-                                    : isGraduatePreparing
-                                      ? 'Preparing...'
-                                      : graduateStep === 'done'
-                                        ? 'Graduated ✓'
-                                        : 'Graduate Token'}
+                                {wrongChain
+                                    ? isSwitchingChain
+                                        ? 'Switching...'
+                                        : `Switch to ${activeChainName}`
+                                    : isGraduateExecuting
+                                      ? graduateStepLabel || 'Processing...'
+                                      : isGraduatePreparing
+                                        ? 'Preparing...'
+                                        : graduateStep === 'done'
+                                          ? 'Graduated ✓'
+                                          : 'Graduate Token'}
                             </Button>
                             {(isGraduatePreparing || isGraduateExecuting) && (
                                 <p className="text-xs text-muted-foreground">
@@ -568,22 +600,31 @@ export function TokenTradeCard({
                             )}
 
                             <Button
-                                variant="success"
+                                variant="default"
                                 size="lg"
                                 className="w-full"
                                 onClick={handleBuy}
                                 disabled={
-                                    isBuyPreparing ||
-                                    isBuyExecuting ||
-                                    isBuyConfirming ||
-                                    buyAmountWei === 0n
+                                    wrongChain
+                                        ? isSwitchingChain
+                                        : isBuyPreparing ||
+                                          isBuyExecuting ||
+                                          isBuyConfirming ||
+                                          buyAmountWei === 0n ||
+                                          (isConnected && buyAmountWei > 0n && !canBuy)
                                 }
                             >
-                                {isBuyExecuting
-                                    ? 'Buying...'
-                                    : isBuyConfirming
-                                      ? 'Confirming...'
-                                      : 'Buy'}
+                                {wrongChain
+                                    ? isSwitchingChain
+                                        ? 'Switching...'
+                                        : `Switch to ${activeChainName}`
+                                    : isBuyExecuting
+                                      ? 'Buying...'
+                                      : isBuyConfirming
+                                        ? 'Confirming...'
+                                        : isBuyPreparing
+                                          ? 'Preparing...'
+                                          : 'Buy'}
                             </Button>
                         </TabsContent>
 
@@ -656,28 +697,40 @@ export function TokenTradeCard({
                             )}
 
                             <Button
-                                variant="danger"
+                                variant="default"
                                 size="lg"
                                 className="w-full"
                                 onClick={handleSell}
                                 disabled={
-                                    isSellPreparing ||
-                                    isSellExecuting ||
-                                    isSellConfirming ||
-                                    isApprovingSell ||
-                                    isConfirmingApproval ||
-                                    sellAmountWei === 0n
+                                    wrongChain
+                                        ? isSwitchingChain
+                                        : isSellPreparing ||
+                                          isSellExecuting ||
+                                          isSellConfirming ||
+                                          isApprovingSell ||
+                                          isConfirmingApproval ||
+                                          sellAmountWei === 0n ||
+                                          (isConnected &&
+                                              !needsSellApproval &&
+                                              sellAmountWei > 0n &&
+                                              !canSell)
                                 }
                             >
-                                {isApprovingSell || isConfirmingApproval
-                                    ? 'Approving...'
-                                    : needsSellApproval
-                                      ? `Approve ${tokenSymbol}`
-                                      : isSellExecuting
-                                        ? 'Selling...'
-                                        : isSellConfirming
-                                          ? 'Confirming...'
-                                          : 'Sell'}
+                                {wrongChain
+                                    ? isSwitchingChain
+                                        ? 'Switching...'
+                                        : `Switch to ${activeChainName}`
+                                    : isApprovingSell || isConfirmingApproval
+                                      ? 'Approving...'
+                                      : needsSellApproval
+                                        ? `Approve ${tokenSymbol}`
+                                        : isSellExecuting
+                                          ? 'Selling...'
+                                          : isSellConfirming
+                                            ? 'Confirming...'
+                                            : isSellPreparing
+                                              ? 'Preparing...'
+                                              : 'Sell'}
                             </Button>
                         </TabsContent>
                     </Tabs>

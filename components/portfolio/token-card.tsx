@@ -42,7 +42,7 @@ export function TokenCard({ portfolioToken }: TokenCardProps) {
     // Launchpad (bonding curve) tokens trade on their launchpad page;
     // everything else (static + graduated) trades via the swap page.
     const href = isLaunchpad
-        ? `/launchpad/token/${token.address}`
+        ? `/launchpad/token/${token.address}?chain=${token.chainId}`
         : `/swap?input=${token.address}&chain=${token.chainId}`
 
     return (

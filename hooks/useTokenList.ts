@@ -1,9 +1,9 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useChainId } from 'wagmi'
 import type { Address } from 'viem'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
+import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { ponderRequest } from '@/lib/ponder-client'
 import { normalizePinataGateway } from '@/lib/ipfs'
 import type { LaunchToken } from '@/types/launchpad'
@@ -88,7 +88,7 @@ interface UseTokenListResult {
 }
 
 export function useTokenList(): UseTokenListResult {
-    const chainId = useChainId()
+    const chainId = useLaunchpadChainId()
     const supported = isLaunchpadChain(chainId)
 
     const {

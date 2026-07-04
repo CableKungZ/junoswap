@@ -25,7 +25,7 @@ function TradeChip({ event, chainId }: { event: EnrichedSwapEvent; chainId: numb
 
     return (
         <Link
-            href={`/launchpad/token/${event.tokenAddr}`}
+            href={`/launchpad/token/${event.tokenAddr}?chain=${chainId}`}
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/50 bg-card/50 px-2.5 py-1 text-[11px] transition-colors hover:border-primary/40 hover:bg-accent/50"
         >
             <span

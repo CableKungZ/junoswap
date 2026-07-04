@@ -20,6 +20,7 @@ interface UseBondingCurveBuyParams {
 
 interface UseBondingCurveBuyResult {
     buy: () => void
+    canBuy: boolean
     expectedOut: bigint
     minTokenOut: bigint
     isPreparing: boolean
@@ -95,6 +96,8 @@ export function useBondingCurveBuy({
         writeError ||
         (isError && receipt?.status === 'reverted' ? new Error('Transaction reverted') : null)
 
+    const canBuy = !!simulationData?.request
+
     const buy = () => {
         if (!simulationData?.request) return
         writeContract(simulationData.request)
@@ -102,6 +105,7 @@ export function useBondingCurveBuy({
 
     return {
         buy,
+        canBuy,
         expectedOut,
         minTokenOut,
         isPreparing,
