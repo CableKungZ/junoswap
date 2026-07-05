@@ -16,7 +16,6 @@ export function Hero() {
     const sectionRef = useRef<HTMLElement>(null)
     const rafRef = useRef<number>(0)
 
-    // Scroll parallax: text recedes and fades as user scrolls past the hero
     useEffect(() => {
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         if (prefersReducedMotion) return
@@ -25,7 +24,6 @@ export function Hero() {
         const text = textRef.current
         if (!section || !text) return
 
-        // Reduce parallax intensity on mobile where the hero fills more of the viewport
         const isMobile = window.innerWidth < 768
 
         const onScroll = () => {
@@ -33,7 +31,6 @@ export function Hero() {
             rafRef.current = requestAnimationFrame(() => {
                 const scrollY = window.scrollY
                 const heroHeight = section.offsetHeight
-                // Only apply while the hero is partially visible
                 if (scrollY >= heroHeight) return
 
                 const progress = Math.min(scrollY / heroHeight, 1)
@@ -58,7 +55,6 @@ export function Hero() {
             ref={sectionRef}
             className="relative -mt-16 flex min-h-[100dvh] items-center overflow-hidden"
         >
-            {/* Eclipse-horizon fallback (approximates the WebGL canvas) shown during SSR / before it loads */}
             <div className="absolute inset-0 -z-10 overflow-hidden bg-[#04050B]">
                 <div className="absolute inset-x-0 bottom-0 h-[55%] bg-[radial-gradient(90%_100%_at_50%_100%,hsl(43_100%_55%_/_0.13),hsl(24_100%_59%_/_0.06)_45%,transparent_75%)]" />
                 <div className="absolute left-1/2 top-[85%] h-[130%] w-[360%] -translate-x-1/2 rounded-[50%] bg-[#020309] shadow-[0_-2px_28px_hsl(43_100%_60%_/_0.22)] sm:w-[240%]" />

@@ -13,7 +13,6 @@ interface Feature {
     href: string
 }
 
-/* Suspension-bridge glyph in lucide style — lucide-react has no bridge icon */
 function BridgeIcon({ className }: { className?: string }) {
     return (
         <svg
@@ -61,9 +60,6 @@ const features: Feature[] = [
     },
 ]
 
-/* Orthogonal "circuit rail" from Token A (40,125) to Token B (360,125): branch
-   vertically at branchX with rounded 90° bends (r=10), run along laneY, mirror
-   back at 400-branchX. Sweep flags flip for lanes above vs below the center line. */
 function railPath(branchX: number, laneY: number): string {
     const r = 10
     const s = laneY < 125 ? -1 : 1
@@ -90,8 +86,6 @@ const swapRails = [
     { d: railPath(62, 205), delay: '0.6s' },
 ]
 
-/* DEX hops: single chip on the outer lanes, double hop on the inner lanes;
-   the center lane's hop is the hub card itself */
 const dexChips = [
     { x: 200, y: 45 },
     { x: 145, y: 85 },
@@ -186,7 +180,6 @@ function SwapVisual() {
                     <DexChip key={`${chip.x}-${chip.y}`} x={chip.x} y={chip.y} />
                 ))}
 
-                {/* Winning rail — whole path + its chip light up after the probe phase */}
                 <g className="animate-route-best">
                     <path
                         d={swapRails[0]!.d}
@@ -207,7 +200,6 @@ function SwapVisual() {
                     <circle cx="200" cy="45" r="2" fill="hsl(0 100% 60%)" />
                 </g>
 
-                {/* Token endpoints — KUB in, USDC out */}
                 <circle cx="40" cy="125" r="16" className="fill-primary/10" />
                 <circle
                     cx="40"
@@ -242,7 +234,6 @@ function SwapVisual() {
                 />
             </svg>
 
-            {/* flex-centered wrapper — the badge keyframe owns `transform`, so no translate utilities here */}
             <div className="absolute inset-x-0 top-[4%] flex justify-center">
                 <div className="animate-best-badge rounded-full border border-primary/30 bg-card px-2.5 py-0.5 text-[10px] font-medium text-primary">
                     Best price
@@ -263,9 +254,6 @@ function SwapVisual() {
     )
 }
 
-/* Orbit rail: quadratic arc from a node into the hub (200,125), control point
-   pushed perpendicular to the chord so all four arcs swirl the same rotational
-   direction. Symmetric node placement keeps all arc lengths equal. */
 function orbitPath(nx: number, ny: number): string {
     const dx = 200 - nx
     const dy = 125 - ny
@@ -273,7 +261,6 @@ function orbitPath(nx: number, ny: number): string {
     return `M ${nx} ${ny} Q ${nx + dx / 2 - dy * k} ${ny + dy / 2 + dx * k} 200 125`
 }
 
-/* Nodes sit exactly on the outer orbit ring (ellipse rx=150 ry=80 at 200,125) */
 function onRing(deg: number): { x: number; y: number } {
     const t = (deg * Math.PI) / 180
     return { x: 200 + 150 * Math.cos(t), y: 125 + 80 * Math.sin(t) }
@@ -303,9 +290,6 @@ const bridgeNodes: BridgeNode[] = [
     },
 ]
 
-/* Each transfer rides two orbit arcs: in-leg (source → hub), then out-leg
-   (hub → destination) starting exactly when the in-leg arrives
-   (outDelay = inDelay + 1.08s, one leg's travel time on the 6s clock) */
 const bridgeTransfers = [
     { from: 0, to: 3, color: 'hsl(0 100% 60%)', inDelay: '0s', outDelay: '1.08s' },
     { from: 2, to: 1, color: '#FF914D', inDelay: '1.32s', outDelay: '2.4s' },
@@ -450,7 +434,6 @@ function BridgeVisual() {
                 ))}
             </svg>
 
-            {/* flex wrapper owns centering so the hub keyframe can own `transform` */}
             <div className="absolute inset-0 flex items-center justify-center">
                 <div className="animate-bridge-hub flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#FF914D] p-0.5">
                     <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-card">
@@ -462,15 +445,9 @@ function BridgeVisual() {
     )
 }
 
-/* Bullish price curve: Catmull-Rom smoothing of a climb with pullbacks from
-   the left axis edge (28,206) up to the right axis edge (372,48), so the line
-   and its area span the full x-axis width and rise into the rocket card at
-   top-right. Shared by the line, its glow copies, the area, and the tip dot. */
 const pricePath =
     'M 28 206 C 32.7 203.3 47.7 191.7 56 190 C 64.3 188.3 69.3 199.3 78 196 C 86.7 192.7 99.0 173.0 108 170 C 117.0 167.0 122.7 182.0 132 178 C 141.3 174.0 154.7 149.8 164 146 C 173.3 142.2 179.0 160.7 188 155 C 197.0 149.3 209.0 117.5 218 112 C 227.0 106.5 233.0 126.3 242 122 C 251.0 117.7 263.0 90.7 272 86 C 281.0 81.3 285.7 97.7 296 94 C 306.3 90.3 321.3 71.7 334 64 C 346.7 56.3 365.7 50.7 372 48'
 
-/* Volume bars along the baseline — heights loosely echo the price action,
-   busiest into the breakout. Revealed by the same sweep mask as the area. */
 const volumeBars = [
     { x: 34, h: 9, o: 0.14 },
     { x: 56, h: 14, o: 0.18 },
@@ -496,10 +473,6 @@ const priceGridlines = [
     { y: 190, label: '$10K' },
 ]
 
-/* Firework sparks bursting from the rocket card at graduation: radial flight
-   vectors (px from card center) with size/delay jitter so the burst reads
-   organic rather than mechanical. Consumed by the firework-spark keyframe
-   via --fw-x/--fw-y. */
 const fireworkSparks = [
     { x: 68, y: -13, size: 6, color: '#FFD700', delay: 0 },
     { x: 48, y: -50, size: 5, color: '#FF914D', delay: 0.06 },
@@ -521,7 +494,6 @@ function LaunchpadVisual() {
             <div className="absolute -bottom-12 -right-8 h-48 w-48 rounded-full bg-primary/8 blur-3xl" />
             <div className="absolute top-1/3 left-1/4 h-24 w-24 rounded-full bg-[#FF914D]/5 blur-xl" />
 
-            {/* Gold sparkles in the empty space above the climbing line */}
             <div className="absolute top-[12%] left-[10%] h-2.5 w-2.5 rotate-45 bg-[#FFD700]/30" />
             <div className="absolute top-[28%] left-[30%] h-2 w-2 rotate-45 bg-[#FFD700]/20 animate-pulse" />
             <div className="absolute top-[8%] left-[46%] h-1.5 w-1.5 rotate-45 bg-[#FFD700]/25" />
@@ -560,9 +532,6 @@ function LaunchpadVisual() {
                         <stop offset="0%" stopColor="#FF914D" stopOpacity="0.28" />
                         <stop offset="100%" stopColor="#FF914D" stopOpacity="0" />
                     </linearGradient>
-                    {/* soft-edged reveal: the rect sweeps left→right in sync with the
-                       line draw; its trailing gradient gives the reveal a feathered
-                       front instead of a hard clip edge */}
                     <linearGradient id="launchpad-sweep-grad" x1="0" y1="0" x2="1" y2="0">
                         <stop offset="0%" stopColor="white" />
                         <stop offset="88%" stopColor="white" />
@@ -641,7 +610,6 @@ function LaunchpadVisual() {
                             fill="url(#launchpad-area-grad)"
                         />
                     </g>
-                    {/* layered neon bloom under the crisp line */}
                     <path
                         d={pricePath}
                         pathLength={1}
@@ -669,7 +637,6 @@ function LaunchpadVisual() {
                         strokeLinejoin="round"
                         className="animate-chart-draw"
                     />
-                    {/* tip: blurred gold halo under a white-hot core */}
                     <circle
                         r="8"
                         fill="#FFD700"
@@ -685,9 +652,6 @@ function LaunchpadVisual() {
                 </g>
             </svg>
 
-            {/* flex wrapper owns placement — the badge keyframe owns `transform`.
-                Gold gradient border via p-px wrapper; the shimmer strip sweeps
-                once right after the pop-in */}
             <div className="absolute inset-x-0 top-[44%] flex justify-end pr-[7%]">
                 <div className="animate-graduated-badge rounded-full bg-gradient-to-r from-[#FFD700] via-[#FF914D] to-primary p-px shadow-[0_6px_24px_-6px_rgba(255,183,0,0.6)]">
                     <div className="relative flex items-center gap-1.5 overflow-hidden rounded-full bg-card px-3 py-1">
@@ -700,16 +664,11 @@ function LaunchpadVisual() {
                 </div>
             </div>
 
-            {/* wrapper owns position — the lift keyframe owns `transform` */}
             <div className="absolute top-[10%] right-[6%]">
-                {/* radiant aura that blooms behind the card at graduation */}
                 <div
                     className="animate-rocket-aura pointer-events-none absolute left-1/2 top-1/2 -ml-16 -mt-16 h-32 w-32 rounded-full bg-[radial-gradient(circle,rgba(255,215,0,0.55),rgba(255,145,77,0.3)_45%,transparent_70%)] blur-lg"
                     aria-hidden="true"
                 />
-                {/* firework burst at graduation — shockwave rings + diamond sparks
-                    centered on the card; margin offsets do the centering because
-                    the keyframes own `transform` */}
                 <div className="pointer-events-none absolute inset-0" aria-hidden="true">
                     <div className="animate-firework-ring absolute left-1/2 top-1/2 -ml-14 -mt-14 h-28 w-28 rounded-full border-2 border-[#FFD700]/60" />
                     <div
@@ -738,7 +697,6 @@ function LaunchpadVisual() {
                 </div>
                 <div className="animate-launchpad-lift flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#FF914D] p-0.5">
                     <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[14px] bg-card">
-                        {/* warm inner wash behind the icon during the celebration */}
                         <div className="animate-rocket-core absolute inset-0 bg-gradient-to-br from-[#FFD700]/20 via-[#FF914D]/10 to-transparent" />
                         <Rocket className="animate-rocket-icon relative h-10 w-10 text-primary" />
                     </div>
@@ -805,7 +763,6 @@ export function Features() {
                     </h2>
                 </div>
 
-                {/* Feature rows — each observed independently */}
                 <div className="mt-16 space-y-20 sm:mt-20 lg:space-y-32">
                     {features.map((feature, index) => (
                         <FeatureRow key={feature.name} feature={feature} index={index} />

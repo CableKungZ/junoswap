@@ -1,23 +1,28 @@
 'use client'
 
 import { useEffect, useRef, useCallback } from 'react'
-import warpVert from '@/shaders/warp.vert'
-import warpFrag from '@/shaders/warp.frag'
+import warpVert from './shaders/warp.vert'
+import warpFrag from './shaders/warp.frag'
 
-const BG_COLOR = { r: 0.016, g: 0.02, b: 0.043 } // near-black void #04050B
-const ACCENT1 = { r: 1.0, g: 0.302, b: 0.0 } // #FF4D00 — deep orange-red (limb edges)
-const ACCENT2 = { r: 1.0, g: 0.569, b: 0.302 } // #FF914D — orange (mid-limb / atmosphere)
-const ACCENT3 = { r: 1.0, g: 0.843, b: 0.0 } // #FFD700 — gold (crest rim light)
+const BG_COLOR = [0.016, 0.02, 0.043] as const
+const ACCENT1 = [1.0, 0.302, 0.0] as const
+const ACCENT2 = [1.0, 0.569, 0.302] as const
+const ACCENT3 = [1.0, 0.843, 0.0] as const
 
 const ENTRANCE_DURATION = 3.0
 const MOUSE_LERP = 0.05
-// Reduced-motion static frame: sin(2.0 * 0.785) ≈ 1 puts the rim breathe at peak
 const STATIC_TIME = 2.0
 
-interface Vec2 {
-    x: number
-    y: number
-}
+const UNIFORM_NAMES = [
+    'uTime',
+    'uResolution',
+    'uMouse',
+    'uIntensity',
+    'uAccentColor1',
+    'uAccentColor2',
+    'uAccentColor3',
+    'uBgColor',
+] as const
 
 function isMobile() {
     return typeof window !== 'undefined' && window.innerWidth < 768
@@ -33,7 +38,6 @@ function compileShader(gl: WebGLRenderingContext, source: string, type: number) 
     gl.shaderSource(shader, source)
     gl.compileShader(shader)
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error:', gl.getShaderInfoLog(shader))
         gl.deleteShader(shader)
         return null
     }
@@ -51,12 +55,10 @@ function createProgram(gl: WebGLRenderingContext, vertSrc: string, fragSrc: stri
     gl.linkProgram(program)
 
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error('Program link error:', gl.getProgramInfoLog(program))
         gl.deleteProgram(program)
         return null
     }
 
-    // Shaders can be freed after linking
     gl.deleteShader(vert)
     gl.deleteShader(frag)
     return program
@@ -69,41 +71,25 @@ export function HeroBackground() {
     const bufferRef = useRef<WebGLBuffer | null>(null)
     const rafRef = useRef(0)
     const startTimeRef = useRef(0)
-    const mouseRef = useRef<Vec2>({ x: 0.5, y: 0.5 })
-    const smoothMouseRef = useRef<Vec2>({ x: 0.5, y: 0.5 })
+    const mouseRef = useRef({ x: 0.5, y: 0.5 })
+    const smoothMouseRef = useRef({ x: 0.5, y: 0.5 })
     const isVisibleRef = useRef(true)
     const frameCountRef = useRef(0)
-    const uniformsRef = useRef({
-        uTime: null as WebGLUniformLocation | null,
-        uResolution: null as WebGLUniformLocation | null,
-        uMouse: null as WebGLUniformLocation | null,
-        uIntensity: null as WebGLUniformLocation | null,
-        uAccentColor1: null as WebGLUniformLocation | null,
-        uAccentColor2: null as WebGLUniformLocation | null,
-        uAccentColor3: null as WebGLUniformLocation | null,
-        uBgColor: null as WebGLUniformLocation | null,
-    })
+    const uniformsRef = useRef(
+        {} as Record<(typeof UNIFORM_NAMES)[number], WebGLUniformLocation | null>
+    )
 
     const setupWebGL = useCallback(() => {
         const canvas = canvasRef.current
-        if (!canvas) {
-            console.warn('[HeroBG] No canvas element')
-            return false
-        }
+        if (!canvas) return false
 
         const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
-        if (!gl) {
-            console.warn('[HeroBG] WebGL not supported')
-            return false
-        }
+        if (!gl) return false
 
         glRef.current = gl
 
         const program = createProgram(gl, warpVert, warpFrag)
-        if (!program) {
-            console.warn('[HeroBG] Shader program creation failed')
-            return false
-        }
+        if (!program) return false
         programRef.current = program
 
         const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
@@ -119,23 +105,13 @@ export function HeroBackground() {
         gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0)
 
         const u = uniformsRef.current
-        u.uTime = gl.getUniformLocation(program, 'uTime')
-        u.uResolution = gl.getUniformLocation(program, 'uResolution')
-        u.uMouse = gl.getUniformLocation(program, 'uMouse')
-        u.uIntensity = gl.getUniformLocation(program, 'uIntensity')
-        u.uAccentColor1 = gl.getUniformLocation(program, 'uAccentColor1')
-        u.uAccentColor2 = gl.getUniformLocation(program, 'uAccentColor2')
-        u.uAccentColor3 = gl.getUniformLocation(program, 'uAccentColor3')
-        u.uBgColor = gl.getUniformLocation(program, 'uBgColor')
+        for (const name of UNIFORM_NAMES) u[name] = gl.getUniformLocation(program, name)
 
-        gl.uniform3f(u.uBgColor, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b)
-        gl.uniform3f(u.uAccentColor1, ACCENT1.r, ACCENT1.g, ACCENT1.b)
-        gl.uniform3f(u.uAccentColor2, ACCENT2.r, ACCENT2.g, ACCENT2.b)
-        gl.uniform3f(u.uAccentColor3, ACCENT3.r, ACCENT3.g, ACCENT3.b)
+        gl.uniform3fv(u.uBgColor, BG_COLOR)
+        gl.uniform3fv(u.uAccentColor1, ACCENT1)
+        gl.uniform3fv(u.uAccentColor2, ACCENT2)
+        gl.uniform3fv(u.uAccentColor3, ACCENT3)
 
-        // After a context restore the canvas keeps its size, so resize()'s
-        // size-changed guard would skip re-uploading uResolution/viewport
-        // into the fresh program — set them here when the size is known.
         if (canvas.width > 0) {
             gl.viewport(0, 0, canvas.width, canvas.height)
             gl.uniform2f(u.uResolution, canvas.width, canvas.height)
@@ -177,8 +153,6 @@ export function HeroBackground() {
         const mobile = isMobile()
         const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-        // Reduced motion: no RAF loop — render one finished frame (entrance
-        // complete, breathe at peak) and re-render only on resize.
         const drawStatic = () => {
             if (!glRef.current) return
             gl.uniform1f(u.uTime, STATIC_TIME)
@@ -187,10 +161,8 @@ export function HeroBackground() {
             gl.drawArrays(gl.TRIANGLES, 0, 6)
         }
 
-        // Defer initial resize — parent may not have layout dimensions yet
         requestAnimationFrame(() => {
             resize()
-            // Safety net: if still 0, try again next frame
             if (canvasRef.current?.width === 0) {
                 requestAnimationFrame(() => {
                     resize()
@@ -209,7 +181,6 @@ export function HeroBackground() {
             resizeObserver.observe(canvasRef.current.parentElement)
         }
 
-        // IntersectionObserver: pause the render loop while off-screen
         const intersectionObserver = new IntersectionObserver(
             ([entry]) => {
                 isVisibleRef.current = entry?.isIntersecting ?? false
@@ -245,7 +216,6 @@ export function HeroBackground() {
 
             if (!isVisibleRef.current) return
 
-            // Mobile: skip every other frame for 30fps
             frameCountRef.current++
             if (mobile && frameCountRef.current % 2 !== 0) return
 
@@ -272,10 +242,6 @@ export function HeroBackground() {
             gl.drawArrays(gl.TRIANGLES, 0, 6)
         }
 
-        // preventDefault on loss marks the context restorable; on restore the
-        // same context object becomes valid again, so re-running setupWebGL
-        // rebuilds the program/buffer and re-uploads uniforms. startTimeRef
-        // is kept so a mid-session restore doesn't replay the entrance.
         const onContextLost = (e: Event) => {
             e.preventDefault()
             cancelAnimationFrame(rafRef.current)
