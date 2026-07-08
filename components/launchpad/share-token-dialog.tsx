@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { TokenIcon } from '@/components/ui/token-icon'
 import { formatCompact } from '@/services/launchpad'
 import { cn } from '@/lib/utils'
+import { JUNOSWAP_X_HANDLE } from '@/lib/socials'
 import { toastSuccess } from '@/lib/toast'
 import { useShareableImage } from '@/hooks/useShareableImage'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
@@ -121,7 +122,7 @@ export function ShareTokenDialog({
     }
 
     const shareOnX = () => {
-        const text = `$${symbol} on Junoswap Launchpad 🚀`
+        const text = `$${symbol} on Junoswap Launchpad 🚀 via @${JUNOSWAP_X_HANDLE}`
         const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`
         window.open(intentUrl, '_blank', 'noopener,noreferrer')
     }

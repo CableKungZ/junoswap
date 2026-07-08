@@ -6,6 +6,7 @@ import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toastSuccess } from '@/lib/toast'
+import { JUNOSWAP_X_HANDLE } from '@/lib/socials'
 
 function XIcon({ className }: { className?: string }) {
     return (
@@ -37,7 +38,7 @@ export function ReferralDialog({ open, onOpenChange }: ReferralDialogProps) {
 
     const shareOnX = () => {
         if (!referralLink) return
-        const text = 'Swap on Junoswap with my referral link 👇'
+        const text = `Swap on Junoswap with my referral link via @${JUNOSWAP_X_HANDLE} 👇`
         const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(referralLink)}`
         window.open(intentUrl, '_blank', 'noopener,noreferrer')
     }
