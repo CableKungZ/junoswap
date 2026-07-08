@@ -10,7 +10,7 @@ import { TokenIconPair, TokenIconSkeleton } from '@/components/ui/token-icon'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConnectButton } from '@/components/web3/connect-button'
-import { PriceRangeBar } from '@/components/positions/price-range-bar'
+import { PositionRangeChart } from '@/components/positions/position-range-chart'
 import { useUserPositions, usePositionsByTokenIds } from '@/hooks/useUserPositions'
 import { useDepositedTokenIds } from '@/hooks/useDepositedTokenIds'
 import { useIncentives } from '@/hooks/useIncentives'
@@ -211,33 +211,30 @@ function PositionCard({
                             Price Range
                         </div>
                         {isFullRange ? (
-                            <div className="text-sm font-medium font-mono tracking-tight">
+                            <div className="text-xs font-medium font-mono tracking-tight">
                                 Full Range
                             </div>
                         ) : (
-                            <>
-                                <div className="flex items-baseline justify-between gap-2 text-xs">
-                                    <span className="font-mono tracking-tight truncate">
-                                        {priceLower}
-                                    </span>
-                                    <span className="font-mono tracking-tight truncate text-muted-foreground">
-                                        {priceUpper}
-                                    </span>
-                                </div>
-                                <PriceRangeBar
-                                    tickLower={position.tickLower}
-                                    tickUpper={position.tickUpper}
-                                    currentTick={position.currentTick}
-                                    inRange={position.inRange}
-                                    segmentInRangeClassName={
-                                        isClosed ? 'bg-muted-foreground/30' : undefined
-                                    }
-                                    segmentOutRangeClassName={
-                                        isClosed ? 'bg-muted-foreground/30' : undefined
-                                    }
-                                />
-                            </>
+                            <div className="flex items-baseline justify-between gap-2 text-xs">
+                                <span className="font-mono tracking-tight truncate">
+                                    {priceLower}
+                                </span>
+                                <span className="font-mono tracking-tight truncate text-muted-foreground">
+                                    {priceUpper}
+                                </span>
+                            </div>
                         )}
+                        <PositionRangeChart
+                            poolAddress={position.poolAddress}
+                            tickLower={position.tickLower}
+                            tickUpper={position.tickUpper}
+                            currentTick={position.currentTick}
+                            token0Decimals={position.token0Info.decimals}
+                            token1Decimals={position.token1Info.decimals}
+                            inRange={position.inRange}
+                            isClosed={isClosed}
+                            isFullRange={isFullRange}
+                        />
                     </div>
                 </div>
 
