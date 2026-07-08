@@ -407,11 +407,13 @@ describe('extractCreatorTrades', () => {
     const CREATOR_LOWER = CREATOR.toLowerCase()
     const OTHER = '0x1111111111111111111111111111111111111111'
 
-    const bc = (timestamp: number, isBuy: boolean, sender?: string) => ({
-        timestamp,
-        isBuy,
-        sender,
-    })
+    const bc = (
+        timestamp: number,
+        isBuy: boolean,
+        sender?: string,
+        amountIn = NATIVE(1),
+        amountOut = TOKENS(2)
+    ) => ({ timestamp, isBuy, sender, amountIn, amountOut })
     // amounts signed from the pool's view: negative token amount = user bought
     const v3 = (
         timestamp: number,
@@ -421,6 +423,9 @@ describe('extractCreatorTrades', () => {
         tokenIsToken0: number = 1
     ) => ({ timestamp, amount0, amount1, txFrom, tokenIsToken0 })
 
+    const sides = (trades: ReturnType<typeof extractCreatorTrades>) =>
+        trades.map((t) => ({ timestamp: t.timestamp, isBuy: t.isBuy }))
+
     it('filters bonding-curve events by sender, case-insensitively', () => {
         const trades = extractCreatorTrades(
             [bc(100, true, CREATOR_LOWER), bc(200, false, OTHER), bc(300, false, CREATOR_LOWER)],
@@ -428,10 +433,36 @@ describe('extractCreatorTrades', () => {
             CREATOR, // checksummed input vs lowercase indexer data
             null
         )
-        expect(trades).toEqual([
+        expect(sides(trades)).toEqual([
             { timestamp: 100, isBuy: true },
             { timestamp: 300, isBuy: false },
         ])
+    })
+
+    it('derives native/token amounts from bonding-curve buy and sell sides', () => {
+        const trades = extractCreatorTrades(
+            [
+                bc(100, true, CREATOR_LOWER, NATIVE(3), TOKENS(50)), // buy: native in, token out
+                bc(200, false, CREATOR_LOWER, TOKENS(40), NATIVE(2)), // sell: token in, native out
+            ],
+            [],
+            CREATOR,
+            null
+        )
+        expect(trades).toEqual([
+            { timestamp: 100, isBuy: true, nativeAmount: 3, tokenAmount: 50 },
+            { timestamp: 200, isBuy: false, nativeAmount: 2, tokenAmount: 40 },
+        ])
+    })
+
+    it('derives v3 amounts from the signed token/native legs', () => {
+        const trades = extractCreatorTrades(
+            [],
+            [v3(200, '-5000000000000000000', '10000000000000000000', CREATOR_LOWER, 1)],
+            CREATOR,
+            100
+        )
+        expect(trades).toEqual([{ timestamp: 200, isBuy: true, nativeAmount: 10, tokenAmount: 5 }])
     })
 
     it('ignores events with a missing sender/txFrom', () => {
@@ -447,7 +478,7 @@ describe('extractCreatorTrades', () => {
             CREATOR,
             100
         )
-        expect(trades).toEqual([
+        expect(sides(trades)).toEqual([
             { timestamp: 200, isBuy: true },
             { timestamp: 300, isBuy: false },
         ])
@@ -460,7 +491,7 @@ describe('extractCreatorTrades', () => {
             CREATOR,
             100
         )
-        expect(trades).toEqual([
+        expect(sides(trades)).toEqual([
             { timestamp: 200, isBuy: true },
             { timestamp: 300, isBuy: false },
         ])
@@ -473,7 +504,7 @@ describe('extractCreatorTrades', () => {
             CREATOR,
             500
         )
-        expect(trades).toEqual([
+        expect(sides(trades)).toEqual([
             { timestamp: 100, isBuy: true },
             { timestamp: 600, isBuy: true },
         ])
@@ -499,55 +530,59 @@ describe('extractCreatorTrades', () => {
 describe('buildCreatorMarkers', () => {
     const HOUR = 3600
 
+    const trade = (timestamp: number, isBuy: boolean, nativeAmount = 1, tokenAmount = 1) => ({
+        timestamp,
+        isBuy,
+        nativeAmount,
+        tokenAmount,
+    })
+    const sides = (points: ReturnType<typeof buildCreatorMarkers>) =>
+        points.map((p) => ({ time: p.time, isBuy: p.isBuy }))
+
     it('returns empty for no trades', () => {
         expect(buildCreatorMarkers([], '1h', [0, HOUR])).toEqual([])
     })
 
     it('snaps trade timestamps to timeframe buckets', () => {
-        const points = buildCreatorMarkers([{ timestamp: HOUR + 59, isBuy: true }], '1h', [0, HOUR])
-        expect(points).toEqual([{ time: HOUR, isBuy: true }])
+        const points = buildCreatorMarkers([trade(HOUR + 59, true)], '1h', [0, HOUR])
+        expect(sides(points)).toEqual([{ time: HOUR, isBuy: true }])
     })
 
     it('collapses multiple trades in one bucket to one buy and one sell point, buy first', () => {
         const points = buildCreatorMarkers(
-            [
-                { timestamp: 10, isBuy: false },
-                { timestamp: 20, isBuy: true },
-                { timestamp: 30, isBuy: true },
-                { timestamp: 40, isBuy: false },
-                { timestamp: 50, isBuy: true },
-            ],
+            [trade(10, false), trade(20, true), trade(30, true), trade(40, false), trade(50, true)],
             '1h',
             [0]
         )
-        expect(points).toEqual([
+        expect(sides(points)).toEqual([
             { time: 0, isBuy: true },
             { time: 0, isBuy: false },
         ])
     })
 
-    it('drops trades whose bucket has no rendered candle', () => {
+    it('sums same-side amounts in a bucket and keeps the latest trade time', () => {
         const points = buildCreatorMarkers(
-            [
-                { timestamp: 10, isBuy: true },
-                { timestamp: HOUR + 10, isBuy: true },
-            ],
+            [trade(20, true, 3, 100), trade(50, true, 2, 40)],
             '1h',
-            [HOUR]
+            [0]
         )
-        expect(points).toEqual([{ time: HOUR, isBuy: true }])
+        expect(points).toEqual([
+            { time: 0, isBuy: true, nativeAmount: 5, tokenAmount: 140, timestamp: 50 },
+        ])
+    })
+
+    it('drops trades whose bucket has no rendered candle', () => {
+        const points = buildCreatorMarkers([trade(10, true), trade(HOUR + 10, true)], '1h', [HOUR])
+        expect(sides(points)).toEqual([{ time: HOUR, isBuy: true }])
     })
 
     it('sorts output ascending across buckets', () => {
-        const points = buildCreatorMarkers(
-            [
-                { timestamp: 2 * HOUR + 5, isBuy: false },
-                { timestamp: 5, isBuy: true },
-            ],
-            '1h',
-            [0, HOUR, 2 * HOUR]
-        )
-        expect(points).toEqual([
+        const points = buildCreatorMarkers([trade(2 * HOUR + 5, false), trade(5, true)], '1h', [
+            0,
+            HOUR,
+            2 * HOUR,
+        ])
+        expect(sides(points)).toEqual([
             { time: 0, isBuy: true },
             { time: 2 * HOUR, isBuy: false },
         ])

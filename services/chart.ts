@@ -372,15 +372,24 @@ export function stitchCandlesticks(
 export interface CreatorTrade {
     timestamp: number
     isBuy: boolean
+    nativeAmount: number // KUB spent (buy) or received (sell), ether units
+    tokenAmount: number // launch tokens received (buy) or sold (sell), ether units
 }
 
 export interface CreatorMarkerPoint {
     time: number // candle bucket time (pre-toLocalChartTime)
     isBuy: boolean
+    nativeAmount: number // summed over the bucket's same-side trades
+    tokenAmount: number
+    timestamp: number // latest real trade time in the bucket
+}
+
+function absBigInt(v: bigint): bigint {
+    return v < 0n ? -v : v
 }
 
 export function extractCreatorTrades(
-    bcEvents: Array<Pick<SwapEvent, 'timestamp' | 'isBuy' | 'sender'>>,
+    bcEvents: Array<Pick<SwapEvent, 'timestamp' | 'isBuy' | 'sender' | 'amountIn' | 'amountOut'>>,
     v3Events: Array<
         Pick<V3SwapEvent, 'timestamp' | 'amount0' | 'amount1' | 'txFrom' | 'tokenIsToken0'>
     >,
@@ -394,14 +403,23 @@ export function extractCreatorTrades(
     for (const e of bcEvents) {
         if (e.sender?.toLowerCase() !== target) continue
         if (splitAt !== null && e.timestamp >= splitAt) continue
-        trades.push({ timestamp: e.timestamp, isBuy: e.isBuy })
+        // buy: native in / token out; sell: token in / native out
+        const nativeAmount = parseFloat(formatEther(e.isBuy ? e.amountIn : e.amountOut))
+        const tokenAmount = parseFloat(formatEther(e.isBuy ? e.amountOut : e.amountIn))
+        trades.push({ timestamp: e.timestamp, isBuy: e.isBuy, nativeAmount, tokenAmount })
     }
     if (splitAt !== null) {
         for (const e of v3Events) {
             if (e.txFrom?.toLowerCase() !== target) continue
             if (e.timestamp < splitAt) continue
-            const tokenAmount = BigInt(e.tokenIsToken0 === 1 ? e.amount0 : e.amount1)
-            trades.push({ timestamp: e.timestamp, isBuy: tokenAmount < 0n })
+            const tokenRaw = BigInt(e.tokenIsToken0 === 1 ? e.amount0 : e.amount1)
+            const nativeRaw = BigInt(e.tokenIsToken0 === 1 ? e.amount1 : e.amount0)
+            trades.push({
+                timestamp: e.timestamp,
+                isBuy: tokenRaw < 0n, // token leaving the pool → creator received tokens
+                nativeAmount: parseFloat(formatEther(absBigInt(nativeRaw))),
+                tokenAmount: parseFloat(formatEther(absBigInt(tokenRaw))),
+            })
         }
     }
     return trades.sort((a, b) => a.timestamp - b.timestamp)
@@ -416,24 +434,32 @@ export function buildCreatorMarkers(
 
     const duration = TIMEFRAME_DURATIONS[timeframe]
     const rendered = new Set(candleTimes)
-    const buckets = new Map<number, { hasBuy: boolean; hasSell: boolean }>()
+    // keyed by `${bucket}:${side}` so a bucket can hold one buy marker and one sell marker
+    const buckets = new Map<string, CreatorMarkerPoint>()
 
     for (const trade of trades) {
         const bucket = Math.floor(trade.timestamp / duration) * duration
         if (!rendered.has(bucket)) continue
-        const b = buckets.get(bucket) ?? { hasBuy: false, hasSell: false }
-        if (trade.isBuy) b.hasBuy = true
-        else b.hasSell = true
-        buckets.set(bucket, b)
+        const key = `${bucket}:${trade.isBuy ? 'b' : 's'}`
+        const existing = buckets.get(key)
+        if (existing) {
+            existing.nativeAmount += trade.nativeAmount
+            existing.tokenAmount += trade.tokenAmount
+            existing.timestamp = trade.timestamp // trades are time-sorted → latest wins
+        } else {
+            buckets.set(key, {
+                time: bucket,
+                isBuy: trade.isBuy,
+                nativeAmount: trade.nativeAmount,
+                tokenAmount: trade.tokenAmount,
+                timestamp: trade.timestamp,
+            })
+        }
     }
 
-    const points: CreatorMarkerPoint[] = []
-    for (const time of Array.from(buckets.keys()).sort((a, b) => a - b)) {
-        const b = buckets.get(time)!
-        if (b.hasBuy) points.push({ time, isBuy: true })
-        if (b.hasSell) points.push({ time, isBuy: false })
-    }
-    return points
+    return Array.from(buckets.values()).sort((a, b) =>
+        a.time === b.time ? Number(b.isBuy) - Number(a.isBuy) : a.time - b.time
+    )
 }
 
 export interface FeeBreakdown {

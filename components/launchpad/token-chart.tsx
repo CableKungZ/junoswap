@@ -16,7 +16,11 @@ import type {
     HistogramData as LWHistogramData,
     Time as LWTime,
 } from 'lightweight-charts'
-import { CreatorMarkerPrimitive, createJazziconAvatar } from '@/lib/creator-marker-primitive'
+import {
+    CreatorMarkerPrimitive,
+    createJazziconAvatar,
+    type CreatorMarker,
+} from '@/lib/creator-marker-primitive'
 import type { Address } from 'viem'
 import { formatEther } from 'viem'
 import { useChartColors, toLocalChartTime } from '@/lib/lightweight-chart-theme'
@@ -24,7 +28,7 @@ import { useReadContract } from 'wagmi'
 import { useTokenPriceHistory, TIMEFRAMES } from '@/hooks/useTokenPriceHistory'
 import type { ChartMode } from '@/types/chart'
 import { TIMEFRAME_DURATIONS } from '@/types/chart'
-import { cn } from '@/lib/utils'
+import { cn, formatAddress } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
     buildCreatorMarkers,
@@ -60,11 +64,10 @@ function formatPrice(value: number): string {
 
 function formatMcap(value: number): string {
     if (value < 0.01) return '<0.01'
-    if (value < 1) return value.toFixed(2)
-    if (value < 1000) return value.toFixed(2)
-    if (value < 1_000_000) return `${(value / 1_000).toFixed(2)}K`
-    if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-    return `${(value / 1_000_000_000).toFixed(2)}B`
+    return value.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })
 }
 
 function formatChartValue(value: number, mode: ChartMode): string {
@@ -242,6 +245,53 @@ export function TokenChart({
         ) => void
     >(() => {})
 
+    const tooltipRef = useRef<HTMLDivElement>(null)
+    const updateTooltipDom = useRef<(marker: CreatorMarker | null, x: number, y: number) => void>(
+        () => {}
+    )
+
+    updateTooltipDom.current = (marker, x, y) => {
+        const el = tooltipRef.current
+        const container = chartContainerRef.current
+        if (!el || !container || !marker) {
+            if (el) el.style.display = 'none'
+            return
+        }
+        const isUsd = nativeUsdPrice !== null
+        const nativeDisplay = isUsd
+            ? `$${formatCompact(marker.nativeAmount * nativeUsdPrice!)}`
+            : `${formatCompact(marker.nativeAmount)} KUB`
+        const action = marker.isBuy ? 'bought' : 'sold'
+        const actionColor = marker.isBuy ? chartColors.ohlcvUp : chartColors.ohlcvDown
+        const when = new Date(marker.timestamp * 1000).toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        })
+
+        el.innerHTML =
+            `<div class="font-semibold ${actionColor}">Creator ${action}</div>` +
+            (creatorAddress
+                ? `<div class="text-muted-foreground">${formatAddress(creatorAddress)}</div>`
+                : '') +
+            `<div class="mt-0.5 text-foreground">${nativeDisplay} · ${formatCompact(marker.tokenAmount)} tokens</div>` +
+            `<div class="text-muted-foreground">${when}</div>`
+
+        el.style.display = ''
+        const { width: cw, height: ch } = container.getBoundingClientRect()
+        const tw = el.offsetWidth
+        const th = el.offsetHeight
+        let left = x + 12
+        if (left + tw > cw) left = x - tw - 12
+        if (left < 0) left = 0
+        let top = y - th - 8
+        if (top < 0) top = y + 12
+        if (top + th > ch) top = ch - th
+        el.style.left = `${left}px`
+        el.style.top = `${top}px`
+    }
+
     updateOhlcvDom.current = (d) => {
         currentOhlcv.current = d
         const el = ohlcvRef.current
@@ -340,6 +390,13 @@ export function TokenChart({
         const crosshairHandler = (
             param: Parameters<Parameters<typeof chart.subscribeCrosshairMove>[0]>[0]
         ) => {
+            if (param.point) {
+                const marker = markersRef.current?.markerAt(param.point.x, param.point.y) ?? null
+                updateTooltipDom.current(marker, param.point.x, param.point.y)
+            } else {
+                updateTooltipDom.current(null, 0, 0)
+            }
+
             if (!param.time || !param.point) {
                 updateOhlcvDom.current(lastCandleRef.current)
                 return
@@ -461,7 +518,14 @@ export function TokenChart({
         markersRef.current?.setMarkers(
             markerPoints.map((p) => {
                 const candle = bucketToCandle.get(p.time)!
-                return { time: candle.chartTime, high: candle.high, isBuy: p.isBuy }
+                return {
+                    time: candle.chartTime,
+                    high: candle.high,
+                    isBuy: p.isBuy,
+                    nativeAmount: p.nativeAmount,
+                    tokenAmount: p.tokenAmount,
+                    timestamp: p.timestamp,
+                }
             })
         )
 
@@ -583,6 +647,12 @@ export function TokenChart({
                     ref={ohlcvRef}
                     style={{ display: 'none' }}
                     className="pointer-events-none absolute left-2 top-2 z-10 flex flex-wrap items-center gap-2 font-mono text-[10px] sm:left-3 sm:gap-3 sm:text-[11px]"
+                />
+
+                <div
+                    ref={tooltipRef}
+                    style={{ display: 'none' }}
+                    className="pointer-events-none absolute z-20 rounded-md border border-border/60 bg-popover/95 px-2.5 py-1.5 text-[11px] leading-tight shadow-lg backdrop-blur-sm"
                 />
 
                 <div

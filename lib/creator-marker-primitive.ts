@@ -16,6 +16,9 @@ export interface CreatorMarker {
     time: Time
     high: number // candle high in display units (matches the series data)
     isBuy: boolean
+    nativeAmount: number
+    tokenAmount: number
+    timestamp: number // real trade time (seconds)
 }
 
 const RADIUS = 9
@@ -59,6 +62,7 @@ interface MarkerPoint {
     x: number
     y: number
     isBuy: boolean
+    marker: CreatorMarker
 }
 
 class CreatorMarkerRenderer implements IPrimitivePaneRenderer {
@@ -175,9 +179,18 @@ export class CreatorMarkerPrimitive implements ISeriesPrimitive<Time> {
                 ? prev!.y - RADIUS * 2 - STACK_GAP
                 : highY - GAP_ABOVE_BAR - RADIUS
             if (y < minY) y = stacked ? prev!.y + RADIUS * 2 + STACK_GAP : minY
-            points.push({ x, y, isBuy: m.isBuy })
+            points.push({ x, y, isBuy: m.isBuy, marker: m })
             prev = { x, y }
         }
         return points
+    }
+
+    /** Returns the creator marker whose circle contains (x, y), or null. */
+    markerAt(x: number, y: number): CreatorMarker | null {
+        const hitRadius = RADIUS + RING_WIDTH
+        for (const p of this.computePoints()) {
+            if (Math.hypot(p.x - x, p.y - y) <= hitRadius) return p.marker
+        }
+        return null
     }
 }
