@@ -5,13 +5,12 @@ import type { Token } from '@/types/tokens'
 interface CustomTokensStore {
     customTokens: Token[]
     addCustomToken: (token: Token) => void
+    removeCustomToken: (token: Token) => void
 }
 
 const sameToken = (a: Token, b: Token) =>
     a.chainId === b.chainId && a.address.toLowerCase() === b.address.toLowerCase()
 
-// localStorage is absent during SSR and in the node test env — fall back to a
-// no-op store there so persist doesn't throw on setItem.
 const safeStorage = createJSONStorage(() => {
     if (typeof window !== 'undefined' && window.localStorage) return window.localStorage
     return { getItem: () => null, setItem: () => {}, removeItem: () => {} }
@@ -26,6 +25,12 @@ export const useCustomTokensStore = create<CustomTokensStore>()(
                 addCustomToken: (token) => {
                     if (get().customTokens.some((t) => sameToken(t, token))) return
                     set((state) => ({ customTokens: [...state.customTokens, token] }))
+                },
+
+                removeCustomToken: (token) => {
+                    set((state) => ({
+                        customTokens: state.customTokens.filter((t) => !sameToken(t, token)),
+                    }))
                 },
             }),
             { name: 'junoswap-custom-tokens', storage: safeStorage }

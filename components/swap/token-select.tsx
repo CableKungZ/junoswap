@@ -18,7 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { TokenIcon, TokenIconSkeleton } from '@/components/ui/token-icon'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ChevronDown, Search, Copy, Check, Loader2 } from 'lucide-react'
+import { ChevronDown, Search, Copy, Check, Loader2, Trash2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBalance, isValidTokenAddress } from '@/services/tokens'
 import { toastSuccess } from '@/lib/toast'
@@ -66,23 +66,26 @@ function ImportTokenRow({ address, chainId, onImport }: ImportTokenRowProps) {
     }
 
     return (
-        <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <div className="flex items-center gap-3">
-                <TokenIcon src={token.logo} symbol={token.symbol} size="sm" />
-                <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-foreground">{token.symbol}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                        {token.name || truncateAddress(token.address)}
-                    </div>
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={handleImport}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') handleImport()
+            }}
+            className="flex items-center gap-3 w-full p-2 rounded-xl border border-transparent transition-all duration-150 hover:bg-muted/50"
+        >
+            <TokenIcon src={token.logo} symbol={token.symbol} size="sm" />
+            <div className="min-w-0 flex-1 text-left">
+                <div className="text-sm font-medium">{token.symbol}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                    {token.name || truncateAddress(token.address)}
                 </div>
-                <Button
-                    size="sm"
-                    onClick={handleImport}
-                    className="rounded-lg bg-gradient-to-r from-primary to-[#FF914D] text-primary-foreground"
-                >
-                    Import
-                </Button>
             </div>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Plus className="h-3.5 w-3.5" />
+                Import
+            </span>
         </div>
     )
 }
@@ -95,6 +98,8 @@ interface TokenListProps {
 
 function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
     const chainId = useChainId()
+    const customTokens = useCustomTokensStore((s) => s.customTokens)
+    const removeCustomToken = useCustomTokensStore((s) => s.removeCustomToken)
     const [searchQuery, setSearchQuery] = useState('')
     const filteredTokens = tokens.filter(
         (token) =>
@@ -155,6 +160,11 @@ function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
                         <div className="space-y-1">
                             {filteredTokens.map((token) => {
                                 const isSelected = selectedToken?.address === token.address
+                                const isCustom = customTokens.some(
+                                    (t) =>
+                                        t.chainId === token.chainId &&
+                                        t.address.toLowerCase() === token.address.toLowerCase()
+                                )
                                 return (
                                     <div
                                         key={token.address}
@@ -212,6 +222,19 @@ function TokenList({ tokens, selectedToken, onSelect }: TokenListProps) {
                                         <span className="text-sm text-muted-foreground">
                                             {getBalance(token.address)}
                                         </span>
+                                        {isCustom && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    removeCustomToken(token)
+                                                    toastSuccess('Token removed')
+                                                }}
+                                                aria-label={`Remove ${token.symbol}`}
+                                                className="text-muted-foreground hover:text-destructive"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                        )}
                                         {isSelected && (
                                             <div className="flex items-center justify-center h-5 w-5 rounded-full bg-foreground/10">
                                                 <Check className="h-3 w-3 text-foreground" />
