@@ -15,6 +15,17 @@ import { useRoutePriceImpact } from '@/hooks/useRoutePriceImpact'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUniV3SwapExecution } from '@/hooks/useUniV3SwapExecution'
 import { useUniV2SwapExecution } from '@/hooks/useUniV2SwapExecution'
+import { useAggRouterSwapExecution } from '@/hooks/useAggRouterSwapExecution'
+import { useSplitRoute } from '@/hooks/useSplitRoute'
+import { useCrossDexRoute } from '@/hooks/useCrossDexRoute'
+import { splitClearsMargin } from '@/services/dex/split-routing'
+import {
+    splitToPlan,
+    crossDexToPlan,
+    bestPlan,
+    planToLegs,
+    describePlan,
+} from '@/services/dex/agg-plan'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useSwapUrlSync } from '@/hooks/useSwapUrlSync'
 import { useChainTokens } from '@/hooks/useChainTokens'
@@ -39,6 +50,8 @@ import { toast } from 'sonner'
 import { isSameToken, getWrapOperation } from '@/services/tokens'
 import { isValidNumberInput, cn } from '@/lib/utils'
 import { getChainMetadata, isNativeToken, shouldSkipUnwrap } from '@/lib/wagmi'
+import { getAggRouterAddress, isAggRouterChain } from '@/lib/abis/agg-router-junoswap'
+import { MIN_AGG_IMPROVEMENT_BPS } from '@/lib/routing-config'
 import { useKkubUnwrap } from '@/hooks/useKkubUnwrap'
 
 interface SwapCardProps {
@@ -70,6 +83,8 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         setDeadlineMinutes,
         selectedDex,
         setSelectedDex,
+        setAggRouteKind,
+        setAggPredictedOut,
     } = useSwapStore()
     const dexConfig = getDexConfig(chainId, selectedDex)
     const isV2Protocol = dexConfig && isV2Config(dexConfig)
@@ -200,20 +215,76 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         setIsLoading,
         amountInBigInt,
     ])
+    const isSameTokenSwap = isSameToken(tokenIn, tokenOut)
+    const aggEligible = isAggRouterChain(chainId) && !isWrapUnwrap && settings.autoSelectBestDex
+    const splitRoute = useSplitRoute({
+        tokenIn,
+        tokenOut,
+        amountIn: amountInBigInt,
+        allRoutes,
+        enabled: aggEligible,
+    })
+    const crossDex = useCrossDexRoute({
+        tokenIn,
+        tokenOut,
+        amountIn: amountInBigInt,
+        enabled: aggEligible,
+    })
+    const aggPlan = useMemo(() => {
+        const splitPlan = splitRoute.allocation ? splitToPlan(splitRoute.allocation, chainId) : null
+        const crossPlan = crossDex.leg
+            ? crossDexToPlan(crossDex.leg, amountInBigInt, splitRoute.aggFeeBps)
+            : null
+        return bestPlan(splitPlan, crossPlan)
+    }, [splitRoute.allocation, splitRoute.aggFeeBps, crossDex.leg, amountInBigInt, chainId])
+    const bestSingleOut = allRoutes[0]?.quote.amountOut ?? null
+    const liveUseAgg =
+        aggEligible &&
+        !!aggPlan &&
+        splitClearsMargin(aggPlan.predictedNetOut, bestSingleOut, MIN_AGG_IMPROVEMENT_BPS)
+    const [pinnedUseAgg, setPinnedUseAgg] = useState<boolean | null>(null)
+    const useAggPath = (pinnedUseAgg ?? liveUseAgg) && !!aggPlan
+    useEffect(() => {
+        setPinnedUseAgg(null)
+    }, [amountInBigInt, tokenIn?.address, tokenOut?.address, chainId])
+    const aggLegs = useMemo(
+        () => (useAggPath && aggPlan ? planToLegs(aggPlan) : null),
+        [useAggPath, aggPlan]
+    )
+    const amountOutMinimum = useMemo(() => {
+        if (useAggPath && aggPlan && tokenOut) {
+            return calculateMinOutput(aggPlan.predictedNetOut, Math.floor(settings.slippage * 100))
+        }
+        if (!effectiveQuote || !tokenOut) return 0n
+        const calcFn = isV2Protocol ? calculateMinOutputV2 : calculateMinOutput
+        return calcFn(effectiveQuote.amountOut, Math.floor(settings.slippage * 100))
+    }, [useAggPath, aggPlan, effectiveQuote, tokenOut, settings.slippage, isV2Protocol])
     const displayAmountOut = useMemo(() => {
         if (isQuoteLoading) return '...'
+        if (useAggPath && aggPlan && tokenOut) {
+            return formatDisplayAmount(aggPlan.predictedNetOut, tokenOut.decimals)
+        }
         if (shouldShowError) return '0'
         if (effectiveQuote && tokenOut) {
             return formatDisplayAmount(effectiveQuote.amountOut, tokenOut.decimals)
         }
         return '0'
-    }, [effectiveQuote, isQuoteLoading, shouldShowError, tokenOut])
-    const isSameTokenSwap = isSameToken(tokenIn, tokenOut)
-    const amountOutMinimum = useMemo(() => {
-        if (!effectiveQuote || !tokenOut) return 0n
-        const calcFn = isV2Protocol ? calculateMinOutputV2 : calculateMinOutput
-        return calcFn(effectiveQuote.amountOut, Math.floor(settings.slippage * 100))
-    }, [effectiveQuote, tokenOut, settings.slippage, isV2Protocol])
+    }, [useAggPath, aggPlan, effectiveQuote, isQuoteLoading, shouldShowError, tokenOut])
+    const symbolOf = useMemo(() => {
+        const byAddr = new Map(tokens.map((t) => [t.address.toLowerCase(), t.symbol]))
+        return (addr: Address) => byAddr.get(addr.toLowerCase()) ?? `${addr.slice(0, 6)}…`
+    }, [tokens])
+    const planLegs = useMemo(
+        () => (useAggPath && aggPlan ? describePlan(aggPlan, symbolOf) : null),
+        [useAggPath, aggPlan, symbolOf]
+    )
+    useEffect(() => {
+        const nextKind = useAggPath && aggPlan ? aggPlan.kind : null
+        const nextOut = useAggPath && aggPlan ? aggPlan.predictedNetOut : null
+        const s = useSwapStore.getState()
+        if (s.aggRouteKind !== nextKind) setAggRouteKind(nextKind)
+        if (s.aggPredictedOut !== nextOut) setAggPredictedOut(nextOut)
+    }, [useAggPath, aggPlan, setAggRouteKind, setAggPredictedOut])
     const {
         needsApproval,
         isApproving,
@@ -224,6 +295,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         token: tokenIn ?? tokens[0]!,
         owner: address,
         amountToApprove: amountInBigInt,
+        spender: useAggPath ? getAggRouterAddress(chainId) : undefined,
     })
     const needsApprovalCheck = useMemo(() => {
         if (wrapOp === 'wrap') return false
@@ -254,6 +326,16 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         route: selectedDexRoute?.route,
         skipSimulation: skipSwapSimulation,
     })
+    const aggSwap = useAggRouterSwapExecution({
+        tokenIn: tokenIn ?? tokens[0]!,
+        tokenOut: tokenOut ?? tokens[1] ?? tokens[0]!,
+        amountIn: amountInBigInt,
+        amountOutMinimum,
+        recipient: address ?? zeroAddress,
+        deadlineMinutes: settings.deadlineMinutes,
+        legs: aggLegs,
+        skipSimulation: skipSwapSimulation,
+    })
     const {
         swap,
         isPreparing,
@@ -264,7 +346,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         error: swapError,
         hash: swapHash,
         simulationError,
-    } = isV2Protocol ? v2Swap : v3Swap
+    } = useAggPath ? aggSwap : isV2Protocol ? v2Swap : v3Swap
     const isNativeOutput = !!tokenOut && isNativeToken(tokenOut.address as Address)
     const skipUnwrap = (!!isNativeOutput || isKubUnwrapDirect) && shouldSkipUnwrap(chainId)
     const {
@@ -569,29 +651,69 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                                                 </span>
                                             </div>
                                         )}
-                                        {displayRoute && (
-                                            <div className="flex justify-between items-center gap-2">
+                                        {planLegs ? (
+                                            <div className="flex justify-between items-start gap-2">
                                                 <span className="text-muted-foreground">Route</span>
-                                                <span className="font-medium flex items-center gap-1 flex-wrap justify-end">
-                                                    <span className="text-xs uppercase">
-                                                        {displayRoute.dexId}
-                                                    </span>
-                                                    <span className="text-muted-foreground">•</span>
-                                                    {tokenIn?.symbol}
-                                                    {displayRoute.route.intermediaryTokens.map(
-                                                        (t) => (
-                                                            <Fragment key={t.address}>
+                                                <div className="flex flex-col items-end gap-0.5">
+                                                    {planLegs.map((leg, i) => (
+                                                        <span
+                                                            key={i}
+                                                            className="font-medium flex items-center gap-1 flex-wrap justify-end text-xs"
+                                                        >
+                                                            {planLegs.length > 1 && (
                                                                 <span className="text-muted-foreground">
-                                                                    →
+                                                                    {leg.percent}%
                                                                 </span>
-                                                                {t.symbol}
-                                                            </Fragment>
-                                                        )
-                                                    )}
-                                                    <span className="text-muted-foreground">→</span>
-                                                    {tokenOut?.symbol}
-                                                </span>
+                                                            )}
+                                                            {leg.hops.map((h, j) => (
+                                                                <Fragment key={j}>
+                                                                    {j === 0 && (
+                                                                        <span>{h.symbolIn}</span>
+                                                                    )}
+                                                                    <span className="text-muted-foreground">
+                                                                        →
+                                                                    </span>
+                                                                    <span className="text-[10px] uppercase text-muted-foreground">
+                                                                        {h.dexId}
+                                                                    </span>
+                                                                    <span>{h.symbolOut}</span>
+                                                                </Fragment>
+                                                            ))}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             </div>
+                                        ) : (
+                                            displayRoute && (
+                                                <div className="flex justify-between items-center gap-2">
+                                                    <span className="text-muted-foreground">
+                                                        Route
+                                                    </span>
+                                                    <span className="font-medium flex items-center gap-1 flex-wrap justify-end">
+                                                        <span className="text-xs uppercase">
+                                                            {displayRoute.dexId}
+                                                        </span>
+                                                        <span className="text-muted-foreground">
+                                                            •
+                                                        </span>
+                                                        {tokenIn?.symbol}
+                                                        {displayRoute.route.intermediaryTokens.map(
+                                                            (t) => (
+                                                                <Fragment key={t.address}>
+                                                                    <span className="text-muted-foreground">
+                                                                        →
+                                                                    </span>
+                                                                    {t.symbol}
+                                                                </Fragment>
+                                                            )
+                                                        )}
+                                                        <span className="text-muted-foreground">
+                                                            →
+                                                        </span>
+                                                        {tokenOut?.symbol}
+                                                    </span>
+                                                </div>
+                                            )
                                         )}
                                     </>
                                 )}
@@ -645,10 +767,12 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                                 return
                             }
                             if (needsApprovalCheck) {
+                                if (pinnedUseAgg === null) setPinnedUseAgg(liveUseAgg)
                                 approve()
                             } else if (isKubUnwrapDirect) {
                                 if (!isUnwrapping && !isUnwrapSuccess) startUnwrap()
                             } else if (!isPreparing) {
+                                if (pinnedUseAgg === null) setPinnedUseAgg(liveUseAgg)
                                 if (skipUnwrap) resetUnwrap()
                                 swap()
                             }

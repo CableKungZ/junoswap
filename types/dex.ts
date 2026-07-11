@@ -16,6 +16,20 @@ export const DEX_REGISTRY: Record<string, DEXMetadata> = {
         logo: 'https://icons.llamao.fi/icons/protocols/junoswap.trade',
         description: 'Uniswap v3-style CLAMM',
     },
+    'junoswap-amm': {
+        id: 'junoswap-amm',
+        name: 'junoswap-amm',
+        displayName: 'Junoswap AMM',
+        logo: 'https://icons.llamao.fi/icons/protocols/junoswap.trade',
+        description: 'Uniswap v3-style CLAMM',
+    },
+    'junoswap-aggregator': {
+        id: 'junoswap-aggregator',
+        name: 'junoswap-aggregator',
+        displayName: 'Junoswap Aggregator',
+        logo: 'https://icons.llamao.fi/icons/protocols/junoswap.trade',
+        description: 'Split + cross-DEX aggregation router',
+    },
     uniswap: {
         id: 'uniswap',
         name: 'uniswap',

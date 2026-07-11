@@ -5,11 +5,14 @@ import type { Address } from 'viem'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
-import { getTokensForChain } from '@/lib/tokens'
+import { isAggRouterChain } from '@/lib/abis/agg-router-junoswap'
+import { findTokenByAddress, getTokensForChain } from '@/lib/tokens'
+import { findWrappedNativeAddress } from '@/services/tokens'
 import { resolveLaunchpadLogo } from '@/lib/logo'
 import type { ActivityEvent, ActivityLeg } from '@/types/portfolio'
 
 const PAGE_SIZE = 20
+const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
 interface BondingCurvePage {
     swapEvents: {
@@ -75,6 +78,23 @@ interface TransferPage {
     }
 }
 
+interface AggSwapPage {
+    aggSwapEvents: {
+        items: Array<{
+            id: string
+            sender: string
+            tokenIn: string
+            tokenOut: string
+            amountIn: string
+            amountOut: string
+            fee: string
+            legs: number
+            timestamp: number
+            transactionHash: string
+        }>
+    }
+}
+
 interface TokenMetaPage {
     launchTokens: {
         items: Array<{
@@ -126,7 +146,6 @@ async function fetchBondingCurveEvents(
         }
     `
     const data = await ponderRequest<BondingCurvePage>(query, { sender, chainId, limit, after })
-    // Total count comes from a separate count query
     const countQuery = `
         query UserBcCount($sender: String!, $chainId: Int!) {
             swapEvents(where: { sender: $sender, chainId: $chainId }, limit: 0) { items { id } }
@@ -181,9 +200,6 @@ async function fetchV3Events(
     }
 }
 
-// External V2 (non-Junoswap) swaps routed through this frontend. The v2_swap_event
-// table only holds frontend-originated swaps (the indexer skips untagged ones), so
-// no referrer/viaFrontend filter is needed here — just the user's own swaps.
 async function fetchV2Events(
     sender: string,
     chainId: number,
@@ -227,9 +243,6 @@ async function fetchTransferEvents(
     chainId: number,
     limit: number
 ): Promise<{ items: TransferPage['transferEvents']['items']; totalCount: number }> {
-    // The generated Ponder filter supports OR, so a single query covers both
-    // incoming and outgoing transfers for the connected wallet. The OR is wrapped in
-    // an AND with chainId so the chain filter applies to both legs.
     const query = `
         query UserTransfers($sender: String!, $chainId: Int!, $limit: Int!) {
             transferEvents(
@@ -257,6 +270,40 @@ async function fetchTransferEvents(
     }
 }
 
+async function fetchAggEvents(
+    sender: string,
+    chainId: number,
+    limit: number,
+    after?: string
+): Promise<{ items: AggSwapPage['aggSwapEvents']['items']; totalCount: number }> {
+    const query = `
+        query UserAggActivity($sender: String!, $chainId: Int!, $limit: Int!, $after: String) {
+            aggSwapEvents(
+                where: { sender: $sender, chainId: $chainId },
+                orderBy: "timestamp",
+                orderDirection: "desc",
+                limit: $limit,
+                after: $after
+            ) {
+                items {
+                    id sender tokenIn tokenOut amountIn amountOut fee legs timestamp transactionHash
+                }
+            }
+        }
+    `
+    const data = await ponderRequest<AggSwapPage>(query, { sender, chainId, limit, after })
+    const countQuery = `
+        query UserAggCount($sender: String!, $chainId: Int!) {
+            aggSwapEvents(where: { sender: $sender, chainId: $chainId }, limit: 0) { items { id } }
+        }
+    `
+    const countData = await ponderRequest<AggSwapPage>(countQuery, { sender, chainId, limit: 0 })
+    return {
+        items: data.aggSwapEvents.items,
+        totalCount: countData.aggSwapEvents.items.length,
+    }
+}
+
 async function fetchTokenMeta(): Promise<Map<string, TokenMeta>> {
     const query = `
         query TokenMeta {
@@ -268,7 +315,6 @@ async function fetchTokenMeta(): Promise<Map<string, TokenMeta>> {
     const data = await ponderRequest<TokenMetaPage>(query, {})
     const map = new Map<string, TokenMeta>()
     for (const t of data.launchTokens.items) {
-        // Launch tokens are always 18-decimal.
         map.set(t.tokenAddr.toLowerCase(), {
             symbol: t.symbol || '',
             name: t.name || '',
@@ -279,9 +325,6 @@ async function fetchTokenMeta(): Promise<Map<string, TokenMeta>> {
     return map
 }
 
-// V3 token metadata lives in its own per-chain table (not launchTokens), so V3
-// trades on chains without a launchpad — or for tokens that never launched —
-// still resolve to a real symbol/name instead of a truncated address.
 async function fetchV3TokenMeta(chainId: number): Promise<Map<string, TokenMeta>> {
     const query = `
         query V3TokenMeta($chainId: Int!) {
@@ -320,29 +363,30 @@ export function useUserActivity(
             const sender = address.toLowerCase()
 
             try {
-                // Bonding-curve trades, transfers, and launch-token metadata are
-                // launchpad-only. V3 trades are indexed for all supported chains.
-                const [launchMeta, v3Meta, bcResult, v3Result, v2Result, transferResult] =
-                    await Promise.all([
-                        hasLaunchpad
-                            ? fetchTokenMeta()
-                            : Promise.resolve(new Map<string, TokenMeta>()),
-                        fetchV3TokenMeta(chainId),
-                        hasLaunchpad
-                            ? fetchBondingCurveEvents(sender, chainId, PAGE_SIZE + 50)
-                            : Promise.resolve({ items: [], totalCount: 0 }),
-                        fetchV3Events(sender, chainId, PAGE_SIZE + 50),
-                        fetchV2Events(sender, chainId, PAGE_SIZE + 50),
-                        hasLaunchpad
-                            ? fetchTransferEvents(sender, chainId, PAGE_SIZE + 50)
-                            : Promise.resolve({ items: [], totalCount: 0 }),
-                    ])
+                const [
+                    launchMeta,
+                    v3Meta,
+                    bcResult,
+                    v3Result,
+                    v2Result,
+                    transferResult,
+                    aggResult,
+                ] = await Promise.all([
+                    hasLaunchpad ? fetchTokenMeta() : Promise.resolve(new Map<string, TokenMeta>()),
+                    fetchV3TokenMeta(chainId),
+                    hasLaunchpad
+                        ? fetchBondingCurveEvents(sender, chainId, PAGE_SIZE + 50)
+                        : Promise.resolve({ items: [], totalCount: 0 }),
+                    fetchV3Events(sender, chainId, PAGE_SIZE + 50),
+                    fetchV2Events(sender, chainId, PAGE_SIZE + 50),
+                    hasLaunchpad
+                        ? fetchTransferEvents(sender, chainId, PAGE_SIZE + 50)
+                        : Promise.resolve({ items: [], totalCount: 0 }),
+                    isAggRouterChain(chainId)
+                        ? fetchAggEvents(sender, chainId, PAGE_SIZE + 50)
+                        : Promise.resolve({ items: [], totalCount: 0 }),
+                ])
 
-                // Merge: launchpad tokens carry a logo, so they take precedence;
-                // the static per-chain list fills in logos for known tokens on
-                // chains without a launchpad (KUB mainnet, JB chain) and for V3
-                // swaps of static tokens on KUB testnet; V3 metadata fills in
-                // symbol/name for any remaining tokens.
                 const tokenMeta = new Map(launchMeta)
                 for (const t of getTokensForChain(chainId)) {
                     const addr = t.address.toLowerCase()
@@ -359,8 +403,42 @@ export function useUserActivity(
                     if (!tokenMeta.has(addr)) tokenMeta.set(addr, meta)
                 }
 
-                // Map bonding curve events
-                const bcEvents: ActivityEvent[] = bcResult.items.map((e) => {
+                const aggTxHashes = new Set(aggResult.items.map((e) => e.transactionHash))
+                const bcItems = bcResult.items.filter((e) => !aggTxHashes.has(e.transactionHash))
+                const v3Items = v3Result.items.filter((e) => !aggTxHashes.has(e.transactionHash))
+                const v2Items = v2Result.items.filter((e) => !aggTxHashes.has(e.transactionHash))
+
+                const wrappedNative = findWrappedNativeAddress(chainId)?.toLowerCase()
+                const nativeToken = findTokenByAddress(chainId, NATIVE_ADDRESS)
+                const nativeLegMeta = nativeToken
+                    ? {
+                          symbol: nativeToken.symbol,
+                          logo: resolveLaunchpadLogo(nativeToken.logo),
+                          decimals: nativeToken.decimals ?? 18,
+                      }
+                    : null
+                const resolveAggLeg = (addr: string, amount: string): ActivityLeg => {
+                    const a = addr.toLowerCase()
+                    if (wrappedNative && a === wrappedNative && nativeLegMeta) {
+                        return {
+                            tokenAddr: a,
+                            symbol: nativeLegMeta.symbol,
+                            logo: nativeLegMeta.logo,
+                            amount,
+                            decimals: nativeLegMeta.decimals,
+                        }
+                    }
+                    const m = tokenMeta.get(a)
+                    return {
+                        tokenAddr: a,
+                        symbol: m?.symbol || a.slice(0, 6) + '…',
+                        logo: m?.logo || '',
+                        amount,
+                        decimals: m?.decimals ?? 18,
+                    }
+                }
+
+                const bcEvents: ActivityEvent[] = bcItems.map((e) => {
                     const meta = tokenMeta.get(e.tokenAddr.toLowerCase())
                     return {
                         kind: 'trade' as const,
@@ -379,12 +457,7 @@ export function useUserActivity(
                     }
                 })
 
-                // Map V3 events — amount0/amount1 are pool-perspective signed
-                // deltas (positive = into pool, negative = out of pool). Use
-                // tokenIsToken0 to pick which side is the token vs native, since
-                // the launch token can sort to either side of WKUB. Mirrors the
-                // proven decode in useUserSwapEvents.ts.
-                const v3Events: ActivityEvent[] = v3Result.items.map((e) => {
+                const v3Events: ActivityEvent[] = v3Items.map((e) => {
                     const tokenIsToken0 = e.tokenIsToken0 === 1
                     const tokenAmt = BigInt(tokenIsToken0 ? e.amount0 : e.amount1)
                     const nativeAmt = BigInt(tokenIsToken0 ? e.amount1 : e.amount0)
@@ -401,17 +474,14 @@ export function useUserActivity(
                         isBuy,
                         amountIn: (isBuy ? abs(nativeAmt) : abs(tokenAmt)).toString(),
                         amountOut: (isBuy ? abs(tokenAmt) : abs(nativeAmt)).toString(),
-                        // Default guards rows indexed before the protocol column existed.
-                        protocol: e.protocol || 'junoswap',
+                        protocol:
+                            !e.protocol || e.protocol === 'junoswap' ? 'junoswap-amm' : e.protocol,
                         timestamp: e.timestamp,
                         transactionHash: e.transactionHash,
                         sender: e.txFrom,
                     }
                 })
 
-                // Map V2 events with the generalized two-leg model (works for any
-                // pairing, incl. token/token). The side with a positive `In` is what
-                // the user sold; the side with a positive `Out` is what they bought.
                 const legMeta = (addr: string): ActivityLeg => {
                     const a = addr.toLowerCase()
                     const m = tokenMeta.get(a)
@@ -423,7 +493,7 @@ export function useUserActivity(
                         decimals: m?.decimals ?? 18,
                     }
                 }
-                const v2Events: ActivityEvent[] = v2Result.items.map((e) => {
+                const v2Events: ActivityEvent[] = v2Items.map((e) => {
                     const sellToken0 = BigInt(e.amount0In) > 0n
                     const soldAddr = sellToken0 ? e.token0Addr : e.token1Addr
                     const boughtAddr = sellToken0 ? e.token1Addr : e.token0Addr
@@ -441,7 +511,7 @@ export function useUserActivity(
                         isBuy: true,
                         amountIn: soldAmt,
                         amountOut: boughtAmt,
-                        protocol: e.protocol,
+                        protocol: e.protocol === 'junoswap' ? 'junoswap-amm' : e.protocol,
                         sell,
                         buy,
                         timestamp: e.timestamp,
@@ -450,13 +520,33 @@ export function useUserActivity(
                     }
                 })
 
-                // Swap tx hashes — a swap moves the token between pool and trader in
-                // the same tx, emitting a Transfer we'd otherwise show twice. Drop
-                // any transfer whose tx already produced a swap.
+                const aggEvents: ActivityEvent[] = aggResult.items.map((e) => {
+                    const sell = resolveAggLeg(e.tokenIn, e.amountIn)
+                    const buy = resolveAggLeg(e.tokenOut, e.amountOut)
+                    return {
+                        kind: 'trade' as const,
+                        id: e.id,
+                        tokenAddr: buy.tokenAddr,
+                        tokenSymbol: buy.symbol,
+                        tokenName: '',
+                        tokenLogo: buy.logo,
+                        isBuy: true,
+                        amountIn: e.amountIn,
+                        amountOut: e.amountOut,
+                        protocol: 'junoswap-aggregator',
+                        sell,
+                        buy,
+                        timestamp: e.timestamp,
+                        transactionHash: e.transactionHash,
+                        sender: e.sender,
+                    }
+                })
+
                 const swapTxHashes = new Set([
-                    ...bcResult.items.map((e) => e.transactionHash),
-                    ...v3Result.items.map((e) => e.transactionHash),
-                    ...v2Result.items.map((e) => e.transactionHash),
+                    ...bcItems.map((e) => e.transactionHash),
+                    ...v3Items.map((e) => e.transactionHash),
+                    ...v2Items.map((e) => e.transactionHash),
+                    ...aggTxHashes,
                 ])
 
                 const transferEvents: ActivityEvent[] = transferResult.items
@@ -483,12 +573,14 @@ export function useUserActivity(
                         }
                     })
 
-                // Merge and sort descending
-                let allEvents = [...bcEvents, ...v3Events, ...v2Events, ...transferEvents].sort(
-                    (a, b) => b.timestamp - a.timestamp
-                )
+                let allEvents = [
+                    ...bcEvents,
+                    ...v3Events,
+                    ...v2Events,
+                    ...aggEvents,
+                    ...transferEvents,
+                ].sort((a, b) => b.timestamp - a.timestamp)
 
-                // Apply type filter — buy/sell are trade-only filters; exclude transfers
                 if (typeFilter !== 'all') {
                     const isBuyFilter = typeFilter === 'buy'
                     allEvents = allEvents.filter(

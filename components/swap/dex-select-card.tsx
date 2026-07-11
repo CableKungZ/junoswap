@@ -10,8 +10,12 @@ import { useSwapStore } from '@/store/swap-store'
 import { useMultiDexQuotes } from '@/hooks/useMultiDexQuotes'
 import { DEX_REGISTRY } from '@/types/dex'
 import { getSupportedDexs } from '@/lib/dex-config'
+import { percentDiff } from '@/lib/routing-config'
 import { Switch } from '@/components/ui/switch'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+
+const BEST_QUOTE_CLASS =
+    'font-bold bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent'
 
 export function DexSelectCard() {
     const [expanded, setExpanded] = useState(false)
@@ -23,6 +27,8 @@ export function DexSelectCard() {
         tokenOut,
         amountIn,
         settings,
+        aggRouteKind,
+        aggPredictedOut,
     } = useSwapStore()
     const chainId = useChainId()
     const supportedDexs = getSupportedDexs(chainId)
@@ -40,6 +46,8 @@ export function DexSelectCard() {
         amountIn: amountInBigInt,
         enabled: !!tokenIn && !!tokenOut && amountInBigInt > 0n,
     })
+    const aggActive = aggRouteKind !== null && aggPredictedOut !== null
+    const aggLabel = aggActive ? 'Junoswap Aggregator' : null
     useEffect(() => {
         if (settings?.autoSelectBestDex && bestQuoteDex && bestQuoteDex !== selectedDex) {
             setSelectedDex(bestQuoteDex)
@@ -64,12 +72,14 @@ export function DexSelectCard() {
         }
         if (quoteData.quote && tokenOut) {
             const amountOut = formatUnits(quoteData.quote.amountOut, tokenOut.decimals)
-            const isBest = bestQuoteDex === dexId
-            const priceDiff = priceDifferences[dexId]
+            const isBest = !aggActive && bestQuoteDex === dexId
+            const priceDiff = aggActive
+                ? percentDiff(quoteData.quote.amountOut, aggPredictedOut!)
+                : priceDifferences[dexId]
             return (
                 <div className="flex items-center gap-2">
                     <span
-                        className={`text-sm ${isBest ? 'font-bold bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent' : 'font-normal text-muted-foreground'}`}
+                        className={`text-sm ${isBest ? BEST_QUOTE_CLASS : 'font-normal text-muted-foreground'}`}
                     >
                         {parseFloat(amountOut).toFixed(6)} {tokenOut.symbol}
                     </span>
@@ -96,7 +106,9 @@ export function DexSelectCard() {
                 >
                     <div className="flex items-center gap-2">
                         <Label className="text-muted-foreground">Swap via:</Label>
-                        <span className="font-medium">{selectedDexInfo.displayName}</span>
+                        <span className="font-medium">
+                            {aggLabel ?? selectedDexInfo.displayName}
+                        </span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div
@@ -129,9 +141,32 @@ export function DexSelectCard() {
                 </div>
                 {expanded && (
                     <div className="mt-3 pt-3 border-t">
+                        {aggActive && (
+                            <div className="w-full text-left p-3 rounded-lg bg-muted/40">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="secondary">Best</Badge>
+                                    <span className="font-medium text-foreground">
+                                        Junoswap Aggregator
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Split / cross-DEX best route
+                                </p>
+                                {tokenOut && (
+                                    <div className="mt-2">
+                                        <span className={`text-sm ${BEST_QUOTE_CLASS}`}>
+                                            {parseFloat(
+                                                formatUnits(aggPredictedOut!, tokenOut.decimals)
+                                            ).toFixed(6)}{' '}
+                                            {tokenOut.symbol}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {availableDexs.map((dex) => {
                             const isSelected = dex.id === selectedDex
-                            const isBest = bestQuoteDex === dex.id
+                            const isBest = !aggActive && bestQuoteDex === dex.id
                             return (
                                 <button
                                     key={dex.id}

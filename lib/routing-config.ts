@@ -2,10 +2,6 @@ import type { Address } from 'viem'
 import type { IntermediaryConfig } from '@/types/routing'
 import { kubTestnet, jbc, bitkub, worldchain, base, bsc } from './wagmi'
 
-/**
- * USDT/stablecoin address per chain for native→USD price conversion.
- * Used by the launchpad to display prices/mcaps in USD.
- */
 export const NATIVE_USD_STABLE: Record<number, { address: Address; decimals: number }> = {
     [kubTestnet.id]: {
         address: '0x70138f1b88BEe73dD2Cb06F24146f964Dde6144e', // KUSDT on kubTestnet
@@ -17,9 +13,6 @@ export const NATIVE_USD_STABLE: Record<number, { address: Address; decimals: num
     },
 }
 
-/**
- * Intermediary token addresses for multi-hop routing per chain
- */
 export const INTERMEDIARY_TOKENS: Record<number, IntermediaryConfig> = {
     [kubTestnet.id]: {
         wrappedNative: '0x700D3ba307E1256e509eD3E45D6f9dff441d6907' as Address, // tKKUB
@@ -90,33 +83,19 @@ export function getIntermediaryTokens(chainId: number): Address[] {
     return INTERMEDIARY_TOKENS[chainId]?.priority ?? []
 }
 
-/**
- * Minimum improvement (in basis points) required to prefer multi-hop over direct
- * E.g., 50 = 0.5% better output required
- */
 export const MIN_MULTIHOP_IMPROVEMENT_BPS = 50
 
-/**
- * Maximum hops considered when routing (tokenIn + intermediaries + tokenOut).
- * 3 = up to two intermediaries. Deeper hops only ever go through the curated
- * connector list, never an arbitrary token graph, to keep on-chain quote calls
- * bounded (these chains are not archive nodes — see CLAUDE.md).
- */
+export const MIN_AGG_IMPROVEMENT_BPS = 50
+
+export function percentDiff(amountOut: bigint, baseline: bigint): number {
+    if (baseline === 0n) return 0
+    return (Number(amountOut - baseline) / Number(baseline)) * 100
+}
+
 export const MAX_HOPS = 3
 
-/**
- * Cap on distinct connectors used to build the deeper (3-hop) connector×connector
- * paths. 2-hop uses every connector (cheap); the 3-hop cross-product is quadratic,
- * so it is restricted to the top-priority connectors.
- */
 export const MAX_DEEP_CONNECTORS = 3
 
-/**
- * Enumerate candidate multi-hop token sequences between two tokens through the
- * curated connectors. Returns raw address paths [tokenIn, ...connectors, tokenOut];
- * callers normalize native→wrapped as needed. Connectors equal to tokenIn/tokenOut
- * are dropped so a "hop" never revisits an endpoint.
- */
 export function enumerateHopPaths(
     tokenIn: Address,
     tokenOut: Address,
@@ -130,11 +109,9 @@ export function enumerateHopPaths(
         return l !== inL && l !== outL
     })
     const paths: Address[][] = []
-    // 2-hop: tokenIn -> connector -> tokenOut
     for (const c of conns) {
         paths.push([tokenIn, c, tokenOut])
     }
-    // 3-hop: tokenIn -> c1 -> c2 -> tokenOut (distinct connectors, top-priority only)
     if (maxHops >= 3) {
         const deep = conns.slice(0, MAX_DEEP_CONNECTORS)
         for (const c1 of deep) {

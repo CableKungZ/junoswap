@@ -13,6 +13,7 @@ import {
     isV3Config,
     ProtocolType,
 } from '@/lib/dex-config'
+import { percentDiff } from '@/lib/routing-config'
 import { useUniV3Quote } from './useUniV3Quote'
 import { useUniV2Quote } from './useUniV2Quote'
 import { useSwapRouting } from './useSwapRouting'
@@ -206,14 +207,7 @@ export function useMultiDexQuotes({
         const bestAmountOut = bestQuote.amountOut
         Object.entries(quotesWithMultiHop).forEach(([dexId, dexQuote]) => {
             if (dexQuote.quote && !dexQuote.isLoading && !dexQuote.isError) {
-                if (dexId === bestQuoteDex) {
-                    differences[dexId] = 0
-                } else {
-                    const currentAmountOut = dexQuote.quote.amountOut
-                    const percentageDiff =
-                        (Number(currentAmountOut - bestAmountOut) / Number(bestAmountOut)) * 100
-                    differences[dexId] = percentageDiff
-                }
+                differences[dexId] = percentDiff(dexQuote.quote.amountOut, bestAmountOut)
             } else {
                 differences[dexId] = null
             }

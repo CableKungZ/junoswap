@@ -59,3 +59,26 @@ describe('enumerateHopPaths', () => {
         }
     })
 })
+
+describe('percentDiff', () => {
+    it('is negative when the amount is below the baseline', async () => {
+        const { percentDiff } = await import('@/lib/routing-config')
+        // 99 vs baseline 100 → -1%
+        expect(percentDiff(99n, 100n)).toBeCloseTo(-1)
+    })
+
+    it('is positive when the amount is above the baseline', async () => {
+        const { percentDiff } = await import('@/lib/routing-config')
+        expect(percentDiff(150n, 100n)).toBeCloseTo(50)
+    })
+
+    it('is zero when the amount equals the baseline', async () => {
+        const { percentDiff } = await import('@/lib/routing-config')
+        expect(percentDiff(100n, 100n)).toBe(0)
+    })
+
+    it('returns 0 rather than dividing by a zero baseline', async () => {
+        const { percentDiff } = await import('@/lib/routing-config')
+        expect(percentDiff(100n, 0n)).toBe(0)
+    })
+})

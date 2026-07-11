@@ -117,6 +117,22 @@ export const v2SwapEvent = onchainTable('v2_swap_event', (t) => ({
     protocol: t.text().notNull().default(''),
 }))
 
+export const aggSwapEvent = onchainTable('agg_swap_event', (t) => ({
+    id: t.text().primaryKey(),
+    chainId: t.integer().notNull(),
+    sender: t.text().notNull(),
+    tokenIn: t.text().notNull(),
+    tokenOut: t.text().notNull(),
+    amountIn: t.text().notNull(),
+    amountOut: t.text().notNull(),
+    fee: t.text().notNull(),
+    legs: t.integer().notNull(),
+    referrer: t.text(),
+    blockNumber: t.integer().notNull(),
+    timestamp: t.integer().notNull(),
+    transactionHash: t.text().notNull(),
+}))
+
 export const v2Pool = onchainTable('v2_pool', (t) => ({
     id: t.text().primaryKey(),
     chainId: t.integer().notNull(),

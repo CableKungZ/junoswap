@@ -10,6 +10,10 @@ import { UNISWAP_V3_FACTORY_ABI } from './abis/uniswap-v3-factory'
 import { UNISWAP_V3_POOL_ABI } from './abis/uniswap-v3-pool'
 import { UNISWAP_V2_FACTORY_ABI } from './abis/uniswap-v2-factory'
 import { UNISWAP_V2_PAIR_ABI } from './abis/uniswap-v2-pair'
+import {
+    AGG_ROUTER_JUNOSWAP_ABI,
+    AGG_ROUTER_JUNOSWAP_BITKUB_ADDRESS,
+} from './abis/agg-router-junoswap'
 import externalPools from './external-pools.json'
 
 const BONDING_CURVE_MAINNET_ENABLED =
@@ -246,6 +250,12 @@ export default createConfig({
                 event: V3_POOL_CREATED_EVENT,
                 parameter: 'pool',
             }),
+            startBlock: BITKUB_SWAP_START,
+        },
+        AggRouterJunoswap: {
+            abi: AGG_ROUTER_JUNOSWAP_ABI,
+            chain: 'bitkub',
+            address: AGG_ROUTER_JUNOSWAP_BITKUB_ADDRESS,
             startBlock: BITKUB_SWAP_START,
         },
     },
