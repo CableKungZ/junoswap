@@ -80,14 +80,10 @@ export function useLeaderboardTraders(
         [allTokens]
     )
 
-    // Step 1: Fetch Ponder data (swap events + token holders)
     const { data: raw, isLoading: isPonderLoading } = useQuery({
         queryKey: ['leaderboard-traders', timePeriod, chainId],
         queryFn: async () => {
             const since = getTimeThreshold(timePeriod)
-            // Bonding-curve swaps and launch-token holders only exist on the
-            // launchpad chain; V3 (junoswap + external kublerx) and external V2 swaps
-            // are indexed for all supported chains.
             const includeLaunchpad = isLaunchpadChain(chainId)
             const [swapEvents, v3SwapEvents, v2SwapEvents, tokenHolders] = await Promise.all([
                 includeLaunchpad ? fetchSwapEvents(chainId, since) : Promise.resolve([]),
@@ -105,7 +101,6 @@ export function useLeaderboardTraders(
         refetchInterval: 30_000,
     })
 
-    // Step 2: Extract unique addresses
     const uniqueAddresses = useMemo(() => {
         if (!raw) return []
         const addrs = new Set<string>()
@@ -114,7 +109,6 @@ export function useLeaderboardTraders(
         return [...addrs] as Address[]
     }, [raw])
 
-    // Step 3a: Fetch native balances via getBalance
     const publicClient = usePublicClient({ chainId })
 
     const { data: nativeBalanceMap, isLoading: isNativeLoading } = useQuery({
@@ -137,18 +131,15 @@ export function useLeaderboardTraders(
         enabled: uniqueAddresses.length > 0 && !!publicClient,
     })
 
-    // Step 3b: Fetch ERC20 balances for all addresses
     const { holdings, isLoading: isErc20Loading } = useMultiBalances(
         erc20Tokens,
         uniqueAddresses,
         chainId
     )
 
-    // Step 4: Fetch prices
-    const priceMap = useTokenPrices(allTokens, chainId, nativeUsdPrice, getTokenType)
+    const { prices: priceMap } = useTokenPrices(allTokens, chainId, nativeUsdPrice, getTokenType)
     const { priceAt } = useNativeUsdPriceHistory(chainId, nativeUsdPrice)
 
-    // Step 5: Build numeric holder map for swap aggregation
     const numericHolderMap = useMemo(() => {
         const map = new Map<string, Map<string, number>>()
         for (const [addr, tokenHoldings] of holdings) {
@@ -161,8 +152,6 @@ export function useLeaderboardTraders(
         return map
     }, [holdings])
 
-    // Token decimals so the PnL engine decodes swap amounts at the right scale
-    // (6-decimal tokens like USDT otherwise produce astronomical cost bases).
     const decimalsByToken = useMemo(() => {
         const map = new Map<string, number>()
         for (const token of erc20Tokens) {
@@ -171,7 +160,6 @@ export function useLeaderboardTraders(
         return map
     }, [erc20Tokens])
 
-    // Step 6: Per-trader PNL (same engine as the portfolio), volume & trade counts
     const perAddressStats = useMemo(() => {
         const events: LeaderboardSwapEvent[] =
             raw?.swapEvents.map((e) => ({
@@ -191,21 +179,17 @@ export function useLeaderboardTraders(
         )
     }, [raw, numericHolderMap, priceMap, priceAt, decimalsByToken])
 
-    // Step 7: Compute net worth per address, merge with swap stats, sort & paginate
     const result = useMemo(() => {
         if (!raw) return { traders: [], totalCount: 0, totalPages: 0 }
 
-        // Net worth in native terms
         const netWorthByAddress = new Map<string, number>()
 
-        // Add native balance
         if (nativeBalanceMap) {
             for (const [addr, nativeBal] of nativeBalanceMap) {
                 if (nativeBal > 0) netWorthByAddress.set(addr, nativeBal)
             }
         }
 
-        // Add ERC20 balance value from holdings
         for (const [addr, tokenHoldings] of numericHolderMap) {
             let netWorth = netWorthByAddress.get(addr) ?? 0
             for (const [tokenAddr, balance] of tokenHoldings) {
@@ -216,7 +200,6 @@ export function useLeaderboardTraders(
             if (netWorth > 0) netWorthByAddress.set(addr, netWorth)
         }
 
-        // Build address set
         const allAddresses = new Set<string>()
         for (const addr of netWorthByAddress.keys()) allAddresses.add(addr)
         for (const addr of perAddressStats.keys()) allAddresses.add(addr)
@@ -239,7 +222,6 @@ export function useLeaderboardTraders(
             })
         }
 
-        // Sort
         const sortFn = (a: TraderAgg, b: TraderAgg) => {
             let aVal: number, bVal: number
             switch (sortKey) {
@@ -264,12 +246,10 @@ export function useLeaderboardTraders(
         }
         traders.sort(sortFn)
 
-        // Filter by search
         const filtered = searchQuery
             ? traders.filter((t) => t.address.includes(searchQuery.toLowerCase()))
             : traders
 
-        // Assign ranks
         filtered.forEach((t, i) => {
             t.rank = i + 1
         })

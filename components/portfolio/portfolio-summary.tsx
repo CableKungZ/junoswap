@@ -1,12 +1,16 @@
 'use client'
 
 import { Card, CardContent } from '@/components/ui/card'
+import { NetWorthChart } from '@/components/portfolio/net-worth-chart'
 import type { PortfolioSummary } from '@/types/portfolio'
+import type { NetWorthPoint } from '@/services/net-worth-history'
 import { cn } from '@/lib/utils'
 
 interface PortfolioSummaryProps {
     summary: PortfolioSummary
+    history: NetWorthPoint[]
     isLoading: boolean
+    isHistoryLoading: boolean
 }
 
 function formatUsd(value: number): string {
@@ -31,51 +35,57 @@ function formatPnl(value: number): string {
     return `${sign}$${abs.toFixed(2)}`
 }
 
-export function PortfolioSummary({ summary, isLoading }: PortfolioSummaryProps) {
+export function PortfolioSummary({
+    summary,
+    history,
+    isLoading,
+    isHistoryLoading,
+}: PortfolioSummaryProps) {
     const isPositive = (summary.totalPnl ?? 0) >= 0
+    const hasChart = history.length >= 2
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                <CardContent className="p-6">
-                    <div className="mb-2">
-                        <span className="text-sm text-muted-foreground font-medium">Net Worth</span>
-                    </div>
-                    <div className="flex items-baseline gap-3">
-                        {isLoading ? (
-                            <div className="h-10 w-48 bg-muted/30 rounded-md animate-pulse" />
-                        ) : (
-                            <span className="text-3xl font-bold font-mono tracking-tight">
-                                {formatUsd(summary.netWorth)}
-                            </span>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-                <CardContent className="p-6">
-                    <div className="mb-2">
-                        <span className="text-sm text-muted-foreground font-medium">Total PNL</span>
-                    </div>
-                    <div className="flex items-baseline gap-3">
-                        {isLoading || summary.totalPnl === null ? (
-                            <span className="text-3xl font-bold font-mono tracking-tight text-muted-foreground">
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-6">
+                <div className="space-y-1.5">
+                    {isLoading ? (
+                        <div className="h-10 w-48 animate-pulse rounded-md bg-muted/30" />
+                    ) : (
+                        <div className="text-4xl font-bold font-mono tracking-tight">
+                            {formatUsd(summary.netWorth)}
+                        </div>
+                    )}
+                    <div className="flex items-baseline gap-2 pt-0.5">
+                        {isLoading || isHistoryLoading ? (
+                            <div className="h-5 w-32 animate-pulse rounded-md bg-muted/30" />
+                        ) : summary.totalPnl === null ? (
+                            <span className="font-mono text-sm font-semibold text-muted-foreground">
                                 --
                             </span>
                         ) : (
                             <span
                                 className={cn(
-                                    'text-3xl font-bold font-mono tracking-tight',
+                                    'font-mono text-sm font-semibold',
                                     isPositive ? 'text-positive' : 'text-negative'
                                 )}
                             >
                                 {formatPnl(summary.totalPnl)}
                             </span>
                         )}
+                        <span className="text-xs font-medium text-muted-foreground">Total PNL</span>
                     </div>
-                </CardContent>
-            </Card>
-        </div>
+                </div>
+
+                {isHistoryLoading ? (
+                    <div className="mt-6 h-[120px] w-full animate-pulse rounded-md bg-muted/20" />
+                ) : (
+                    hasChart && (
+                        <div className="mt-6 animate-in fade-in duration-500">
+                            <NetWorthChart data={history} />
+                        </div>
+                    )
+                )}
+            </CardContent>
+        </Card>
     )
 }

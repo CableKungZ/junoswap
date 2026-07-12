@@ -20,13 +20,19 @@ export function usePortfolioPrices(
         return tokens
     }, [holdings])
 
-    const allPrices = useTokenPrices(heldTokens, chainId, nativeUsdPrice, getTokenType)
+    const {
+        prices: allPrices,
+        isLoading,
+        isSettled,
+    } = useTokenPrices(heldTokens, chainId, nativeUsdPrice, getTokenType)
 
-    return useMemo(() => {
+    const prices = useMemo(() => {
         const priceMap = new Map<string, number | null>()
         for (const [key] of holdings) {
             priceMap.set(key, allPrices.get(key) ?? null)
         }
         return priceMap
     }, [holdings, allPrices])
+
+    return { prices, isLoading, isSettled }
 }

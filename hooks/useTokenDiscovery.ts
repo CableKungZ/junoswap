@@ -9,6 +9,7 @@ import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
 import { isLaunchpadChain as isLaunchpadChainFn } from '@/lib/abis/bonding-curve-junoswap'
+import { hasSettled } from '@/lib/query-status'
 import { useGraduatedTokens } from '@/hooks/useGraduatedTokens'
 import type { Token } from '@/types/tokens'
 import type { TokenType } from '@/types/portfolio'
@@ -57,7 +58,7 @@ const BONDING_CURVE_TOKENS_QUERY = `
 
 export function useTokenDiscovery(chainId: number) {
     const staticTokens = useMemo(() => getTokensForChain(chainId), [chainId])
-    const { tokens: graduatedTokens } = useGraduatedTokens(chainId)
+    const { tokens: graduatedTokens, isSettled: isGraduatedSettled } = useGraduatedTokens(chainId)
     const isLaunchpadChain = isLaunchpadChainFn(chainId)
 
     const { data: v3Tokens } = useQuery({
@@ -127,10 +128,8 @@ export function useTokenDiscovery(chainId: number) {
         for (const t of graduatedTokens) add(t)
         for (const t of v3Tokens ?? []) add(t)
         if (isLaunchpadChain) {
-            // Only add bonding curve tokens not already known
             for (const t of bondingCurveTokens ?? []) {
                 const key = t.address.toLowerCase()
-                // Skip if it's already in static/graduated/v3
                 if (!seen.has(key)) add(t)
             }
         }
@@ -157,9 +156,6 @@ export function useTokenDiscovery(chainId: number) {
                 if (staticAddresses.has(key)) return 'static'
                 if (graduatedAddresses.has(key)) return 'graduated'
                 if (bondingCurveAddresses.has(key)) return 'bonding_curve'
-                // Unknown tokens (V3-discovered, arbitrary held KAP20) are not
-                // launchpad tokens. Off launchpad chains the bonding-curve set is
-                // empty, so everything correctly resolves to static.
                 return 'static'
             },
         [staticAddresses, graduatedAddresses, bondingCurveAddresses]
@@ -172,5 +168,10 @@ export function useTokenDiscovery(chainId: number) {
 
     const wrappedNative = INTERMEDIARY_TOKENS[chainId]?.wrappedNative
 
-    return { allTokens, erc20Tokens, getTokenType, isLaunchpadChain, wrappedNative }
+    const isSettled =
+        isGraduatedSettled &&
+        hasSettled(true, v3Tokens) &&
+        hasSettled(isLaunchpadChain, bondingCurveTokens)
+
+    return { allTokens, erc20Tokens, getTokenType, isLaunchpadChain, wrappedNative, isSettled }
 }

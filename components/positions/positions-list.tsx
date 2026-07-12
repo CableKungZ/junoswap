@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useAccount, useChainId } from 'wagmi'
-import { ChevronDown, ChevronRight, Minus, Plus, Unlock, Zap } from 'lucide-react'
+import { useChainId } from 'wagmi'
+import type { Address } from 'viem'
+import { ChevronDown, ChevronRight, Coins, Minus, Plus, Unlock, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,8 @@ interface PositionActions {
 }
 
 interface PositionsListProps extends PositionActions {
+    address: Address | undefined
+    canManage: boolean
     onAddLiquidity: () => void
     onUnstake: (stakedPosition: StakedPosition) => void
     refreshNonce: number
@@ -39,6 +42,7 @@ interface PositionsListProps extends PositionActions {
 function PositionCard({
     position,
     stakedPosition,
+    canManage,
     onCollectFees,
     onRemoveLiquidity,
     onIncreaseLiquidity,
@@ -46,6 +50,7 @@ function PositionCard({
 }: {
     position: PositionWithTokens
     stakedPosition?: StakedPosition
+    canManage: boolean
     onUnstake: (stakedPosition: StakedPosition) => void
 } & PositionActions) {
     const isStaked = !!stakedPosition
@@ -69,8 +74,8 @@ function PositionCard({
     return (
         <Card>
             <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
                         <TokenIconPair
                             src0={t0.logo}
                             symbol0={t0.symbol}
@@ -78,45 +83,106 @@ function PositionCard({
                             symbol1={t1.symbol}
                             size="md"
                         />
-                        <div className="flex items-center gap-2">
-                            <span className="text-base font-semibold">
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                            <span className="text-base font-semibold truncate">
                                 {t0.symbol} / {t1.symbol}
                             </span>
                             <Badge variant="outline" className="text-xs">
                                 {(position.fee / 10000).toFixed(2)}%
                             </Badge>
+                            {isStaked && (
+                                <Badge
+                                    variant="outline"
+                                    className="bg-primary/15 text-primary border-primary/30"
+                                >
+                                    <Zap className="mr-1 h-3 w-3" />
+                                    Staking
+                                </Badge>
+                            )}
+                            {!isStaked &&
+                                (isClosed ? (
+                                    <Badge variant="secondary">Closed</Badge>
+                                ) : position.inRange ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="bg-positive/15 text-positive border-positive/25"
+                                    >
+                                        <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-positive" />
+                                        In Range
+                                    </Badge>
+                                ) : (
+                                    <Badge
+                                        variant="outline"
+                                        className="bg-negative/15 text-negative border-negative/25"
+                                    >
+                                        Out of Range
+                                    </Badge>
+                                ))}
                         </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        {isStaked && (
-                            <Badge
-                                variant="outline"
-                                className="bg-primary/15 text-primary border-primary/30"
-                            >
-                                <Zap className="mr-1 h-3 w-3" />
-                                Staking
-                            </Badge>
-                        )}
-                        {!isStaked &&
-                            (isClosed ? (
-                                <Badge variant="secondary">Closed</Badge>
-                            ) : position.inRange ? (
-                                <Badge
-                                    variant="outline"
-                                    className="bg-positive/15 text-positive border-positive/25"
+                    {canManage && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                            {stakedPosition ? (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onUnstake(stakedPosition)
+                                    }}
                                 >
-                                    <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-positive" />
-                                    In Range
-                                </Badge>
+                                    <Unlock className="!size-3.5" />
+                                    Unstake
+                                </Button>
                             ) : (
-                                <Badge
-                                    variant="outline"
-                                    className="bg-negative/15 text-negative border-negative/25"
-                                >
-                                    Out of Range
-                                </Badge>
-                            ))}
-                    </div>
+                                <>
+                                    {hasFees && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-xs text-positive hover:text-positive"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onCollectFees(position)
+                                            }}
+                                        >
+                                            <Coins className="!size-3.5" />
+                                            Collect
+                                        </Button>
+                                    )}
+                                    {!isClosed && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onIncreaseLiquidity(position)
+                                            }}
+                                        >
+                                            <Plus className="!size-3.5" />
+                                            Add
+                                        </Button>
+                                    )}
+                                    {!isClosed && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onRemoveLiquidity(position)
+                                            }}
+                                        >
+                                            <Minus className="!size-3.5" />
+                                            Remove
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <Separator className="my-4" />
@@ -237,67 +303,6 @@ function PositionCard({
                         />
                     </div>
                 </div>
-
-                <Separator className="my-4" />
-                <div className="flex gap-2">
-                    {stakedPosition ? (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onUnstake(stakedPosition)
-                            }}
-                        >
-                            <Unlock className="h-3.5 w-3.5" />
-                            Unstake
-                        </Button>
-                    ) : (
-                        <>
-                            {hasFees && (
-                                <Button
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        onCollectFees(position)
-                                    }}
-                                >
-                                    Collect Fees
-                                </Button>
-                            )}
-                            {!isClosed && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        onIncreaseLiquidity(position)
-                                    }}
-                                >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    Add
-                                </Button>
-                            )}
-                            {!isClosed && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="flex-1"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        onRemoveLiquidity(position)
-                                    }}
-                                >
-                                    <Minus className="h-3.5 w-3.5" />
-                                    Remove
-                                </Button>
-                            )}
-                        </>
-                    )}
-                </div>
             </CardContent>
         </Card>
     )
@@ -335,11 +340,6 @@ function LoadingState() {
                                     <div className="h-4 w-20 bg-muted rounded" />
                                 </div>
                             </div>
-                            <div className="h-[1px] bg-muted" />
-                            <div className="flex gap-2">
-                                <div className="h-8 flex-1 bg-muted rounded" />
-                                <div className="h-8 flex-1 bg-muted rounded" />
-                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -349,6 +349,8 @@ function LoadingState() {
 }
 
 export function PositionsList({
+    address,
+    canManage,
     onAddLiquidity,
     onCollectFees,
     onRemoveLiquidity,
@@ -356,7 +358,6 @@ export function PositionsList({
     onUnstake,
     refreshNonce,
 }: PositionsListProps) {
-    const { address } = useAccount()
     const chainId = useChainId()
     const { positions: walletPositions, isLoading: isLoadingWallet } = useUserPositions(
         address,
@@ -443,12 +444,18 @@ export function PositionsList({
         return (
             <EmptyState
                 title="No liquidity positions"
-                description="You don't have any liquidity positions yet."
+                description={
+                    canManage
+                        ? "You don't have any liquidity positions yet."
+                        : 'This address has no liquidity positions.'
+                }
                 action={
-                    <Button onClick={() => onAddLiquidity()}>
-                        <Plus />
-                        Create Position
-                    </Button>
+                    canManage ? (
+                        <Button onClick={() => onAddLiquidity()}>
+                            <Plus />
+                            Create Position
+                        </Button>
+                    ) : undefined
                 }
             />
         )
@@ -458,6 +465,7 @@ export function PositionsList({
             key={position.tokenId.toString()}
             position={position}
             stakedPosition={stakedByTokenId.get(position.tokenId.toString())}
+            canManage={canManage}
             onCollectFees={onCollectFees}
             onRemoveLiquidity={onRemoveLiquidity}
             onIncreaseLiquidity={onIncreaseLiquidity}

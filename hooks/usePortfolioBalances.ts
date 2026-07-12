@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { useBalance } from 'wagmi'
 import type { Address } from 'viem'
 import { isNativeToken } from '@/lib/wagmi'
+import { hasSettled } from '@/lib/query-status'
 import { formatTokenAmount } from '@/services/tokens'
 import type { Token } from '@/types/tokens'
 import { useMultiBalances, type TokenHolding } from '@/hooks/useMultiBalances'
@@ -24,11 +25,12 @@ export function usePortfolioBalances(tokens: Token[], chainId: number, address?:
     })
 
     const addresses = useMemo(() => (address ? [address as `0x${string}`] : []), [address])
-    const { holdings: erc20Holdings, isLoading: isErc20Loading } = useMultiBalances(
-        erc20Tokens,
-        addresses,
-        chainId
-    )
+    const {
+        holdings: erc20Holdings,
+        isLoading: isErc20Loading,
+        isFetching: isErc20Fetching,
+        isSettled: isErc20Settled,
+    } = useMultiBalances(erc20Tokens, addresses, chainId)
 
     const holdings = useMemo(() => {
         const map = new Map<string, TokenHolding>()
@@ -61,5 +63,11 @@ export function usePortfolioBalances(tokens: Token[], chainId: number, address?:
         (nativeToken ? nativeBalance.isLoading : false) ||
         (erc20Tokens.length > 0 ? isErc20Loading : false)
 
-    return { holdings, isLoading }
+    const isFetching =
+        (nativeToken ? nativeBalance.isFetching : false) ||
+        (erc20Tokens.length > 0 ? isErc20Fetching : false)
+
+    const isSettled = hasSettled(!!nativeToken && !!address, nativeBalance.data) && isErc20Settled
+
+    return { holdings, isLoading, isFetching, isSettled }
 }

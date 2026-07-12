@@ -93,10 +93,10 @@ export function Header() {
     const transparent = isLanding && !scrolled
     const navLinks = [
         { href: '/swap', label: 'Swap' },
+        { href: '/portfolio', label: 'Portfolio' },
         { href: '/earn', label: 'Earn' },
         { href: '/bridge', label: 'Bridge' },
         { href: '/launchpad', label: 'Launchpad' },
-        { href: '/portfolio', label: 'Portfolio' },
         { href: '/leaderboard', label: 'Leaderboard' },
         { href: '/points', label: 'Points' },
     ]

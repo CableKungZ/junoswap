@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAccount, useChainId } from 'wagmi'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatAddress } from '@/lib/utils'
 import { Jazzicon } from '@/components/web3/jazzicon'
 import { useNativeUsdPriceContext } from '@/components/launchpad/native-usd-price-provider'
@@ -12,14 +13,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummary } from '@/components/portfolio/portfolio-summary'
 import { TokenList } from '@/components/portfolio/token-list'
 import { ActivityTab } from '@/components/portfolio/activity-tab'
+import { PositionsList } from '@/components/positions/positions-list'
+import { AddLiquidityDialog } from '@/components/positions/add-liquidity-dialog'
+import { RemoveLiquidityDialog } from '@/components/positions/remove-liquidity-dialog'
+import { CollectFeesDialog } from '@/components/positions/collect-fees-dialog'
+import { IncreaseLiquidityDialog } from '@/components/positions/increase-liquidity-dialog'
+import { UnstakeDialog } from '@/components/mining'
 import { usePortfolioTokens } from '@/hooks/usePortfolioTokens'
 import { usePortfolioBalances } from '@/hooks/usePortfolioBalances'
 import { usePortfolioPrices } from '@/hooks/usePortfolioPrices'
+import { useNetWorthHistory } from '@/hooks/useNetWorthHistory'
 import { useUserSwapEvents } from '@/hooks/useUserSwapEvents'
 import { useNativeUsdPriceHistory } from '@/hooks/useNativeUsdPriceHistory'
 import { usePortfolioPnl } from '@/hooks/usePortfolioPnl'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import type { PortfolioToken, PortfolioSummary as Summary } from '@/types/portfolio'
+import type { PositionWithTokens, StakedPosition } from '@/types/earn'
+
+function useFirstPaintLoading(isSettling: boolean, scope: string): boolean {
+    const settledScope = useRef<string | null>(null)
+    if (!isSettling) settledScope.current = scope
+    return settledScope.current !== scope
+}
 
 export function PortfolioContent() {
     const { address: connectedAddress } = useAccount()
@@ -28,19 +43,69 @@ export function PortfolioContent() {
 
     const viewedParam = searchParams.get('address')
     const address = (viewedParam ?? connectedAddress) as `0x${string}` | undefined
+    const canManagePositions =
+        !!connectedAddress && !!address && connectedAddress.toLowerCase() === address.toLowerCase()
     const { nativeUsdPrice, isLoading: isPriceLoading } = useNativeUsdPriceContext()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
-    const [activeTab, setActiveTab] = useState<'holdings' | 'activity'>('holdings')
+    const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'activity'>('holdings')
 
-    const { tokens, getTokenType } = usePortfolioTokens(chainId, address)
-    const { holdings, isLoading: isBalancesLoading } = usePortfolioBalances(
-        tokens,
-        chainId,
-        address
+    const [selectedPosition, setSelectedPosition] = useState<PositionWithTokens | null>(null)
+    const [selectedStakedPosition, setSelectedStakedPosition] = useState<StakedPosition | null>(
+        null
     )
-    const prices = usePortfolioPrices(holdings, nativeUsdPrice, chainId, getTokenType)
+    const [isAddLiquidityOpen, setIsAddLiquidityOpen] = useState(false)
+    const [isRemoveLiquidityOpen, setIsRemoveLiquidityOpen] = useState(false)
+    const [isCollectFeesOpen, setIsCollectFeesOpen] = useState(false)
+    const [isIncreaseLiquidityOpen, setIsIncreaseLiquidityOpen] = useState(false)
+    const [isUnstakeDialogOpen, setIsUnstakeDialogOpen] = useState(false)
+
+    const queryClient = useQueryClient()
+    const [positionsRefreshNonce, setPositionsRefreshNonce] = useState(0)
+    const bumpPositionsRefresh = useCallback(() => {
+        setPositionsRefreshNonce((n) => n + 1)
+        queryClient.invalidateQueries()
+    }, [queryClient])
+
+    const openAddLiquidity = () => setIsAddLiquidityOpen(true)
+    const openRemoveLiquidity = (position: PositionWithTokens) => {
+        setSelectedPosition(position)
+        setIsRemoveLiquidityOpen(true)
+    }
+    const openCollectFees = (position: PositionWithTokens) => {
+        setSelectedPosition(position)
+        setIsCollectFeesOpen(true)
+    }
+    const openIncreaseLiquidity = (position: PositionWithTokens) => {
+        setSelectedPosition(position)
+        setIsIncreaseLiquidityOpen(true)
+    }
+    const openUnstakeDialog = (stakedPosition: StakedPosition) => {
+        setSelectedStakedPosition(stakedPosition)
+        setIsUnstakeDialogOpen(true)
+    }
+
+    const {
+        tokens,
+        getTokenType,
+        isSettled: isTokensSettled,
+    } = usePortfolioTokens(chainId, address)
+    const {
+        holdings,
+        isFetching: isBalancesFetching,
+        isSettled: isBalancesSettled,
+    } = usePortfolioBalances(tokens, chainId, address)
+    const { prices, isSettled: isPricesSettled } = usePortfolioPrices(
+        holdings,
+        nativeUsdPrice,
+        chainId,
+        getTokenType
+    )
     const { data: swapEvents } = useUserSwapEvents(address, chainId)
-    const { priceAt } = useNativeUsdPriceHistory(chainId, nativeUsdPrice)
+    const {
+        points: nativeUsdHistory,
+        priceAt,
+        isSettled: isNativeUsdHistorySettled,
+    } = useNativeUsdPriceHistory(chainId, nativeUsdPrice)
     const { pnlByToken, totals: pnlTotals } = usePortfolioPnl(swapEvents, holdings, prices, priceAt)
 
     const portfolioTokens = useMemo<PortfolioToken[]>(() => {
@@ -77,7 +142,29 @@ export function PortfolioContent() {
         return { netWorth, totalPnl, totalPnlPercent }
     }, [portfolioTokens, pnlTotals])
 
-    const isLoading = isBalancesLoading || isPriceLoading
+    const isHoldingsSettling =
+        !isTokensSettled ||
+        !isBalancesSettled ||
+        isBalancesFetching ||
+        !isPricesSettled ||
+        isPriceLoading
+    const isHistorySettling =
+        isHoldingsSettling || swapEvents === undefined || !isNativeUsdHistorySettled
+
+    const scope = `${chainId}:${address ?? ''}`
+    const isLoading = useFirstPaintLoading(isHoldingsSettling, scope)
+    const isHistoryLoading = useFirstPaintLoading(isHistorySettling, scope)
+
+    const netWorthHistory = useNetWorthHistory({
+        address,
+        chainId,
+        portfolioTokens,
+        swapEvents,
+        nativeUsdPoints: nativeUsdHistory,
+        nativeUsdPrice,
+        netWorthNow: summary.netWorth,
+        isInputLoading: isHistorySettling,
+    })
 
     if (!address) {
         return (
@@ -111,14 +198,20 @@ export function PortfolioContent() {
                     </h1>
                 </div>
 
-                <PortfolioSummary summary={summary} isLoading={isLoading} />
+                <PortfolioSummary
+                    summary={summary}
+                    history={netWorthHistory}
+                    isLoading={isLoading}
+                    isHistoryLoading={isHistoryLoading}
+                />
 
                 <Tabs
                     value={activeTab}
-                    onValueChange={(v) => setActiveTab(v as 'holdings' | 'activity')}
+                    onValueChange={(v) => setActiveTab(v as 'holdings' | 'positions' | 'activity')}
                 >
                     <TabsList>
                         <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                        <TabsTrigger value="positions">Positions</TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
 
@@ -126,10 +219,54 @@ export function PortfolioContent() {
                         <TokenList tokens={portfolioTokens} isLoading={isLoading} />
                     </TabsContent>
 
+                    <TabsContent value="positions">
+                        <PositionsList
+                            address={address}
+                            canManage={canManagePositions}
+                            onAddLiquidity={openAddLiquidity}
+                            onCollectFees={openCollectFees}
+                            onRemoveLiquidity={openRemoveLiquidity}
+                            onIncreaseLiquidity={openIncreaseLiquidity}
+                            onUnstake={openUnstakeDialog}
+                            refreshNonce={positionsRefreshNonce}
+                        />
+                    </TabsContent>
+
                     <TabsContent value="activity">
                         <ActivityTab address={address!} chainId={chainId} />
                     </TabsContent>
                 </Tabs>
+
+                <AddLiquidityDialog
+                    open={isAddLiquidityOpen}
+                    initialPool={null}
+                    onClose={() => setIsAddLiquidityOpen(false)}
+                    onSuccess={bumpPositionsRefresh}
+                />
+                <RemoveLiquidityDialog
+                    open={isRemoveLiquidityOpen}
+                    position={selectedPosition}
+                    onClose={() => setIsRemoveLiquidityOpen(false)}
+                    onSuccess={bumpPositionsRefresh}
+                />
+                <CollectFeesDialog
+                    open={isCollectFeesOpen}
+                    position={selectedPosition}
+                    onClose={() => setIsCollectFeesOpen(false)}
+                    onSuccess={bumpPositionsRefresh}
+                />
+                <IncreaseLiquidityDialog
+                    open={isIncreaseLiquidityOpen}
+                    position={selectedPosition}
+                    onClose={() => setIsIncreaseLiquidityOpen(false)}
+                    onSuccess={bumpPositionsRefresh}
+                />
+                <UnstakeDialog
+                    open={isUnstakeDialogOpen}
+                    stakedPosition={selectedStakedPosition}
+                    onClose={() => setIsUnstakeDialogOpen(false)}
+                    onSuccess={bumpPositionsRefresh}
+                />
             </div>
         </div>
     )

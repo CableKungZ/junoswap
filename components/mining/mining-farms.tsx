@@ -1,9 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useChainId } from 'wagmi'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TokenIconSkeleton } from '@/components/ui/token-icon'
@@ -50,27 +48,12 @@ function FarmCardSkeleton() {
 export function MiningFarms({ onStake }: { onStake: (incentive: Incentive) => void }) {
     const chainId = useChainId()
     const stakerAddress = getV3StakerAddress(chainId)
-    const [hideEndedIncentives, setHideEndedIncentives] = useState(true)
     const incentiveKeys = useMemo(() => KNOWN_INCENTIVES[chainId] ?? [], [chainId])
     const { incentives, isLoading } = useIncentives(incentiveKeys)
-    const filteredIncentives = useMemo(() => {
-        if (!hideEndedIncentives) return incentives
-        return incentives.filter((i) => !i.isEnded)
-    }, [incentives, hideEndedIncentives])
 
     const header = (
         <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Mining Farms</h2>
-            <div className="flex items-center space-x-2">
-                <Switch
-                    id="hide-ended"
-                    checked={hideEndedIncentives}
-                    onCheckedChange={setHideEndedIncentives}
-                />
-                <Label htmlFor="hide-ended" className="text-sm">
-                    Hide ended
-                </Label>
-            </div>
         </div>
     )
 
@@ -95,14 +78,14 @@ export function MiningFarms({ onStake }: { onStake: (incentive: Incentive) => vo
                         <FarmCardSkeleton key={i} />
                     ))}
                 </div>
-            ) : filteredIncentives.length === 0 ? (
+            ) : incentives.length === 0 ? (
                 <EmptyState
                     title="No active mining farms"
                     description="Check back later for new rewards programs."
                 />
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredIncentives.map((incentive) => (
+                    {incentives.map((incentive) => (
                         <MiningFarmCard
                             key={incentive.incentiveId}
                             incentive={incentive}

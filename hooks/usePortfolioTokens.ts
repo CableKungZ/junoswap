@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { hasSettled } from '@/lib/query-status'
 import { useTokenDiscovery } from '@/hooks/useTokenDiscovery'
 import type { Token } from '@/types/tokens'
 
@@ -50,9 +51,9 @@ export function usePortfolioTokens(chainId: number, userAddress?: Address) {
         allTokens: discoveredTokens,
         getTokenType,
         isLaunchpadChain,
+        isSettled: isDiscoverySettled,
     } = useTokenDiscovery(chainId)
 
-    // Fetch user-held token addresses (launchpad chain only)
     const { data: userHeldTokenAddrs } = useQuery({
         queryKey: ['user-held-tokens', userAddress, chainId],
         queryFn: async () => {
@@ -73,20 +74,17 @@ export function usePortfolioTokens(chainId: number, userAddress?: Address) {
         staleTime: 30_000,
     })
 
-    // Build set of all discovered token addresses
     const knownAddrs = useMemo(() => {
         const set = new Set<string>()
         for (const t of discoveredTokens) set.add(t.address.toLowerCase())
         return set
     }, [discoveredTokens])
 
-    // Find unknown tokens that the user holds
     const unknownAddrs = useMemo(
         () => (userHeldTokenAddrs ?? []).filter((addr) => !knownAddrs.has(addr.toLowerCase())),
         [userHeldTokenAddrs, knownAddrs]
     )
 
-    // Fetch metadata for unknown tokens
     const { data: launchTokenMeta } = useQuery({
         queryKey: ['launch-token-meta', unknownAddrs],
         queryFn: async () => {
@@ -140,5 +138,10 @@ export function usePortfolioTokens(chainId: number, userAddress?: Address) {
         return merged
     }, [discoveredTokens, unknownAddrs, launchTokenMeta, isLaunchpadChain, chainId])
 
-    return { tokens, getTokenType, isLaunchpadChain }
+    const isSettled =
+        isDiscoverySettled &&
+        hasSettled(!!userAddress && isLaunchpadChain, userHeldTokenAddrs) &&
+        hasSettled(unknownAddrs.length > 0 && isLaunchpadChain, launchTokenMeta)
+
+    return { tokens, getTokenType, isLaunchpadChain, isSettled }
 }

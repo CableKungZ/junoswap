@@ -5,6 +5,7 @@ import type { Address } from 'viem'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { hasSettled } from '@/lib/query-status'
 import type { Token } from '@/types/tokens'
 
 const GRADUATED_TOKENS_QUERY = `
@@ -33,7 +34,11 @@ interface GraduatedTokensResponse {
     }
 }
 
-export function useGraduatedTokens(chainId: number): { tokens: Token[]; isLoading: boolean } {
+export function useGraduatedTokens(chainId: number): {
+    tokens: Token[]
+    isLoading: boolean
+    isSettled: boolean
+} {
     const launchpadChain = isLaunchpadChain(chainId)
 
     const { data: tokens, isLoading } = useQuery({
@@ -65,8 +70,8 @@ export function useGraduatedTokens(chainId: number): { tokens: Token[]; isLoadin
     })
 
     if (!launchpadChain) {
-        return { tokens: [], isLoading: false }
+        return { tokens: [], isLoading: false, isSettled: true }
     }
 
-    return { tokens: tokens ?? [], isLoading }
+    return { tokens: tokens ?? [], isLoading, isSettled: hasSettled(true, tokens) }
 }

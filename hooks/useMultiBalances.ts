@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useReadContracts } from 'wagmi'
 import { type Address } from 'viem'
 import { ERC20_ABI } from '@/lib/abis/erc20'
@@ -13,9 +13,18 @@ export interface TokenHolding {
     formattedBalance: string
 }
 
+type HoldingsByAddress = Map<string, Map<string, TokenHolding>>
+
+const EMPTY_HOLDINGS: HoldingsByAddress = new Map()
+
 export function useMultiBalances(tokens: Token[], addresses: Address[], chainId: number) {
-    // ERC20 balances: batch all (address × token) pairs
-    const { data: erc20Results, isLoading: isErc20Loading } = useReadContracts({
+    const enabled = addresses.length > 0 && tokens.length > 0
+
+    const {
+        data: erc20Results,
+        isLoading: isErc20Loading,
+        isFetching,
+    } = useReadContracts({
         contracts: addresses.flatMap((addr) =>
             tokens.map((token) => ({
                 address: token.address as Address,
@@ -25,39 +34,61 @@ export function useMultiBalances(tokens: Token[], addresses: Address[], chainId:
                 chainId,
             }))
         ),
-        query: { enabled: addresses.length > 0 && tokens.length > 0 },
+        query: { enabled },
     })
 
-    const holdings = useMemo(() => {
-        const map = new Map<string, Map<string, TokenHolding>>()
+    const scope = `${chainId}:${addresses.join(',').toLowerCase()}`
+    const cacheRef = useRef<{ scope: string; holdings: HoldingsByAddress } | null>(null)
+    if (cacheRef.current && cacheRef.current.scope !== scope) cacheRef.current = null
 
-        if (erc20Results) {
-            const numTokens = tokens.length
-            addresses.forEach((addr, addrIdx) => {
-                tokens.forEach((token, tokenIdx) => {
-                    const resultIdx = addrIdx * numTokens + tokenIdx
-                    const balance = erc20Results[resultIdx]?.result as bigint | undefined
-                    if (balance && balance > 0n) {
-                        let tokenMap = map.get(addr.toLowerCase())
-                        if (!tokenMap) {
-                            tokenMap = new Map()
-                            map.set(addr.toLowerCase(), tokenMap)
-                        }
-                        tokenMap.set(token.address.toLowerCase(), {
-                            token,
-                            rawBalance: balance,
-                            formattedBalance: formatTokenAmount(balance, token.decimals),
-                        })
-                    }
-                })
-            })
+    const holdings = useMemo(() => {
+        const numTokens = tokens.length
+        if (!erc20Results || erc20Results.length !== addresses.length * numTokens) {
+            return cacheRef.current?.holdings ?? EMPTY_HOLDINGS
         }
 
+        const map: HoldingsByAddress = new Map()
+        addresses.forEach((addr, addrIdx) => {
+            const addrKey = addr.toLowerCase()
+            const cached = cacheRef.current?.holdings.get(addrKey)
+
+            tokens.forEach((token, tokenIdx) => {
+                const tokenKey = token.address.toLowerCase()
+                const result = erc20Results[addrIdx * numTokens + tokenIdx]
+
+                const holding: TokenHolding | undefined =
+                    result?.status === 'success'
+                        ? (result.result as bigint) > 0n
+                            ? {
+                                  token,
+                                  rawBalance: result.result as bigint,
+                                  formattedBalance: formatTokenAmount(
+                                      result.result as bigint,
+                                      token.decimals
+                                  ),
+                              }
+                            : undefined
+                        : cached?.get(tokenKey)
+
+                if (!holding) return
+
+                let tokenMap = map.get(addrKey)
+                if (!tokenMap) {
+                    tokenMap = new Map()
+                    map.set(addrKey, tokenMap)
+                }
+                tokenMap.set(tokenKey, holding)
+            })
+        })
+
+        cacheRef.current = { scope, holdings: map }
         return map
-    }, [erc20Results, addresses, tokens])
+    }, [erc20Results, addresses, tokens, scope])
 
     return {
         holdings,
-        isLoading: isErc20Loading,
+        isLoading: isErc20Loading && cacheRef.current === null,
+        isFetching,
+        isSettled: !enabled || erc20Results?.length === addresses.length * tokens.length,
     }
 }

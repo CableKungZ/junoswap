@@ -229,8 +229,9 @@ function PoolsListContent({
 }: {
     pools: V3PoolData[]
     isLoading: boolean
-    onAddLiquidity: (pool: V3PoolData) => void
+    onAddLiquidity: (pool?: V3PoolData) => void
 }) {
+    const { isConnected } = useAccount()
     const chainId = useChainId()
     const { tvlByAddress, isLoading: isLoadingTvl } = usePoolTvl(pools, chainId)
     const { volumeByAddress, isLoading: isLoadingVol } = usePoolVolume(pools, chainId)
@@ -295,14 +296,29 @@ function PoolsListContent({
     const header = (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold sm:text-xl">Liquidity Pools</h2>
-            <div className="relative w-full sm:max-w-xs">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    placeholder="Search by token"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9 rounded-2xl border border-input"
-                />
+            <div className="flex items-center gap-2">
+                <div className="relative w-full sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Search by token"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 rounded-2xl border border-input"
+                    />
+                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => {
+                        if (!isConnected) {
+                            setIsConnectModalOpen(true)
+                            return
+                        }
+                        onAddLiquidity()
+                    }}
+                >
+                    <Plus />
+                    New Position
+                </Button>
             </div>
         </div>
     )
@@ -423,7 +439,7 @@ function PoolsListPonder({
     onAddLiquidity,
 }: {
     chainId: number
-    onAddLiquidity: (pool: V3PoolData) => void
+    onAddLiquidity: (pool?: V3PoolData) => void
 }) {
     const { pools, isLoading } = useAllPools(chainId)
     return <PoolsListContent pools={pools} isLoading={isLoading} onAddLiquidity={onAddLiquidity} />
@@ -434,7 +450,7 @@ function PoolsListLegacy({
     onAddLiquidity,
 }: {
     chainId: number
-    onAddLiquidity: (pool: V3PoolData) => void
+    onAddLiquidity: (pool?: V3PoolData) => void
 }) {
     const { pools: commonPools, isLoading: isLoadingCommon } = useCommonPools(chainId)
     const { pools: graduatedPools, isLoading: isLoadingGraduated } = useGraduatedPools(chainId)
@@ -452,7 +468,7 @@ function PoolsListLegacy({
     )
 }
 
-export function PoolsList({ onAddLiquidity }: { onAddLiquidity: (pool: V3PoolData) => void }) {
+export function PoolsList({ onAddLiquidity }: { onAddLiquidity: (pool?: V3PoolData) => void }) {
     const chainId = useChainId()
     if (PONDER_INDEXED_CHAINS.has(chainId)) {
         return <PoolsListPonder chainId={chainId} onAddLiquidity={onAddLiquidity} />

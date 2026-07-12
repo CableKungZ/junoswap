@@ -21,7 +21,7 @@ function calculateMarketCapValue(event: SwapEvent): number {
     return calculatePrice(event) * TOTAL_SUPPLY
 }
 
-function calculatePrice(event: SwapEvent): number {
+export function calculatePrice(event: SwapEvent): number {
     const nativeReserve = event.isBuy ? event.reserveIn : event.reserveOut
     const tokenReserve = event.isBuy ? event.reserveOut : event.reserveIn
     if (nativeReserve === 0n || tokenReserve === 0n) return 0
@@ -403,7 +403,6 @@ export function extractCreatorTrades(
     for (const e of bcEvents) {
         if (e.sender?.toLowerCase() !== target) continue
         if (splitAt !== null && e.timestamp >= splitAt) continue
-        // buy: native in / token out; sell: token in / native out
         const nativeAmount = parseFloat(formatEther(e.isBuy ? e.amountIn : e.amountOut))
         const tokenAmount = parseFloat(formatEther(e.isBuy ? e.amountOut : e.amountIn))
         trades.push({ timestamp: e.timestamp, isBuy: e.isBuy, nativeAmount, tokenAmount })
@@ -434,7 +433,6 @@ export function buildCreatorMarkers(
 
     const duration = TIMEFRAME_DURATIONS[timeframe]
     const rendered = new Set(candleTimes)
-    // keyed by `${bucket}:${side}` so a bucket can hold one buy marker and one sell marker
     const buckets = new Map<string, CreatorMarkerPoint>()
 
     for (const trade of trades) {

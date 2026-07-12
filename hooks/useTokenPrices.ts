@@ -1,10 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { isNativeToken } from '@/lib/wagmi'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
+import { hasSettled } from '@/lib/query-status'
 import { isLaunchpadChain as isLaunchpadChainFn } from '@/lib/abis/bonding-curve-junoswap'
 import type { Token } from '@/types/tokens'
 import type { TokenType } from '@/types/portfolio'
@@ -68,7 +69,9 @@ export function useTokenPrices(
         [tokens, getTokenType, chainId]
     )
 
-    const { data: snapshots } = useQuery({
+    const hasBondingCurveTokens = isLaunchpadChain && bondingCurveAddresses.length > 0
+
+    const { data: snapshots, isLoading: isSnapshotsLoading } = useQuery({
         queryKey: ['token-snapshots-usd', bondingCurveAddresses],
         queryFn: async () => {
             if (!isLaunchpadChain || bondingCurveAddresses.length === 0) return []
@@ -82,11 +85,14 @@ export function useTokenPrices(
                 throw e
             }
         },
-        enabled: isLaunchpadChain && bondingCurveAddresses.length > 0,
+        enabled: hasBondingCurveTokens,
         staleTime: 30_000,
+        // The address list grows as token discovery resolves; keep the prices we
+        // already have instead of blanking every held token's value on each rekey.
+        placeholderData: keepPreviousData,
     })
 
-    const { data: v3Snapshots } = useQuery({
+    const { data: v3Snapshots, isLoading: isV3SnapshotsLoading } = useQuery({
         queryKey: ['v3-token-snapshots', chainId],
         queryFn: async () => {
             try {
@@ -104,6 +110,7 @@ export function useTokenPrices(
         },
         enabled: hasV3Tokens,
         staleTime: 30_000,
+        placeholderData: keepPreviousData,
     })
 
     const snapshotMap = useMemo(() => {
@@ -124,7 +131,7 @@ export function useTokenPrices(
         return map
     }, [v3Snapshots])
 
-    return useMemo(() => {
+    const prices = useMemo(() => {
         const priceMap = new Map<string, number | null>()
         for (const token of tokens) {
             const key = token.address.toLowerCase()
@@ -142,9 +149,14 @@ export function useTokenPrices(
         }
         return priceMap
     }, [tokens, getTokenType, nativeUsdPrice, chainId, snapshotMap, v3SnapshotMap])
+
+    const isSettled =
+        hasSettled(hasBondingCurveTokens, snapshots) && hasSettled(hasV3Tokens, v3Snapshots)
+
+    return { prices, isLoading: isSnapshotsLoading || isV3SnapshotsLoading, isSettled }
 }
 
-function isStablecoin(token: Token): boolean {
+export function isStablecoin(token: Token): boolean {
     return STABLECOIN_SYMBOLS.has(token.symbol.toUpperCase())
 }
 

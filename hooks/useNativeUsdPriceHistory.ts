@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
+import { hasSettled } from '@/lib/query-status'
+import { sanitizePricePoints } from '@/services/net-worth-history'
 
 export interface NativeUsdPricePoint {
     timestamp: number
@@ -12,8 +14,11 @@ export interface NativeUsdPricePoint {
 
 interface NativeUsdPriceSnapshotsPage {
     nativeUsdPriceSnapshots: {
+        pageInfo: {
+            hasNextPage: boolean
+            endCursor: string | null
+        }
         items: Array<{
-            id: string
             price: string
             timestamp: number
         }>
@@ -31,8 +36,8 @@ const SNAPSHOTS_QUERY = `
       limit: ${PAGE_SIZE},
       after: $after
     ) {
+      pageInfo { hasNextPage endCursor }
       items {
-        id
         price
         timestamp
       }
@@ -42,32 +47,24 @@ const SNAPSHOTS_QUERY = `
 
 async function fetchAllSnapshots(chainId: number): Promise<NativeUsdPricePoint[]> {
     const points: NativeUsdPricePoint[] = []
-    let after: string | undefined
+    let after: string | null = null
 
     for (;;) {
-        const data = await ponderRequest<NativeUsdPriceSnapshotsPage>(SNAPSHOTS_QUERY, {
+        const data: NativeUsdPriceSnapshotsPage = await ponderRequest(SNAPSHOTS_QUERY, {
             chainId,
             after,
         })
-        const items = data.nativeUsdPriceSnapshots.items
+        const { pageInfo, items } = data.nativeUsdPriceSnapshots
         for (const item of items) {
             points.push({ timestamp: item.timestamp, price: parseFloat(item.price) })
         }
-        if (items.length < PAGE_SIZE) break
-        const last = items[items.length - 1]
-        if (!last) break
-        after = last.id
+        if (!pageInfo.hasNextPage || !pageInfo.endCursor) break
+        after = pageInfo.endCursor
     }
 
-    return points
+    return sanitizePricePoints(points)
 }
 
-/**
- * Builds a `priceAt(timestamp)` lookup over the indexed KUB/USD history so each
- * trade can be valued at the rate in effect when it happened. Binary-searches for
- * the latest point at or before the timestamp; falls back to the earliest point
- * (for trades predating the series) and then to `fallbackPrice` when no history.
- */
 export function makePriceAt(
     points: NativeUsdPricePoint[],
     fallbackPrice: number | null
@@ -96,7 +93,7 @@ export function makePriceAt(
 export function useNativeUsdPriceHistory(chainId: number, fallbackPrice: number | null) {
     const isSupportedChain = isLeaderboardSupportedChain(chainId)
 
-    const { data } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ['native-usd-price-history', chainId],
         queryFn: async (): Promise<NativeUsdPricePoint[]> => {
             try {
@@ -113,5 +110,5 @@ export function useNativeUsdPriceHistory(chainId: number, fallbackPrice: number 
     const points = useMemo(() => data ?? [], [data])
     const priceAt = useMemo(() => makePriceAt(points, fallbackPrice), [points, fallbackPrice])
 
-    return { points, priceAt }
+    return { points, priceAt, isLoading, isSettled: hasSettled(isSupportedChain, data) }
 }
