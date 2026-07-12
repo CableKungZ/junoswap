@@ -6,6 +6,7 @@ import {
     selectSplitCandidates,
     computeGridAmounts,
     pickBestSplit,
+    splitClearsMargin,
     type SplitQuoteGrid,
 } from '@/services/dex/split-routing'
 
@@ -129,6 +130,38 @@ describe('services/dex/split-routing', () => {
                 aggFeeBps: 0,
             }
             expect(pickBestSplit(grid)?.amountInA).toBe(70n)
+        })
+    })
+
+    describe('splitClearsMargin', () => {
+        // 50 bps margin: a plan must beat the baseline by strictly more than 0.5%.
+        const marginBps = 50
+
+        it('clears when the predicted output beats the baseline by more than the margin', () => {
+            // 1010 vs 1000 is a 1.0% improvement — above the 0.5% margin.
+            expect(splitClearsMargin(1010n, 1000n, marginBps)).toBe(true)
+        })
+
+        it('does not clear when the improvement is within the margin', () => {
+            // 1004 vs 1000 is a 0.4% improvement — below the 0.5% margin.
+            expect(splitClearsMargin(1004n, 1000n, marginBps)).toBe(false)
+        })
+
+        it('does not clear when the improvement equals the margin exactly (strictly greater)', () => {
+            // 1005 vs 1000 is exactly the 0.5% threshold; the comparison is strict.
+            expect(splitClearsMargin(1005n, 1000n, marginBps)).toBe(false)
+        })
+
+        it('returns false when there is no aggregator output', () => {
+            expect(splitClearsMargin(null, 1000n, marginBps)).toBe(false)
+        })
+
+        it('clears by default when no single-DEX baseline exists (the only available route)', () => {
+            expect(splitClearsMargin(1n, null, marginBps)).toBe(true)
+        })
+
+        it('returns false when neither output nor baseline exists', () => {
+            expect(splitClearsMargin(null, null, marginBps)).toBe(false)
         })
     })
 })

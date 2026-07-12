@@ -1,38 +1,23 @@
 import type { RouteQuote } from '@/types/routing'
 
-/**
- * Splits a swap across two DEXes via the aggregation router. Outputs are predicted by quoting
- * each leg on-chain (not local AMM math); because two direct routes on distinct DEXes use
- * disjoint pools, the per-leg quotes sum to the exact on-chain split result.
- */
-
 export interface SplitAllocation {
     routeA: RouteQuote
     routeB: RouteQuote
     amountInA: bigint
     amountInB: bigint
-    /** Predicted output of the whole split, net of the aggregator's protocol fee. */
     predictedNetOut: bigint
 }
 
-/**
- * True when a split's predicted output clears the single-route baseline by `marginBps`. Shared by
- * the swap card (gates execution) and the DEX selector (labels the header) so the two never drift.
- */
 export function splitClearsMargin(
     predictedNetOut: bigint | null,
     bestSingleOut: bigint | null,
     marginBps: number
 ): boolean {
-    if (predictedNetOut == null || bestSingleOut == null) return false
+    if (predictedNetOut == null) return false
+    if (bestSingleOut == null) return true
     return predictedNetOut * 10000n > bestSingleOut * BigInt(10000 + marginBps)
 }
 
-/**
- * Best direct route per DEX, top two by single-route output. Direct routes on distinct DEXes are
- * pool-disjoint by construction, which is what lets the grid predictions be summed exactly.
- * Returns null when fewer than two DEXes have a direct route.
- */
 export function selectSplitCandidates(allRoutes: RouteQuote[]): [RouteQuote, RouteQuote] | null {
     const bestPerDex = new Map<string, RouteQuote>()
     for (const r of allRoutes) {
@@ -48,11 +33,6 @@ export function selectSplitCandidates(allRoutes: RouteQuote[]): [RouteQuote, Rou
     return [sorted[0]!, sorted[1]!]
 }
 
-/**
- * Exact integer leg amounts for each interior fraction `f` (routeA's share). `legB = amt - legA`,
- * so the pair always sums to `amountIn` with no dust — required by the router's `sum == amountIn`
- * check. Fractions are taken as permille to stay exact.
- */
 export function computeGridAmounts(
     amountIn: bigint,
     fractions: number[]
@@ -73,20 +53,12 @@ export interface SplitQuoteGrid {
     candidateB: RouteQuote
     amountsInA: bigint[]
     amountsInB: bigint[]
-    /** Gross output of routeA at amountsInA[i]; null where the leg failed to quote. */
     grossA: (bigint | null)[]
-    /** Gross output of routeB at amountsInB[i]. */
     grossB: (bigint | null)[]
-    /** Best single-route output at the full amount — the baseline a split must beat. */
     bestSingleOut: bigint
     aggFeeBps: number
 }
 
-/**
- * Picks the interior allocation with the highest net output, or null if none beats routing the
- * whole amount through the single best DEX. The `MIN_AGG_IMPROVEMENT_BPS` margin is applied later
- * by the gate; here the baseline is a plain strict improvement.
- */
 export function pickBestSplit(g: SplitQuoteGrid): SplitAllocation | null {
     const feeMul = BigInt(10000 - g.aggFeeBps)
     let best: SplitAllocation | null = null

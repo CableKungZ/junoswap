@@ -570,171 +570,185 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     </div>
                 </div>
                 <div className="space-y-4 p-6 pt-0">
-                    {effectiveQuote && tokenIn && tokenOut && !isQuoteLoading && (
-                        <Card className="bg-muted/50 p-1">
-                            <CardContent className="space-y-1 p-3 text-xs">
-                                {isWrapUnwrap && (
-                                    <>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Operation</span>
-                                            <span className="font-semibold">
-                                                {wrapOperation === 'wrap'
-                                                    ? `Wrap ${tokenOut.symbol}`
-                                                    : `Unwrap ${tokenIn.symbol}`}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Rate</span>
-                                            <span className="font-semibold">1:1</span>
-                                        </div>
-                                    </>
-                                )}
-                                {!isWrapUnwrap && (
-                                    <>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Rate</span>
-                                            <span
-                                                className="font-medium cursor-pointer hover:underline flex items-center gap-1"
-                                                onClick={() => setIsRateFlipped(!isRateFlipped)}
-                                                title="Click to flip rate"
-                                            >
-                                                {!isRateFlipped ? (
-                                                    <>
-                                                        1 {tokenIn.symbol} ={' '}
-                                                        {amountIn && parseFloat(amountIn) > 0
-                                                            ? (
-                                                                  parseFloat(displayAmountOut) /
-                                                                  parseFloat(amountIn)
-                                                              ).toFixed(6)
-                                                            : '0'}{' '}
-                                                        {tokenOut.symbol}
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        1 {tokenOut.symbol} ={' '}
-                                                        {displayAmountOut &&
-                                                        parseFloat(displayAmountOut) > 0
-                                                            ? (
-                                                                  parseFloat(amountIn) /
-                                                                  parseFloat(displayAmountOut)
-                                                              ).toFixed(6)
-                                                            : '0'}{' '}
-                                                        {tokenIn.symbol}
-                                                    </>
-                                                )}
-                                                <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">
-                                                Min. Received
-                                            </span>
-                                            <span className="font-medium">
-                                                {formatDisplayAmount(
-                                                    amountOutMinimum,
-                                                    tokenOut.decimals
-                                                )}{' '}
-                                                {tokenOut.symbol}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Fee</span>
-                                            <span className="font-medium">
-                                                {(fee / 10000).toFixed(2)}%
-                                            </span>
-                                        </div>
-                                        {priceImpact !== undefined && (
-                                            <div className="flex justify-between items-center">
+                    {tokenIn &&
+                        tokenOut &&
+                        !isQuoteLoading &&
+                        (effectiveQuote || (useAggPath && aggPlan)) && (
+                            <Card className="bg-muted/50 p-1">
+                                <CardContent className="space-y-1 p-3 text-xs">
+                                    {isWrapUnwrap && (
+                                        <>
+                                            <div className="flex justify-between">
                                                 <span className="text-muted-foreground">
-                                                    Price Impact
+                                                    Operation
                                                 </span>
+                                                <span className="font-semibold">
+                                                    {wrapOperation === 'wrap'
+                                                        ? `Wrap ${tokenOut.symbol}`
+                                                        : `Unwrap ${tokenIn.symbol}`}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Rate</span>
+                                                <span className="font-semibold">1:1</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    {!isWrapUnwrap && (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Rate</span>
                                                 <span
-                                                    className={cn(
-                                                        'font-medium',
-                                                        priceImpact >= 5 && 'text-negative'
-                                                    )}
+                                                    className="font-medium cursor-pointer hover:underline flex items-center gap-1"
+                                                    onClick={() => setIsRateFlipped(!isRateFlipped)}
+                                                    title="Click to flip rate"
                                                 >
-                                                    {priceImpact < 0.01
-                                                        ? '<0.01'
-                                                        : priceImpact.toFixed(2)}
-                                                    %
+                                                    {!isRateFlipped ? (
+                                                        <>
+                                                            1 {tokenIn.symbol} ={' '}
+                                                            {amountIn && parseFloat(amountIn) > 0
+                                                                ? (
+                                                                      parseFloat(displayAmountOut) /
+                                                                      parseFloat(amountIn)
+                                                                  ).toFixed(6)
+                                                                : '0'}{' '}
+                                                            {tokenOut.symbol}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            1 {tokenOut.symbol} ={' '}
+                                                            {displayAmountOut &&
+                                                            parseFloat(displayAmountOut) > 0
+                                                                ? (
+                                                                      parseFloat(amountIn) /
+                                                                      parseFloat(displayAmountOut)
+                                                                  ).toFixed(6)
+                                                                : '0'}{' '}
+                                                            {tokenIn.symbol}
+                                                        </>
+                                                    )}
+                                                    <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
                                                 </span>
                                             </div>
-                                        )}
-                                        {planLegs ? (
-                                            <div className="flex justify-between items-start gap-2">
-                                                <span className="text-muted-foreground">Route</span>
-                                                <div className="flex flex-col items-end gap-0.5">
-                                                    {planLegs.map((leg, i) => (
-                                                        <span
-                                                            key={i}
-                                                            className="font-medium flex items-center gap-1 flex-wrap justify-end text-xs"
-                                                        >
-                                                            {planLegs.length > 1 && (
-                                                                <span className="text-muted-foreground">
-                                                                    {leg.percent}%
-                                                                </span>
-                                                            )}
-                                                            {leg.hops.map((h, j) => (
-                                                                <Fragment key={j}>
-                                                                    {j === 0 && (
-                                                                        <span>{h.symbolIn}</span>
-                                                                    )}
-                                                                    <span className="text-muted-foreground">
-                                                                        →
-                                                                    </span>
-                                                                    <span className="text-[10px] uppercase text-muted-foreground">
-                                                                        {h.dexId}
-                                                                    </span>
-                                                                    <span>{h.symbolOut}</span>
-                                                                </Fragment>
-                                                            ))}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">
+                                                    Min. Received
+                                                </span>
+                                                <span className="font-medium">
+                                                    {formatDisplayAmount(
+                                                        amountOutMinimum,
+                                                        tokenOut.decimals
+                                                    )}{' '}
+                                                    {tokenOut.symbol}
+                                                </span>
                                             </div>
-                                        ) : (
-                                            displayRoute && (
-                                                <div className="flex justify-between items-center gap-2">
+                                            {effectiveQuote && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">
+                                                        Fee
+                                                    </span>
+                                                    <span className="font-medium">
+                                                        {(fee / 10000).toFixed(2)}%
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {priceImpact !== undefined && (
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-muted-foreground">
+                                                        Price Impact
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'font-medium',
+                                                            priceImpact >= 5 && 'text-negative'
+                                                        )}
+                                                    >
+                                                        {priceImpact < 0.01
+                                                            ? '<0.01'
+                                                            : priceImpact.toFixed(2)}
+                                                        %
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {planLegs ? (
+                                                <div className="flex justify-between items-start gap-2">
                                                     <span className="text-muted-foreground">
                                                         Route
                                                     </span>
-                                                    <span className="font-medium flex items-center gap-1 flex-wrap justify-end">
-                                                        <span className="text-[10px] uppercase text-muted-foreground">
-                                                            {displayRoute.dexId}
-                                                        </span>
-                                                        <span className="text-muted-foreground">
-                                                            •
-                                                        </span>
-                                                        {tokenIn?.symbol}
-                                                        {displayRoute.route.intermediaryTokens.map(
-                                                            (t) => (
-                                                                <Fragment key={t.address}>
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        {planLegs.map((leg, i) => (
+                                                            <span
+                                                                key={i}
+                                                                className="font-medium flex items-center gap-1 flex-wrap justify-end text-xs"
+                                                            >
+                                                                {planLegs.length > 1 && (
                                                                     <span className="text-muted-foreground">
-                                                                        →
+                                                                        {leg.percent}%
                                                                     </span>
-                                                                    {t.symbol}
-                                                                </Fragment>
-                                                            )
-                                                        )}
-                                                        <span className="text-muted-foreground">
-                                                            →
-                                                        </span>
-                                                        {tokenOut?.symbol}
-                                                    </span>
+                                                                )}
+                                                                {leg.hops.map((h, j) => (
+                                                                    <Fragment key={j}>
+                                                                        {j === 0 && (
+                                                                            <span>
+                                                                                {h.symbolIn}
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-muted-foreground">
+                                                                            →
+                                                                        </span>
+                                                                        <span className="text-[10px] uppercase text-muted-foreground">
+                                                                            {h.dexId}
+                                                                        </span>
+                                                                        <span>{h.symbolOut}</span>
+                                                                    </Fragment>
+                                                                ))}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            )
-                                        )}
-                                    </>
-                                )}
-                            </CardContent>
-                        </Card>
-                    )}
+                                            ) : (
+                                                displayRoute && (
+                                                    <div className="flex justify-between items-center gap-2">
+                                                        <span className="text-muted-foreground">
+                                                            Route
+                                                        </span>
+                                                        <span className="font-medium flex items-center gap-1 flex-wrap justify-end">
+                                                            <span className="text-[10px] uppercase text-muted-foreground">
+                                                                {displayRoute.dexId}
+                                                            </span>
+                                                            <span className="text-muted-foreground">
+                                                                •
+                                                            </span>
+                                                            {tokenIn?.symbol}
+                                                            {displayRoute.route.intermediaryTokens.map(
+                                                                (t) => (
+                                                                    <Fragment key={t.address}>
+                                                                        <span className="text-muted-foreground">
+                                                                            →
+                                                                        </span>
+                                                                        {t.symbol}
+                                                                    </Fragment>
+                                                                )
+                                                            )}
+                                                            <span className="text-muted-foreground">
+                                                                →
+                                                            </span>
+                                                            {tokenOut?.symbol}
+                                                        </span>
+                                                    </div>
+                                                )
+                                            )}
+                                        </>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
                     {!isWrapUnwrap &&
                         !isSameTokenSwap &&
                         tokenIn &&
                         tokenOut &&
                         amountInBigInt > 0n &&
+                        !useAggPath &&
                         !effectiveQuote &&
                         !isQuoteLoading && (
                             <Card className="bg-muted/50 p-1">
@@ -752,7 +766,10 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                             !tokenOut ||
                             isQuoteLoading ||
                             isSameTokenSwap ||
-                            (!isWrapUnwrap && amountInBigInt > 0n && !effectiveQuote) ||
+                            (!isWrapUnwrap &&
+                                amountInBigInt > 0n &&
+                                !effectiveQuote &&
+                                !useAggPath) ||
                             (isKubUnwrapDirect
                                 ? isUnwrapping
                                 : (isPreparing && !needsApprovalCheck) ||
