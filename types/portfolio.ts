@@ -1,6 +1,18 @@
 import type { Token } from './tokens'
+import type { LaunchToken } from './launchpad'
 
 export type TokenType = 'static' | 'graduated' | 'bonding_curve'
+
+export interface CreatedToken {
+    token: LaunchToken
+    marketCapNative: number
+    creatorFeeNative: bigint
+    creatorFeeClaimedNative: bigint
+    creatorFeeToken: bigint
+    creatorFeeClaimedToken: bigint
+    /** display-only USD estimate for the token-denominated fee, from tokenSnapshot.lastPriceUsd */
+    tokenUsdPrice: number
+}
 
 export interface PortfolioToken {
     token: Token
@@ -19,38 +31,27 @@ export interface PortfolioSummary {
     totalPnlPercent: number | null
 }
 
-/** One side of a generalized (token/token) trade — used when neither leg is native. */
 export interface ActivityLeg {
     tokenAddr: string
     symbol: string
     logo: string
-    /** raw on-chain amount (bigint string) */
     amount: string
     decimals: number
 }
 
 export interface ActivityEvent {
     id: string
-    /** Discriminator for merged feed rendering. */
     kind: 'trade' | 'transfer'
     tokenAddr: string
     tokenSymbol: string
     tokenName: string
     tokenLogo: string
-    /** trade-only */
     isBuy: boolean
     amountIn: string
     amountOut: string
-    /**
-     * Generalized two-leg display for external token/token swaps (no forced native
-     * leg). When present, the row renders `sell`/`buy` directly instead of the
-     * native-centric isBuy/amountIn/amountOut model.
-     */
     sell?: ActivityLeg
     buy?: ActivityLeg
-    /** trade-only — liquidity source dexId (e.g. 'junoswap', 'kublerx', 'udonswap') */
     protocol?: string
-    /** transfer-only — 'in' = received, 'out' = sent */
     direction?: 'in' | 'out'
     counterparty?: string
     transferAmount?: string

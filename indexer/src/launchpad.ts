@@ -3,6 +3,7 @@ import { ponder } from 'ponder:registry'
 import schema from 'ponder:schema'
 import { formatEther, zeroAddress } from 'viem'
 import { readERC20Metadata } from './erc20-read.js'
+import { creatorFeeShareForSwap, VIRTUAL_AMOUNT } from './creator-fee.js'
 import {
     BONDING_CURVE_ADDRESS_BY_CHAIN,
     BONDING_CURVE_JUNOSWAP_BITKUB_ADDRESS,
@@ -13,13 +14,12 @@ const MAINNET_ENABLED = BONDING_CURVE_JUNOSWAP_BITKUB_ADDRESS.toLowerCase() !== 
 type HandlerArgs = { event: any; context: any }
 
 const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n
-const _VIRTUAL_AMOUNT = 3400n * 10n ** 18n
 
 function calculatePriceFromReserves(isBuy: boolean, reserveIn: bigint, reserveOut: bigint): number {
     const nativeReserve = isBuy ? reserveIn : reserveOut
     const tokenReserve = isBuy ? reserveOut : reserveIn
     if (nativeReserve === 0n || tokenReserve === 0n) return 0
-    const effectiveReserve = parseFloat(formatEther(nativeReserve + _VIRTUAL_AMOUNT))
+    const effectiveReserve = parseFloat(formatEther(nativeReserve + VIRTUAL_AMOUNT))
     const tokenRes = parseFloat(formatEther(tokenReserve))
     if (tokenRes === 0) return 0
     return effectiveReserve / tokenRes
@@ -33,7 +33,7 @@ function calculateMarketCapFromReserves(
     if (reserveIn === 0n || reserveOut === 0n) return '0'
     const nativeReserve = isBuy ? reserveIn : reserveOut
     const tokenReserve = isBuy ? reserveOut : reserveIn
-    const effectiveReserve = nativeReserve + _VIRTUAL_AMOUNT
+    const effectiveReserve = nativeReserve + VIRTUAL_AMOUNT
     const marketCap = (effectiveReserve * TOTAL_SUPPLY) / tokenReserve
     return formatEther(marketCap)
 }
@@ -54,6 +54,10 @@ function defaultSnapshot(tokenAddr: string, chainId: number) {
         totalSells: 0,
         totalVolumeNative: '0',
         holderCount: 0,
+        creatorFeeNative: '0',
+        creatorFeeClaimedNative: '0',
+        creatorFeeToken: '0',
+        creatorFeeClaimedToken: '0',
         lastSwapAt: 0,
         price1dAgo: null as string | null,
         price1dAgoTimestamp: null as number | null,
@@ -114,6 +118,9 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
     const price = calculatePriceFromReserves(isBuy, BigInt(reserveIn), BigInt(reserveOut))
     const marketCap = calculateMarketCapFromReserves(isBuy, BigInt(reserveIn), BigInt(reserveOut))
     const volume = calculateVolume(isBuy, amountIn, amountOut)
+    const creatorFeeShare = creatorFeeShareForSwap(amountIn)
+    const creatorFeeNativeDelta = isBuy ? creatorFeeShare : 0n
+    const creatorFeeTokenDelta = isBuy ? 0n : creatorFeeShare
 
     const nativePriceRecord = await context.db.find(schema.nativeUsdPrice, { chainId })
     const nativeUsd = nativePriceRecord ? parseFloat(nativePriceRecord.price) : 0
@@ -181,6 +188,10 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
                 totalSells: isBuy ? 0 : 1,
                 totalVolumeNative: volume.toString(),
                 holderCount,
+                creatorFeeNative: creatorFeeNativeDelta.toString(),
+                creatorFeeClaimedNative: '0',
+                creatorFeeToken: creatorFeeTokenDelta.toString(),
+                creatorFeeClaimedToken: '0',
                 lastSwapAt: timestamp,
                 price1dAgo,
                 price1dAgoTimestamp,
@@ -198,6 +209,12 @@ async function handleSwap({ event, context }: HandlerArgs, chainId: number) {
             totalSells: (snap.totalSells ?? 0) + (isBuy ? 0 : 1),
             totalVolumeNative: (BigInt(snap.totalVolumeNative ?? '0') + volume).toString(),
             holderCount,
+            creatorFeeNative: (
+                BigInt(snap.creatorFeeNative ?? '0') + creatorFeeNativeDelta
+            ).toString(),
+            creatorFeeToken: (
+                BigInt(snap.creatorFeeToken ?? '0') + creatorFeeTokenDelta
+            ).toString(),
             lastSwapAt: timestamp,
             price1dAgo,
             price1dAgoTimestamp,

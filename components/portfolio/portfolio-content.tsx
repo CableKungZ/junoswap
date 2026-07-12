@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PortfolioSummary } from '@/components/portfolio/portfolio-summary'
 import { TokenList } from '@/components/portfolio/token-list'
 import { ActivityTab } from '@/components/portfolio/activity-tab'
+import { CreatedTokensTab } from '@/components/portfolio/created-tokens-tab'
 import { PositionsList } from '@/components/positions/positions-list'
 import { AddLiquidityDialog } from '@/components/positions/add-liquidity-dialog'
 import { RemoveLiquidityDialog } from '@/components/positions/remove-liquidity-dialog'
@@ -47,7 +48,9 @@ export function PortfolioContent() {
         !!connectedAddress && !!address && connectedAddress.toLowerCase() === address.toLowerCase()
     const { nativeUsdPrice, isLoading: isPriceLoading } = useNativeUsdPriceContext()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
-    const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'activity'>('holdings')
+    const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'created' | 'activity'>(
+        'holdings'
+    )
 
     const [selectedPosition, setSelectedPosition] = useState<PositionWithTokens | null>(null)
     const [selectedStakedPosition, setSelectedStakedPosition] = useState<StakedPosition | null>(
@@ -207,11 +210,14 @@ export function PortfolioContent() {
 
                 <Tabs
                     value={activeTab}
-                    onValueChange={(v) => setActiveTab(v as 'holdings' | 'positions' | 'activity')}
+                    onValueChange={(v) =>
+                        setActiveTab(v as 'holdings' | 'positions' | 'created' | 'activity')
+                    }
                 >
                     <TabsList>
                         <TabsTrigger value="holdings">Holdings</TabsTrigger>
                         <TabsTrigger value="positions">Positions</TabsTrigger>
+                        <TabsTrigger value="created">Created</TabsTrigger>
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
 
@@ -230,6 +236,10 @@ export function PortfolioContent() {
                             onUnstake={openUnstakeDialog}
                             refreshNonce={positionsRefreshNonce}
                         />
+                    </TabsContent>
+
+                    <TabsContent value="created">
+                        <CreatedTokensTab address={address} canManage={canManagePositions} />
                     </TabsContent>
 
                     <TabsContent value="activity">

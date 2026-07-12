@@ -1,6 +1,42 @@
 import { formatEther, decodeEventLog } from 'viem'
 import type { Address, Log } from 'viem'
 import { BONDING_CURVE_JUNOSWAP_ABI } from '@/lib/abis/bonding-curve-junoswap'
+import { resolveLaunchpadLogo } from '@/lib/logo'
+import type { LaunchToken } from '@/types/launchpad'
+
+/** Raw shape of a `launchTokens` GraphQL item, shared by every query that selects it. */
+export interface RawLaunchTokenItem {
+    tokenAddr: string
+    creator: string
+    name: string
+    symbol: string
+    logo: string
+    description: string
+    link1: string
+    link2: string
+    link3: string
+    createdTime: number
+    isGraduated: number
+    graduatedAt: number | null
+}
+
+export function mapLaunchTokenItem(item: RawLaunchTokenItem, chainId: number): LaunchToken {
+    return {
+        address: item.tokenAddr as Address,
+        name: item.name ?? '',
+        symbol: item.symbol ?? '',
+        logo: resolveLaunchpadLogo(item.logo),
+        description: item.description ?? '',
+        link1: item.link1 ?? '',
+        link2: item.link2 ?? '',
+        link3: item.link3 ?? '',
+        creator: item.creator as Address,
+        createdTime: item.createdTime,
+        chainId,
+        graduatedAt: item.graduatedAt ?? null,
+        isGraduated: item.isGraduated === 1,
+    }
+}
 
 export const PUMP_FEE_BPS = 100n // 1%
 

@@ -1,11 +1,10 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import type { Address } from 'viem'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { ponderRequest } from '@/lib/ponder-client'
-import { resolveLaunchpadLogo } from '@/lib/logo'
+import { mapLaunchTokenItem } from '@/services/launchpad'
 import type { LaunchToken } from '@/types/launchpad'
 
 const TOKEN_LIST_QUERY = `
@@ -100,21 +99,7 @@ export function useTokenList(): UseTokenListResult {
         queryFn: async () => {
             const data = await ponderRequest<TokenListResponse>(TOKEN_LIST_QUERY, { chainId })
             const tokens = data.launchTokens.items.map(
-                (t): LaunchToken => ({
-                    address: t.tokenAddr as Address,
-                    name: t.name ?? '',
-                    symbol: t.symbol ?? '',
-                    logo: resolveLaunchpadLogo(t.logo),
-                    description: t.description ?? '',
-                    link1: t.link1 ?? '',
-                    link2: t.link2 ?? '',
-                    link3: t.link3 ?? '',
-                    creator: t.creator as Address,
-                    createdTime: t.createdTime,
-                    chainId,
-                    graduatedAt: t.graduatedAt ?? null,
-                    isGraduated: t.isGraduated === 1,
-                })
+                (t): LaunchToken => mapLaunchTokenItem(t, chainId)
             )
             const now = Math.floor(Date.now() / 1000)
             const cutoff = now - 86400
