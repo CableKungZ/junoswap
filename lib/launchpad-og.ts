@@ -1,9 +1,5 @@
-/**
- * Server-side launchpad token lookup for OG images / page metadata.
- * Talks to Ponder directly via PONDER_URL (never imported client-side).
- */
-
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 
 interface LaunchTokenMeta {
     address: string
@@ -14,12 +10,9 @@ interface LaunchTokenMeta {
     isGraduated: boolean
     marketCapNative: number | null
     priceChange1dPct: number | null
-    /** Native (KUB) → USD price for the launchpad chain, mirrors the trade UI. */
     nativeUsdPrice: number | null
 }
 
-// No connected chain server-side: fetch every launchpad chain's native price and
-// each token's chainId, then match the price to the token's chain below.
 const TOKEN_META_QUERY = `
   query TokenMeta {
     launchTokens {
@@ -93,8 +86,9 @@ export async function fetchLaunchTokenMeta(address: string): Promise<LaunchToken
         if (!data) return null
 
         const addr = address.toLowerCase()
-        const token = data.launchTokens.items.find((t) => t.tokenAddr.toLowerCase() === addr)
-        if (!token) return null
+        const raw = data.launchTokens.items.find((t) => t.tokenAddr.toLowerCase() === addr)
+        if (!raw) return null
+        const token = applyLaunchpadTokenOverride(raw, raw.chainId)
 
         const snapshot = data.tokenSnapshots.items.find((s) => s.tokenAddr.toLowerCase() === addr)
         const marketCap = snapshot ? parseFloat(snapshot.marketCapNative) : NaN

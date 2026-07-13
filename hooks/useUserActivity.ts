@@ -9,6 +9,7 @@ import { isAggRouterChain } from '@/lib/abis/agg-router-junoswap'
 import { findTokenByAddress, getTokensForChain } from '@/lib/tokens'
 import { findWrappedNativeAddress } from '@/services/tokens'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import type { ActivityEvent, ActivityLeg } from '@/types/portfolio'
 
 const PAGE_SIZE = 20
@@ -304,7 +305,7 @@ async function fetchAggEvents(
     }
 }
 
-async function fetchTokenMeta(): Promise<Map<string, TokenMeta>> {
+async function fetchTokenMeta(chainId: number): Promise<Map<string, TokenMeta>> {
     const query = `
         query TokenMeta {
             launchTokens(limit: 1000) {
@@ -314,7 +315,8 @@ async function fetchTokenMeta(): Promise<Map<string, TokenMeta>> {
     `
     const data = await ponderRequest<TokenMetaPage>(query, {})
     const map = new Map<string, TokenMeta>()
-    for (const t of data.launchTokens.items) {
+    for (const raw of data.launchTokens.items) {
+        const t = applyLaunchpadTokenOverride(raw, chainId)
         map.set(t.tokenAddr.toLowerCase(), {
             symbol: t.symbol || '',
             name: t.name || '',
@@ -372,7 +374,9 @@ export function useUserActivity(
                     transferResult,
                     aggResult,
                 ] = await Promise.all([
-                    hasLaunchpad ? fetchTokenMeta() : Promise.resolve(new Map<string, TokenMeta>()),
+                    hasLaunchpad
+                        ? fetchTokenMeta(chainId)
+                        : Promise.resolve(new Map<string, TokenMeta>()),
                     fetchV3TokenMeta(chainId),
                     hasLaunchpad
                         ? fetchBondingCurveEvents(sender, chainId, PAGE_SIZE + 50)

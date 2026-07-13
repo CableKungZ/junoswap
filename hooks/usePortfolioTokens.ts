@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import { hasSettled } from '@/lib/query-status'
 import { useTokenDiscovery } from '@/hooks/useTokenDiscovery'
 import type { Token } from '@/types/tokens'
@@ -86,7 +87,7 @@ export function usePortfolioTokens(chainId: number, userAddress?: Address) {
     )
 
     const { data: launchTokenMeta } = useQuery({
-        queryKey: ['launch-token-meta', unknownAddrs],
+        queryKey: ['launch-token-meta', chainId, unknownAddrs],
         queryFn: async () => {
             if (unknownAddrs.length === 0)
                 return new Map<string, { name: string; symbol: string; logo: string }>()
@@ -95,7 +96,8 @@ export function usePortfolioTokens(chainId: number, userAddress?: Address) {
                     addresses: unknownAddrs.map((a) => a.toLowerCase()),
                 })
                 const map = new Map<string, { name: string; symbol: string; logo: string }>()
-                for (const t of data.launchTokens.items) {
+                for (const raw of data.launchTokens.items) {
+                    const t = applyLaunchpadTokenOverride(raw, chainId)
                     map.set(t.tokenAddr.toLowerCase(), {
                         name: t.name ?? '',
                         symbol: t.symbol ?? '',

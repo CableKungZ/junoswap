@@ -135,6 +135,7 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
                 link1: form.link1,
                 link2: form.link2,
                 link3: form.link3,
+                link4: '',
                 creator: address ?? zeroAddress,
                 createdTime: Math.floor(Date.now() / 1000),
                 chainId,

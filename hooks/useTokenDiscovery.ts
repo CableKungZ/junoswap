@@ -8,6 +8,7 @@ import { isNativeToken } from '@/lib/wagmi'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import { isLaunchpadChain as isLaunchpadChainFn } from '@/lib/abis/bonding-curve-junoswap'
 import { hasSettled } from '@/lib/query-status'
 import { useGraduatedTokens } from '@/hooks/useGraduatedTokens'
@@ -95,16 +96,18 @@ export function useTokenDiscovery(chainId: number) {
                     BONDING_CURVE_TOKENS_QUERY,
                     { chainId }
                 )
-                return data.launchTokens.items.map(
-                    (t): Token => ({
-                        address: t.tokenAddr as Address,
-                        symbol: t.symbol || t.tokenAddr.slice(0, 6) + '...',
-                        name: t.name || 'Unknown Token',
-                        decimals: 18,
-                        chainId,
-                        logo: resolveLaunchpadLogo(t.logo) || undefined,
-                    })
-                )
+                return data.launchTokens.items
+                    .map((raw) => applyLaunchpadTokenOverride(raw, chainId))
+                    .map(
+                        (t): Token => ({
+                            address: t.tokenAddr as Address,
+                            symbol: t.symbol || t.tokenAddr.slice(0, 6) + '...',
+                            name: t.name || 'Unknown Token',
+                            decimals: 18,
+                            chainId,
+                            logo: resolveLaunchpadLogo(t.logo) || undefined,
+                        })
+                    )
             } catch (e) {
                 if (isPonderError(e)) return []
                 throw e

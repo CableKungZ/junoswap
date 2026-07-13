@@ -2,6 +2,7 @@ import { formatEther, parseEther, decodeEventLog } from 'viem'
 import type { Address, Log } from 'viem'
 import { BONDING_CURVE_JUNOSWAP_ABI } from '@/lib/abis/bonding-curve-junoswap'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import type { LaunchToken } from '@/types/launchpad'
 
 export interface RawLaunchTokenItem {
@@ -19,7 +20,8 @@ export interface RawLaunchTokenItem {
     graduatedAt: number | null
 }
 
-export function mapLaunchTokenItem(item: RawLaunchTokenItem, chainId: number): LaunchToken {
+export function mapLaunchTokenItem(raw: RawLaunchTokenItem, chainId: number): LaunchToken {
+    const item = applyLaunchpadTokenOverride(raw, chainId)
     return {
         address: item.tokenAddr as Address,
         name: item.name ?? '',
@@ -29,6 +31,7 @@ export function mapLaunchTokenItem(item: RawLaunchTokenItem, chainId: number): L
         link1: item.link1 ?? '',
         link2: item.link2 ?? '',
         link3: item.link3 ?? '',
+        link4: item.link4 ?? '',
         creator: item.creator as Address,
         createdTime: item.createdTime,
         chainId,

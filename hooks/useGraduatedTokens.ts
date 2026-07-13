@@ -5,6 +5,7 @@ import type { Address } from 'viem'
 import { isLaunchpadChain } from '@/lib/abis/bonding-curve-junoswap'
 import { ponderRequest, isPonderError } from '@/lib/ponder-client'
 import { resolveLaunchpadLogo } from '@/lib/logo'
+import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import { hasSettled } from '@/lib/query-status'
 import type { Token } from '@/types/tokens'
 
@@ -50,6 +51,7 @@ export function useGraduatedTokens(chainId: number): {
                 })
                 return data.launchTokens.items
                     .filter((t) => t.isGraduated === 1)
+                    .map((raw) => applyLaunchpadTokenOverride(raw, chainId))
                     .map(
                         (t): Token => ({
                             address: t.tokenAddr as Address,
