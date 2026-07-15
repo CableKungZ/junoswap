@@ -85,7 +85,7 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
             },
         })
         onOpenChange(false)
-    }, [hash, onOpenChange])
+    }, [chainId, hash, onOpenChange])
 
     useEffect(() => {
         if (isSuccess) handleSuccess()
@@ -150,7 +150,7 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
             queryClient.invalidateQueries({ queryKey: ['launchpad-token-list'] })
         }, 4000)
         return () => clearTimeout(timeout)
-    }, [createdTokenAddress, form, address, queryClient])
+    }, [createdTokenAddress, form, address, queryClient, chainId])
 
     const updateField = (field: keyof CreateTokenForm, value: string) => {
         setForm((prev) => ({ ...prev, [field]: value }))
