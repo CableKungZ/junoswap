@@ -375,7 +375,7 @@ export function TokenTradeCard({
         refetchReserves()
         refetchNative()
         refetchTokens()
-    }, [isBuySuccess, buyHash])
+    }, [isBuySuccess, buyHash, chainId, refetchReserves, refetchNative, refetchTokens])
 
     useEffect(() => {
         if (!isSellSuccess || !sellHash) return
@@ -390,7 +390,7 @@ export function TokenTradeCard({
         refetchReserves()
         refetchNative()
         refetchTokens()
-    }, [isSellSuccess, sellHash])
+    }, [isSellSuccess, sellHash, chainId, refetchReserves, refetchNative, refetchTokens])
 
     useEffect(() => {
         if (!isGraduateSuccess || !graduateHash) return
@@ -402,7 +402,7 @@ export function TokenTradeCard({
             },
         })
         refetchReserves()
-    }, [isGraduateSuccess, graduateHash])
+    }, [isGraduateSuccess, graduateHash, chainId, refetchReserves])
 
     useEffect(() => {
         if (isBuyError && buyError) toastError(buyError, 'Buy failed')
