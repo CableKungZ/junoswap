@@ -4,13 +4,7 @@ import { useMemo } from 'react'
 import { usePublicClient } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import { zeroAddress, type Address } from 'viem'
-import {
-    ProtocolType,
-    discoverV3Pools,
-    quoteV3Pools,
-    resolveDexIds,
-    wrapQuoteResult,
-} from '@coshi190/junoswap-sdk'
+import { getV3Quotes, wrapQuoteResult, type V3QuoteOutcome } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import type { DEXType } from '@/lib/dex-meta'
 import type { QuoteResult } from '@/types/swap'
@@ -43,11 +37,7 @@ export function useUniV3Quote({
     const chainId = tokenIn?.chainId ?? tokenOut?.chainId ?? 1
     const client = usePublicClient({ chainId })
 
-    const dexIds = useMemo(
-        () => (tokenIn ? resolveDexIds(chainId, ProtocolType.V3, dexId) : []),
-        [chainId, dexId, tokenIn]
-    )
-    const primaryDexId = dexIds[0] ?? null
+    const pinnedDexId = Array.isArray(dexId) ? (dexId[0] ?? null) : (dexId ?? null)
 
     const wrapOperation = useMemo(() => getWrapOperation(tokenIn, tokenOut), [tokenIn, tokenOut])
 
@@ -64,53 +54,49 @@ export function useUniV3Quote({
         !!tokenIn &&
         !!tokenOut &&
         amountIn > 0n &&
-        dexIds.length > 0 &&
         tokenIn.chainId === tokenOut.chainId &&
         !isSameToken(tokenIn, tokenOut) &&
         !wrapOperation
 
-    const poolQuery = useQuery({
-        queryKey: ['v3-pools', chainId, dexIds, tokenInAddress, tokenOutAddress],
-        queryFn: () =>
-            discoverV3Pools(client!, {
-                chainId,
-                dexId: dexIds,
-                tokenIn: tokenInAddress,
-                tokenOut: tokenOutAddress,
-            }),
-        enabled: isReadyForQuote,
-        staleTime: 60_000,
-    })
-
-    const bestPool = primaryDexId ? (poolQuery.data?.get(primaryDexId) ?? null) : null
-
     const quoteQuery = useQuery({
         queryKey: [
-            'v3-quote',
+            'v3-quotes',
             chainId,
-            primaryDexId,
-            bestPool?.pool,
-            bestPool?.fee,
+            dexId ?? 'all',
+            tokenInAddress,
+            tokenOutAddress,
             amountIn.toString(),
         ],
         queryFn: () =>
-            quoteV3Pools(
-                client!,
-                { chainId, tokenIn: tokenInAddress, tokenOut: tokenOutAddress, amountIn },
-                new Map([[primaryDexId!, bestPool!]])
-            ),
-        enabled: isReadyForQuote && !!bestPool,
-        staleTime: 10_000,
+            getV3Quotes(client!, {
+                chainId,
+                dexId,
+                tokenIn: tokenInAddress,
+                tokenOut: tokenOutAddress,
+                amountIn,
+            }),
+        enabled: isReadyForQuote,
+        staleTime: 0,
     })
 
-    const outcome = primaryDexId ? (quoteQuery.data?.get(primaryDexId) ?? null) : null
+    const outcome = useMemo(() => {
+        const data = quoteQuery.data
+        if (!data || data.size === 0) return null
+        if (pinnedDexId) return data.get(pinnedDexId) ?? null
+        let best: V3QuoteOutcome | null = null
+        for (const o of data.values()) {
+            if (!o.quote) continue
+            if (!best?.quote || o.quote.amountOut > best.quote.amountOut) best = o
+        }
+        return best
+    }, [quoteQuery.data, pinnedDexId])
 
     const quote: QuoteResult | null = useMemo(() => {
         if (wrapOperation && amountIn > 0n) return wrapQuoteResult(amountIn, wrapOperation)
         return outcome?.quote ?? null
     }, [wrapOperation, amountIn, outcome])
 
-    const hasNoPool = !wrapOperation && !poolQuery.isLoading && !bestPool && !!tokenIn && !!tokenOut
+    const hasNoPool = !wrapOperation && quoteQuery.isSuccess && !outcome && !!tokenIn && !!tokenOut
 
     const quoteError = outcome?.error ?? (quoteQuery.error as Error | null)
 
@@ -122,10 +108,10 @@ export function useUniV3Quote({
 
     return {
         quote,
-        isLoading: wrapOperation ? false : quoteQuery.isLoading || poolQuery.isLoading,
+        isLoading: wrapOperation ? false : quoteQuery.isLoading,
         isError: !!quoteError || hasNoPool,
         error,
-        fee: bestPool?.fee ?? null,
-        primaryDexId,
+        fee: outcome?.fee ?? null,
+        primaryDexId: pinnedDexId ?? outcome?.dexId ?? null,
     }
 }
