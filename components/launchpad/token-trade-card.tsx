@@ -19,7 +19,6 @@ import {
     ERC20_ABI,
     NATIVE_TOKEN_ADDRESS,
     ProtocolType,
-    calculateMinOutput,
     getBondingCurveAddress,
     getV3Config,
     getDefaultDexForChain,
@@ -33,6 +32,7 @@ import {
     isReadyToGraduate,
     calculateGraduationTarget,
 } from '@/services/launchpad/launchpad'
+import { calculateMinOutput } from '@/services/dex/slippage'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { getChainMetadata } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'

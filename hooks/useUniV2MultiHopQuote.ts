@@ -1,19 +1,14 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useReadContracts } from 'wagmi'
-import type { Address } from 'viem'
-import {
-    getV2Config,
-    getDexsByProtocol,
-    resolveSwapPath,
-    ProtocolType,
-    UNISWAP_V2_ROUTER_ABI,
-} from '@coshi190/junoswap-sdk'
+import { usePublicClient } from 'wagmi'
+import { useQuery } from '@tanstack/react-query'
+import { zeroAddress, type Address } from 'viem'
+import { getV2Quotes, ProtocolType } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import type { DEXType } from '@/lib/dex-meta'
 import type { RouteQuote, SwapRoute } from '@/types/routing'
-import { getIntermediaryTokens, enumerateHopPaths, MAX_HOPS } from '@/lib/routing-config'
+import { getIntermediaryTokens, MAX_HOPS } from '@/lib/routing-config'
 import { getWrapOperation, findTokenByAddress } from '@/lib/tokens'
 
 interface UseUniV2MultiHopQuoteParams {
@@ -32,15 +27,6 @@ interface UseUniV2MultiHopQuoteResult {
     error: Error | null
 }
 
-const MAX_QUOTE_QUERIES = 80
-
-interface Candidate {
-    dexId: DEXType
-    router: Address
-    path: Address[]
-    intermediaries: Address[] // raw connector addresses, for display/token lookup
-}
-
 export function useUniV2MultiHopQuote({
     tokenIn,
     tokenOut,
@@ -49,102 +35,67 @@ export function useUniV2MultiHopQuote({
     dexId,
 }: UseUniV2MultiHopQuoteParams): UseUniV2MultiHopQuoteResult {
     const chainId = tokenIn?.chainId ?? tokenOut?.chainId ?? 1
+    const client = usePublicClient({ chainId })
+
     const wrapOperation = useMemo(() => getWrapOperation(tokenIn, tokenOut), [tokenIn, tokenOut])
-    const targetDexIds = useMemo(
-        () => (dexId ? [dexId] : getDexsByProtocol(chainId, ProtocolType.V2)),
-        [dexId, chainId]
-    )
 
-    const isReadyForQuote = enabled && !!tokenIn && !!tokenOut && amountIn > 0n && !wrapOperation
+    const tokenInAddress = tokenIn ? (tokenIn.address as Address) : zeroAddress
+    const tokenOutAddress = tokenOut ? (tokenOut.address as Address) : zeroAddress
 
-    const candidates = useMemo((): Candidate[] => {
-        if (!isReadyForQuote || !tokenIn || !tokenOut) return []
-        const connectors = getIntermediaryTokens(chainId)
-        const rawPaths = enumerateHopPaths(
-            tokenIn.address as Address,
-            tokenOut.address as Address,
-            connectors,
-            MAX_HOPS
-        )
-        const result: Candidate[] = []
-        for (const targetDexId of targetDexIds) {
-            const cfg = getV2Config(chainId, targetDexId)
-            if (!cfg?.router) continue
-            for (const rawPath of rawPaths) {
-                const path = resolveSwapPath(rawPath, chainId, cfg.wnative)
-                const collapsed = path.some(
-                    (t, i) => i > 0 && t.toLowerCase() === path[i - 1]!.toLowerCase()
-                )
-                if (collapsed) continue
-                result.push({
-                    dexId: targetDexId,
-                    router: cfg.router,
-                    path,
-                    intermediaries: rawPath.slice(1, -1),
-                })
-                if (result.length >= MAX_QUOTE_QUERIES) return result
-            }
-        }
-        return result
-    }, [isReadyForQuote, tokenIn, tokenOut, chainId, targetDexIds])
+    const isReadyForQuote =
+        enabled && !!client && !!tokenIn && !!tokenOut && amountIn > 0n && !wrapOperation
 
-    const {
-        data: quoteResults,
-        isLoading,
-        isError,
-        error,
-    } = useReadContracts({
-        contracts: candidates.map((c) => ({
-            address: c.router,
-            abi: UNISWAP_V2_ROUTER_ABI,
-            functionName: 'getAmountsOut' as const,
-            args: [amountIn, c.path],
+    const quoteQuery = useQuery({
+        queryKey: [
+            'v2-multihop-quotes',
             chainId,
-        })),
-        query: {
-            enabled: isReadyForQuote && candidates.length > 0,
-            staleTime: 10_000,
-        },
+            dexId ?? 'all',
+            tokenInAddress,
+            tokenOutAddress,
+            amountIn.toString(),
+        ],
+        queryFn: () =>
+            getV2Quotes(client!, {
+                chainId,
+                dexId,
+                tokenIn: tokenInAddress,
+                tokenOut: tokenOutAddress,
+                amountIn,
+                connectors: getIntermediaryTokens(chainId),
+                maxHops: MAX_HOPS,
+                includeDirect: false,
+            }),
+        enabled: isReadyForQuote,
+        staleTime: 0,
     })
 
-    const routes = useMemo(() => {
-        if (!quoteResults) return []
-        const validRoutes: RouteQuote[] = []
-        quoteResults.forEach((result, index) => {
-            if (result.status !== 'success' || !result.result) return
-            const candidate = candidates[index]
-            if (!candidate) return
-            const amounts = result.result as bigint[]
-            const amountOut = amounts[amounts.length - 1]
-            if (!amountOut || amountOut === 0n) return
-            const intermediaryTokens = candidate.intermediaries
+    const routes = useMemo((): RouteQuote[] => {
+        const data = quoteQuery.data?.routes
+        if (!data || data.length === 0) return []
+        return data.map((r) => {
+            const intermediaryTokens = r.path
+                .slice(1, -1)
                 .map((addr) => findTokenByAddress(chainId, addr))
                 .filter((t): t is Token => !!t)
-            const swapRoute: SwapRoute = {
-                path: candidate.path,
+            const route: SwapRoute = {
+                path: r.path,
                 isMultiHop: true,
                 intermediaryTokens,
             }
-            validRoutes.push({
-                route: swapRoute,
-                quote: {
-                    amountOut,
-                    sqrtPriceX96After: 0n,
-                    initializedTicksCrossed: 0,
-                    gasEstimate: 200000n, // Estimated gas for V2 multi-hop
-                },
-                dexId: candidate.dexId,
+            return {
+                route,
+                quote: r.quote,
+                dexId: r.dexId,
                 protocolType: ProtocolType.V2,
-            })
+            }
         })
-        return validRoutes.sort((a, b) => Number(b.quote.amountOut - a.quote.amountOut))
-    }, [quoteResults, candidates, chainId])
+    }, [quoteQuery.data, chainId])
 
     return {
         routes,
         bestRoute: routes[0] ?? null,
-        isLoading,
-        isError,
-        error: error as Error | null,
+        isLoading: isReadyForQuote && quoteQuery.isLoading,
+        isError: quoteQuery.isError,
+        error: quoteQuery.error as Error | null,
     }
 }

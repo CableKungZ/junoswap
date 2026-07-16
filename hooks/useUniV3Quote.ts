@@ -80,7 +80,7 @@ export function useUniV3Quote({
     })
 
     const outcome = useMemo(() => {
-        const data = quoteQuery.data
+        const data = quoteQuery.data?.direct
         if (!data || data.size === 0) return null
         if (pinnedDexId) return data.get(pinnedDexId) ?? null
         let best: V3QuoteOutcome | null = null

@@ -1,18 +1,23 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useReadContract, useReadContracts, useChainId } from 'wagmi'
 import type { Address } from 'viem'
 import type { V3Position, PositionWithTokens, PositionDetails } from '@/types/earn'
 import {
     getV3Config,
     getV3StakerAddress,
+    fetchUserPositions,
+    fetchPositionsByTokenIds,
+    type V3PositionRow,
     NONFUNGIBLE_POSITION_MANAGER_ABI,
     UNISWAP_V3_FACTORY_ABI,
     UNISWAP_V3_POOL_ABI,
 } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import { TOKEN_LISTS } from '@/lib/tokens'
+import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import { useGraduatedTokens } from '@/hooks/useGraduatedTokens'
 import { usePositionFees } from '@/hooks/usePositionFees'
 import {
@@ -22,6 +27,8 @@ import {
     sqrtPriceX96ToPrice,
     tickToPrice,
 } from '@/lib/liquidity-helpers'
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address
 
 function buildTokenMap(chainId: number, graduatedTokens: Token[]): Map<string, Token> {
     const map = new Map<string, Token>()
@@ -47,6 +54,24 @@ function createPlaceholderToken(address: Address, chainId: number): Token {
     }
 }
 
+function rowToV3Position(row: V3PositionRow): V3Position {
+    return {
+        tokenId: BigInt(row.tokenId),
+        nonce: 0n,
+        operator: ZERO_ADDRESS,
+        token0: row.token0 as Address,
+        token1: row.token1 as Address,
+        fee: row.fee,
+        tickLower: row.tickLower,
+        tickUpper: row.tickUpper,
+        liquidity: BigInt(row.liquidity),
+        feeGrowthInside0LastX128: 0n,
+        feeGrowthInside1LastX128: 0n,
+        tokensOwed0: BigInt(row.tokensOwed0),
+        tokensOwed1: BigInt(row.tokensOwed1),
+    }
+}
+
 export function useUserPositions(
     owner: Address | undefined,
     chainId?: number
@@ -59,122 +84,35 @@ export function useUserPositions(
     const currentChainId = useChainId()
     const effectiveChainId = chainId ?? currentChainId
     const dexConfig = getV3Config(effectiveChainId)
-    const positionManager = dexConfig?.positionManager
-    const isEnabled = !!owner && !!positionManager
     const { tokens: graduatedTokens } = useGraduatedTokens(effectiveChainId)
     const tokenMap = useMemo(
         () => buildTokenMap(effectiveChainId, graduatedTokens),
         [effectiveChainId, graduatedTokens]
     )
     const {
-        data: balance,
-        isLoading: isLoadingBalance,
-        refetch: refetchBalance,
-    } = useReadContract({
-        address: positionManager,
-        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
-        functionName: 'balanceOf',
-        args: isEnabled ? [owner] : undefined,
-        chainId: effectiveChainId,
-        query: {
-            enabled: isEnabled,
-            staleTime: 30_000,
-        },
-    })
-    const positionCount = Number(balance ?? 0n)
-    const {
-        data: tokenIds,
-        isLoading: isLoadingTokenIds,
-        refetch: refetchTokenIds,
-    } = useReadContracts({
-        contracts: Array.from({ length: positionCount }, (_, i) => ({
-            address: positionManager as Address,
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
-            functionName: 'tokenOfOwnerByIndex',
-            args: [owner as Address, BigInt(i)],
-            chainId: effectiveChainId,
-        })),
-        query: {
-            enabled: isEnabled && positionCount > 0,
-            staleTime: 30_000,
-        },
-    })
-    const validTokenIds = useMemo(() => {
-        if (!tokenIds) return []
-        return tokenIds
-            .map((r) => r.result as bigint | undefined)
-            .filter((id): id is bigint => id !== undefined)
-    }, [tokenIds])
-    const {
-        data: positionData,
+        data: rowData,
         isLoading: isLoadingPositions,
         refetch: refetchPositionsData,
-    } = useReadContracts({
-        contracts: validTokenIds.map((tokenId) => ({
-            address: positionManager as Address,
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
-            functionName: 'positions',
-            args: [tokenId],
-            chainId: effectiveChainId,
-        })),
-        query: {
-            enabled: validTokenIds.length > 0,
-            staleTime: 10_000,
+    } = useQuery({
+        queryKey: ['user-positions', effectiveChainId, owner?.toLowerCase()],
+        queryFn: async () => {
+            try {
+                return await fetchUserPositions(ponderClient, {
+                    chainId: effectiveChainId,
+                    owner: owner!,
+                })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
         },
+        enabled: !!owner,
+        staleTime: 30_000,
     })
-    const rawPositions = useMemo<V3Position[]>(() => {
-        if (!positionData) return []
-        return positionData
-            .map((result, index) => {
-                const data = result.result as
-                    | [
-                          bigint,
-                          Address,
-                          Address,
-                          Address,
-                          number,
-                          number,
-                          number,
-                          bigint,
-                          bigint,
-                          bigint,
-                          bigint,
-                          bigint,
-                      ]
-                    | undefined
-                if (!data) return null
-                const [
-                    nonce,
-                    operator,
-                    token0,
-                    token1,
-                    fee,
-                    tickLower,
-                    tickUpper,
-                    liquidity,
-                    feeGrowthInside0LastX128,
-                    feeGrowthInside1LastX128,
-                    tokensOwed0,
-                    tokensOwed1,
-                ] = data
-                return {
-                    tokenId: validTokenIds[index]!,
-                    nonce,
-                    operator,
-                    token0,
-                    token1,
-                    fee,
-                    tickLower,
-                    tickUpper,
-                    liquidity,
-                    feeGrowthInside0LastX128,
-                    feeGrowthInside1LastX128,
-                    tokensOwed0,
-                    tokensOwed1,
-                }
-            })
-            .filter((p): p is V3Position => p !== null)
-    }, [positionData, validTokenIds])
+    const rawPositions = useMemo<V3Position[]>(
+        () => (rowData ?? []).map(rowToV3Position),
+        [rowData]
+    )
     const {
         feesMap,
         isLoading: isLoadingFees,
@@ -300,8 +238,6 @@ export function useUserPositions(
         feesMap,
     ])
     const refetch = () => {
-        refetchBalance()
-        refetchTokenIds()
         refetchPositionsData()
         refetchPoolAddresses()
         refetchPoolStates()
@@ -310,12 +246,7 @@ export function useUserPositions(
     return {
         positions,
         isLoading:
-            isLoadingBalance ||
-            isLoadingTokenIds ||
-            isLoadingPositions ||
-            isLoadingPoolAddresses ||
-            isLoadingPoolStates ||
-            isLoadingFees,
+            isLoadingPositions || isLoadingPoolAddresses || isLoadingPoolStates || isLoadingFees,
         isError: false,
         refetch,
     }
@@ -340,22 +271,46 @@ export function usePositionDetails(
         [effectiveChainId, graduatedTokens]
     )
     const {
+        data: rowData,
+        isLoading: isLoadingIndexer,
+        refetch: refetchIndexer,
+    } = useQuery({
+        queryKey: ['position-detail', effectiveChainId, tokenId?.toString()],
+        queryFn: async () => {
+            try {
+                return await fetchPositionsByTokenIds(ponderClient, {
+                    chainId: effectiveChainId,
+                    tokenIds: [tokenId!],
+                })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
+        },
+        enabled: tokenId !== undefined,
+        staleTime: 10_000,
+    })
+    const indexerRow = rowData?.[0]
+    const needsFallback = isEnabled && !isLoadingIndexer && !indexerRow
+    const {
         data: positionData,
-        isLoading: isLoadingPosition,
-        refetch,
+        isLoading: isLoadingFallback,
+        refetch: refetchFallback,
     } = useReadContract({
         address: positionManager,
         abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
         functionName: 'positions',
-        args: isEnabled ? [tokenId] : undefined,
+        args: needsFallback ? [tokenId!] : undefined,
         chainId: effectiveChainId,
         query: {
-            enabled: isEnabled,
+            enabled: needsFallback,
             staleTime: 10_000,
         },
     })
     const rawPosition = useMemo<V3Position | null>(() => {
-        if (!positionData || tokenId === undefined) return null
+        if (tokenId === undefined) return null
+        if (indexerRow) return rowToV3Position(indexerRow)
+        if (!positionData) return null
         const [
             nonce,
             operator,
@@ -385,7 +340,7 @@ export function usePositionDetails(
             tokensOwed0,
             tokensOwed1,
         }
-    }, [positionData, tokenId])
+    }, [indexerRow, positionData, tokenId])
     const { data: poolAddress, isLoading: isLoadingPoolAddress } = useReadContract({
         address: dexConfig?.factory,
         abi: UNISWAP_V3_FACTORY_ABI,
@@ -475,9 +430,14 @@ export function usePositionDetails(
             currentPrice,
         }
     }, [rawPosition, effectiveChainId, tokenMap, poolState, poolAddress])
+    const refetch = () => {
+        refetchIndexer()
+        refetchFallback()
+    }
     return {
         position,
-        isLoading: isLoadingPosition || isLoadingPoolAddress || isLoadingPoolState,
+        isLoading:
+            isLoadingIndexer || isLoadingFallback || isLoadingPoolAddress || isLoadingPoolState,
         refetch,
     }
 }
@@ -493,82 +453,36 @@ export function usePositionsByTokenIds(
     const currentChainId = useChainId()
     const effectiveChainId = chainId ?? currentChainId
     const dexConfig = getV3Config(effectiveChainId)
-    const positionManager = dexConfig?.positionManager
     const { tokens: graduatedTokens } = useGraduatedTokens(effectiveChainId)
     const tokenMap = useMemo(
         () => buildTokenMap(effectiveChainId, graduatedTokens),
         [effectiveChainId, graduatedTokens]
     )
+    const tokenIdKey = useMemo(() => tokenIds.map(String), [tokenIds])
     const {
-        data: positionData,
+        data: rowData,
         isLoading: isLoadingPositions,
         refetch: refetchPositions,
-    } = useReadContracts({
-        contracts: tokenIds.map((tokenId) => ({
-            address: positionManager as Address,
-            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
-            functionName: 'positions' as const,
-            args: [tokenId] as const,
-            chainId: effectiveChainId,
-        })),
-        query: {
-            enabled: tokenIds.length > 0 && !!positionManager,
-            staleTime: 10_000,
+    } = useQuery({
+        queryKey: ['positions-by-ids', effectiveChainId, tokenIdKey],
+        queryFn: async () => {
+            try {
+                return await fetchPositionsByTokenIds(ponderClient, {
+                    chainId: effectiveChainId,
+                    tokenIds,
+                })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
         },
+        enabled: tokenIds.length > 0,
+        staleTime: 10_000,
     })
-    const rawPositions = useMemo<V3Position[]>(() => {
-        if (!positionData) return []
-        return positionData
-            .map((result, index) => {
-                const data = result.result as
-                    | [
-                          bigint,
-                          Address,
-                          Address,
-                          Address,
-                          number,
-                          number,
-                          number,
-                          bigint,
-                          bigint,
-                          bigint,
-                          bigint,
-                          bigint,
-                      ]
-                    | undefined
-                if (!data) return null
-                const [
-                    nonce,
-                    operator,
-                    token0,
-                    token1,
-                    fee,
-                    tickLower,
-                    tickUpper,
-                    liquidity,
-                    feeGrowthInside0LastX128,
-                    feeGrowthInside1LastX128,
-                    tokensOwed0,
-                    tokensOwed1,
-                ] = data
-                return {
-                    tokenId: tokenIds[index]!,
-                    nonce,
-                    operator,
-                    token0,
-                    token1,
-                    fee,
-                    tickLower,
-                    tickUpper,
-                    liquidity,
-                    feeGrowthInside0LastX128,
-                    feeGrowthInside1LastX128,
-                    tokensOwed0,
-                    tokensOwed1,
-                }
-            })
-            .filter((p): p is V3Position => p !== null)
-    }, [positionData, tokenIds])
+    const rawPositions = useMemo<V3Position[]>(
+        () => (rowData ?? []).map(rowToV3Position),
+        [rowData]
+    )
     const stakerAddress = getV3StakerAddress(effectiveChainId)
     const {
         feesMap,

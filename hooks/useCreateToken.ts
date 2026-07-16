@@ -5,13 +5,14 @@ import { useWriteContract, useReadContract, usePublicClient } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import { parseEther } from 'viem'
 import type { Address } from 'viem'
-import { BONDING_CURVE_JUNOSWAP_ABI, calculateMinOutput } from '@coshi190/junoswap-sdk'
+import { BONDING_CURVE_JUNOSWAP_ABI } from '@coshi190/junoswap-sdk'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
 import {
     calculateBuyOutput,
     INITIAL_TOKEN_SUPPLY,
     parseTokenAddressFromLogs,
 } from '@/services/launchpad/launchpad'
+import { calculateMinOutput } from '@/services/dex/slippage'
 import { useSwapStore } from '@/store/swap-store'
 import type { CreateTokenForm } from '@/types/launchpad'
 

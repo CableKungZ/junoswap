@@ -10,10 +10,11 @@ import {
 } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import { zeroAddress, type Address } from 'viem'
-import { BONDING_CURVE_JUNOSWAP_ABI, ERC20_ABI, calculateMinOutput } from '@coshi190/junoswap-sdk'
+import { BONDING_CURVE_JUNOSWAP_ABI, ERC20_ABI } from '@coshi190/junoswap-sdk'
 import { getAllowanceFunctionName } from '@/lib/tokens'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
 import { calculateBuyOutput, calculateSellOutput } from '@/services/launchpad/launchpad'
+import { calculateMinOutput } from '@/services/dex/slippage'
 import { useSwapStore } from '@/store/swap-store'
 
 interface UseBondingCurveSwapExecutionParams {

@@ -37,7 +37,7 @@ import {
 import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useSwapUrlSync } from '@/hooks/useSwapUrlSync'
 import { useChainTokens } from '@/hooks/useChainTokens'
-import { calculateMinOutput } from '@coshi190/junoswap-sdk'
+import { calculateMinOutput } from '@/services/dex/slippage'
 import {
     formatBalance,
     formatTokenAmount,
