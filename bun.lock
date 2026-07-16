@@ -1,11 +1,10 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "junoswap",
       "dependencies": {
-        "@coshi190/junoswap-sdk": "^0.4.0",
+        "@coshi190/junoswap-sdk": "0.5.0",
         "@lifi/sdk": "^3.16.3",
         "@metamask/jazzicon": "^2.0.0",
         "@radix-ui/react-avatar": "^1.1.11",
@@ -103,7 +102,7 @@
 
     "@coinbase/wallet-sdk": ["@coinbase/wallet-sdk@4.3.6", "", { "dependencies": { "@noble/hashes": "1.4.0", "clsx": "1.2.1", "eventemitter3": "5.0.1", "idb-keyval": "6.2.1", "ox": "0.6.9", "preact": "10.24.2", "viem": "^2.27.2", "zustand": "5.0.3" } }, "sha512-4q8BNG1ViL4mSAAvPAtpwlOs1gpC+67eQtgIwNvT3xyeyFFd+guwkc8bcX5rTmQhXpqnhzC4f0obACbP9CqMSA=="],
 
-    "@coshi190/junoswap-sdk": ["@coshi190/junoswap-sdk@0.4.0", "", { "dependencies": { "graphql-request": "^7.4.0" }, "peerDependencies": { "viem": "^2.25.0" } }, "sha512-ROHf5gsuHXT2OpfO3mXwB0ohpP4+38JNFWzTb72ei5GCDcMZg41A7cnbPS+2+vPa6HK25rlCttdEDYHAVvqLsQ=="],
+    "@coshi190/junoswap-sdk": ["@coshi190/junoswap-sdk@0.5.0", "", { "dependencies": { "graphql-request": "^7.4.0" }, "peerDependencies": { "viem": "^2.25.0" } }, "sha512-njAYMv/d2dUllINtO1eqi7r6fXYngnusDO3CJuEnb5ougJSzk73S6nLjnbsIs+BkpC8i+DOJDJqmY5my5JNRlw=="],
 
     "@csstools/color-helpers": ["@csstools/color-helpers@6.0.2", "", {}, "sha512-LMGQLS9EuADloEFkcTBR3BwV/CGHV7zyDxVRtVDTwdI2Ca4it0CCVTT9wCkxSgokjE5Ho41hEPgb8OEUwoXr6Q=="],
 
