@@ -2,9 +2,15 @@
 
 import { useMemo } from 'react'
 import { useReadContracts, useChainId } from 'wagmi'
+import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import type { StakedPosition, Incentive, DepositInfo, PositionWithTokens } from '@/types/earn'
-import { getV3StakerAddress, UNISWAP_V3_STAKER_ABI } from '@coshi190/junoswap-sdk'
+import {
+    getV3StakerAddress,
+    UNISWAP_V3_STAKER_ABI,
+    fetchPositionsByTokenIds,
+} from '@coshi190/junoswap-sdk'
+import { ponderClient, isPonderError } from '@/lib/ponder-client'
 export function useStakedPositions(
     positions: PositionWithTokens[],
     incentives: Incentive[],
@@ -17,40 +23,36 @@ export function useStakedPositions(
 } {
     const chainId = useChainId()
     const stakerAddress = getV3StakerAddress(chainId)
-    const depositContracts = useMemo(() => {
-        if (!stakerAddress || positions.length === 0) return []
-        return positions.map((p) => ({
-            address: stakerAddress,
-            abi: UNISWAP_V3_STAKER_ABI,
-            functionName: 'deposits' as const,
-            args: [p.tokenId] as const,
-            chainId,
-        }))
-    }, [stakerAddress, positions, chainId])
+    const tokenIdKey = useMemo(() => positions.map((p) => p.tokenId.toString()), [positions])
     const {
-        data: depositData,
+        data: depositRows,
         isLoading: isLoadingDeposits,
         refetch: refetchDeposits,
-    } = useReadContracts({
-        contracts: depositContracts,
-        query: {
-            enabled: depositContracts.length > 0,
-            staleTime: 15_000, // 15 seconds
+    } = useQuery({
+        queryKey: ['staked-deposits', chainId, tokenIdKey],
+        queryFn: async () => {
+            try {
+                return await fetchPositionsByTokenIds(ponderClient, {
+                    chainId,
+                    tokenIds: positions.map((p) => p.tokenId),
+                })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
         },
+        enabled: !!owner && !!stakerAddress && positions.length > 0,
+        staleTime: 15_000, // 15 seconds
     })
     const depositedPositionIds = useMemo(() => {
-        if (!depositData || !owner) return new Set<string>()
+        if (!depositRows || !stakerAddress) return new Set<string>()
+        const staker = stakerAddress.toLowerCase()
         const deposited = new Set<string>()
-        positions.forEach((position, index) => {
-            const result = depositData[index]?.result as
-                | [Address, number, number, number]
-                | undefined
-            if (result && result[0].toLowerCase() === owner.toLowerCase()) {
-                deposited.add(position.tokenId.toString())
-            }
-        })
+        for (const row of depositRows) {
+            if (row.owner.toLowerCase() === staker) deposited.add(row.tokenId.toString())
+        }
         return deposited
-    }, [depositData, positions, owner])
+    }, [depositRows, stakerAddress])
     const depositedPositions = useMemo(() => {
         return positions.filter((p) => depositedPositionIds.has(p.tokenId.toString()))
     }, [positions, depositedPositionIds])

@@ -26,7 +26,7 @@ import { useSwapExecution } from '@/hooks/useSwapExecution'
 import { useAggRouterSwapExecution } from '@/hooks/useAggRouterSwapExecution'
 import { useSplitRoute } from '@/hooks/useSplitRoute'
 import { useCrossDexRoute } from '@/hooks/useCrossDexRoute'
-import { splitClearsMargin } from '@/services/dex/split-routing'
+import { splitClearsMargin } from '@coshi190/junoswap-sdk'
 import {
     splitToPlan,
     crossDexToPlan,
