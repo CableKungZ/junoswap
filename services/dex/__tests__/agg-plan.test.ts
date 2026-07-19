@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { decodeAbiParameters, size, type Address } from 'viem'
-import { ProtocolType } from '@coshi190/junoswap-sdk'
+import { ProtocolType, type CrossDexLeg } from '@coshi190/junoswap-sdk'
 import type { RouteQuote, SplitAllocation } from '@/types/routing'
-import type { LegCandidate } from '@/services/dex/cross-dex-routing'
 
 const NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' as Address
 const WNATIVE = '0x67ebd850304c70d983b2d1b93ea79c7cd6c3f6b5' as Address
@@ -51,7 +50,7 @@ const splitAllocation: SplitAllocation = {
     predictedNetOut: 500n,
 }
 
-const crossLeg: LegCandidate = {
+const crossLeg: CrossDexLeg = {
     hops: [
         {
             dexId: 'udonswap',

@@ -20,7 +20,6 @@ import { usePendingRewardsMultiple } from '@/hooks/useRewards'
 import { formatTokenAmount, getDisplayToken } from '@/lib/tokens'
 import { formatLiquidityAmount, formatRewardAmount } from '@/lib/format'
 import { tickToPrice, MIN_TICK, MAX_TICK } from '@/lib/liquidity-helpers'
-import { KNOWN_INCENTIVES } from '@/lib/mining-constants'
 import type { PositionWithTokens, StakedPosition } from '@/types/earn'
 
 const FULL_RANGE_TICK_TOLERANCE = 256
@@ -370,8 +369,7 @@ export function PositionsList({
     const { positions: stakedPositions, isLoading: isLoadingStakedPositions } =
         usePositionsByTokenIds(stakedTokenIds, chainId)
 
-    const incentiveKeys = useMemo(() => KNOWN_INCENTIVES[chainId] ?? [], [chainId])
-    const { incentives, isLoading: isLoadingIncentives } = useIncentives(incentiveKeys)
+    const { incentives, isLoading: isLoadingIncentives } = useIncentives()
     const { stakedPositions: stakedDetails, isLoading: isLoadingStaked } = useStakedPositions(
         stakedPositions,
         incentives,

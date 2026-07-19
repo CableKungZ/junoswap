@@ -4,9 +4,14 @@ import { useMemo, useState } from 'react'
 import { useChainId } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
-import { fetchNativeUsdPriceSnapshots, fetchV3History } from '@coshi190/junoswap-sdk'
+import {
+    fetchNativeUsdPriceSnapshots,
+    fetchTokenCandles,
+    fetchV3History,
+} from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import type { Timeframe, CandlestickData } from '@/types/chart'
+import { TIMEFRAME_DURATIONS } from '@/types/chart'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { isNativeToken } from '@/lib/wagmi'
 import { ponderClient } from '@/lib/ponder-client'
@@ -15,12 +20,12 @@ import {
     aggregatePricePoints,
     sanitizeCandles,
     buildContinuousSeries,
-    tokenNativeCandles,
+    aggregateV3Candlesticks,
     ratioCandles,
 } from '@/services/launchpad/chart'
-import type { V3SwapEvent } from '@/services/launchpad/chart'
 
 const NATIVE_DECIMALS = 18
+const MAX_CANDLES = 500
 
 export interface SwapPairChart {
     candles: CandlestickData[]
@@ -46,11 +51,61 @@ function resolveToken(
     return null
 }
 
-function fetchV3Events(tokenAddr: string, chainId: number): Promise<V3SwapEvent[]> {
-    return fetchV3History(ponderClient, {
-        tokenAddr: tokenAddr.toLowerCase(),
-        chainId,
-    }).catch(() => [] as V3SwapEvent[])
+function useNativeCandles(
+    tokenAddr: string | undefined,
+    tokenDecimals: number,
+    wrappedNative: string | undefined,
+    timeframe: Timeframe,
+    enabled: boolean
+) {
+    const chainId = useChainId()
+    const duration = TIMEFRAME_DURATIONS[timeframe]
+
+    return useQuery({
+        queryKey: ['token-native-candles', chainId, tokenAddr?.toLowerCase(), timeframe],
+        queryFn: async (): Promise<CandlestickData[]> => {
+            const addr = tokenAddr!.toLowerCase()
+            const since = Math.floor(Date.now() / 1000) - MAX_CANDLES * duration
+
+            const rows = await fetchTokenCandles(ponderClient, {
+                tokenAddr: addr,
+                chainId,
+                source: 'v3',
+                duration,
+                since,
+            }).catch(() => [])
+
+            if (rows.length > 0) {
+                return rows.map((r) => ({
+                    time: r.bucketTs,
+                    open: r.open,
+                    high: r.high,
+                    low: r.low,
+                    close: r.close,
+                    volume: r.volumeNative,
+                }))
+            }
+
+            const events = await fetchV3History(ponderClient, { tokenAddr: addr, chainId }).catch(
+                () => []
+            )
+            const tokenIsToken0 = addr < (wrappedNative?.toLowerCase() ?? '')
+            const raw = aggregateV3Candlesticks(events, timeframe, 'price', tokenIsToken0)
+            const factor = 10 ** (tokenDecimals - NATIVE_DECIMALS)
+            return factor === 1
+                ? raw
+                : raw.map((c) => ({
+                      ...c,
+                      open: c.open * factor,
+                      high: c.high * factor,
+                      low: c.low * factor,
+                      close: c.close * factor,
+                  }))
+        },
+        enabled: enabled && !!tokenAddr,
+        staleTime: 30_000,
+        refetchInterval: 30_000,
+    })
 }
 
 export function useSwapPairChart(
@@ -91,21 +146,21 @@ export function useSwapPairChart(
         refetchInterval: 30_000,
     })
 
-    const { data: baseEvents, isLoading: loadingBase } = useQuery({
-        queryKey: ['swap-pair-v3', baseAddr?.toLowerCase(), chainId],
-        queryFn: () => fetchV3Events(baseAddr!, chainId),
-        enabled: isRatioKind && !!baseAddr,
-        staleTime: 30_000,
-        refetchInterval: 30_000,
-    })
+    const { data: baseCandles, isLoading: loadingBase } = useNativeCandles(
+        baseAddr,
+        baseToken?.decimals ?? 18,
+        wrappedNative,
+        timeframe,
+        isRatioKind && !!baseAddr
+    )
 
-    const { data: quoteEvents, isLoading: loadingQuote } = useQuery({
-        queryKey: ['swap-pair-v3', quoteAddr?.toLowerCase(), chainId],
-        queryFn: () => fetchV3Events(quoteAddr!, chainId),
-        enabled: quoteNeedsV3,
-        staleTime: 30_000,
-        refetchInterval: 30_000,
-    })
+    const { data: quoteCandles, isLoading: loadingQuote } = useNativeCandles(
+        quoteAddr,
+        quoteToken?.decimals ?? 18,
+        wrappedNative,
+        timeframe,
+        quoteNeedsV3
+    )
 
     const candles = useMemo(() => {
         if (isNativeStable) {
@@ -118,25 +173,11 @@ export function useSwapPairChart(
                 timeframe
             )
         }
-        if (isRatioKind && baseAddr && wrappedNative) {
-            const npBase = tokenNativeCandles(
-                baseEvents ?? [],
-                baseAddr,
-                baseToken?.decimals ?? 18,
-                wrappedNative,
-                NATIVE_DECIMALS,
-                timeframe
-            )
+        if (isRatioKind && baseAddr) {
+            const npBase = buildContinuousSeries(sanitizeCandles(baseCandles ?? []), timeframe)
             if (quoteIsNative) return npBase
             if (!quoteAddr) return []
-            const npQuote = tokenNativeCandles(
-                quoteEvents ?? [],
-                quoteAddr,
-                quoteToken?.decimals ?? 18,
-                wrappedNative,
-                NATIVE_DECIMALS,
-                timeframe
-            )
+            const npQuote = buildContinuousSeries(sanitizeCandles(quoteCandles ?? []), timeframe)
             return buildContinuousSeries(sanitizeCandles(ratioCandles(npBase, npQuote)), timeframe)
         }
         return []
@@ -144,15 +185,12 @@ export function useSwapPairChart(
         isNativeStable,
         isRatioKind,
         snapshotRows,
-        baseEvents,
-        quoteEvents,
+        baseCandles,
+        quoteCandles,
         timeframe,
         baseAddr,
         quoteAddr,
         quoteIsNative,
-        wrappedNative,
-        baseToken,
-        quoteToken,
     ])
 
     const denom: 'usd' | 'native' | 'token' =

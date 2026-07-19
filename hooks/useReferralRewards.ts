@@ -4,18 +4,13 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAccount, useChainId } from 'wagmi'
 import {
-    aggregatePointsByAddress,
-    computeReferralPoints,
-    fetchSwapEventsForSenders,
-    isLeaderboardSupportedChain,
-} from '@/lib/leaderboard-utils'
-import { fetchReferralBindings } from '@/lib/swap-events'
-
-interface ReferredTrader {
-    address: string
-    points: number
-    volumeUsd: number
-}
+    computeReferralRewards,
+    fetchReferralData,
+    type ReferredTrader,
+} from '@coshi190/junoswap-sdk'
+import { isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
+import { ponderClient } from '@/lib/ponder-client'
+import { wrappedNativeFor } from '@/lib/swap-events'
 
 export interface ReferralRewards {
     referralPoints: number
@@ -25,8 +20,6 @@ export interface ReferralRewards {
     isSupportedChain: boolean
 }
 
-const EMPTY = { referees: [] as string[], rows: [] }
-
 export function useReferralRewards(nativeUsdPrice: number | null): ReferralRewards {
     const { address } = useAccount()
     const chainId = useChainId()
@@ -35,12 +28,12 @@ export function useReferralRewards(nativeUsdPrice: number | null): ReferralRewar
 
     const { data, isLoading } = useQuery({
         queryKey: ['referral-rewards', address?.toLowerCase(), chainId],
-        queryFn: async () => {
-            const referees = await fetchReferralBindings(address!.toLowerCase())
-            if (referees.length === 0) return EMPTY
-            const rows = await fetchSwapEventsForSenders(chainId, referees)
-            return { referees, rows }
-        },
+        queryFn: () =>
+            fetchReferralData(ponderClient, {
+                chainId,
+                referrer: address!,
+                wrappedNative: wrappedNativeFor(chainId),
+            }),
         enabled,
         staleTime: 30_000,
         refetchInterval: 30_000,
@@ -56,21 +49,8 @@ export function useReferralRewards(nativeUsdPrice: number | null): ReferralRewar
                 isSupportedChain,
             }
         }
-        const price = nativeUsdPrice ?? 0
-        const byAddr = aggregatePointsByAddress(data.rows)
-        const referees: ReferredTrader[] = data.referees.map((addr) => {
-            const agg = byAddr.get(addr)
-            return {
-                address: addr,
-                points: agg?.points ?? 0,
-                volumeUsd: (agg?.volumeNative ?? 0) * price,
-            }
-        })
-        referees.sort((a, b) => b.points - a.points)
         return {
-            referralPoints: computeReferralPoints(referees.map((r) => r.points)),
-            refereeCount: referees.length,
-            referees,
+            ...computeReferralRewards(data.referees, data.rows, nativeUsdPrice),
             isLoading: false,
             isSupportedChain,
         }

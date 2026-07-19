@@ -3,17 +3,10 @@
 import { useMemo } from 'react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import type { Address } from 'viem'
-import { TOKEN_LISTS } from '@/lib/tokens'
-import {
-    getFeeTiers,
-    getV3Config,
-    UNISWAP_V3_FACTORY_ABI,
-    UNISWAP_V3_POOL_ABI,
-} from '@coshi190/junoswap-sdk'
+import { getV3Config, UNISWAP_V3_FACTORY_ABI, UNISWAP_V3_POOL_ABI } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import type { V3PoolData } from '@/types/earn'
-import { getTickSpacing } from '@/lib/liquidity-helpers'
-import { sortTokens } from '@/lib/liquidity-helpers'
+import { getTickSpacing, sortTokens } from '@/lib/liquidity-helpers'
 
 export function usePool(
     token0: Token | null,
@@ -99,137 +92,5 @@ export function usePool(
         isLoading: isLoadingPool || isLoadingState,
         isError: isPoolError || isStateError,
         error: poolError || stateError || null,
-    }
-}
-
-function usePoolsForPair(
-    token0: Token | null,
-    token1: Token | null,
-    chainId?: number
-): {
-    pools: V3PoolData[]
-    isLoading: boolean
-} {
-    const effectiveChainId = chainId ?? token0?.chainId ?? token1?.chainId ?? 1
-    const dexConfig = getV3Config(effectiveChainId)
-    const feeTiers = useMemo(() => getFeeTiers(dexConfig), [dexConfig])
-    const [sortedToken0, sortedToken1] = useMemo(() => {
-        if (!token0 || !token1) return [null, null]
-        return sortTokens(token0, token1)
-    }, [token0, token1])
-    const isEnabled = !!sortedToken0 && !!sortedToken1 && !!dexConfig
-    const { data: poolAddresses, isLoading: isLoadingAddresses } = useReadContracts({
-        contracts: feeTiers.map((fee) => ({
-            address: dexConfig?.factory as Address,
-            abi: UNISWAP_V3_FACTORY_ABI,
-            functionName: 'getPool',
-            args: [sortedToken0?.address, sortedToken1?.address, fee],
-            chainId: effectiveChainId,
-        })),
-        query: {
-            enabled: isEnabled,
-            staleTime: 60_000,
-        },
-    })
-    const validPools = useMemo(() => {
-        if (!poolAddresses) return []
-        return poolAddresses
-            .map((result, index) => ({
-                address: result.result as Address | undefined,
-                fee: feeTiers[index],
-            }))
-            .filter((p) => p.address && p.address !== '0x0000000000000000000000000000000000000000')
-    }, [poolAddresses, feeTiers])
-    const { data: poolStates, isLoading: isLoadingStates } = useReadContracts({
-        contracts: validPools.flatMap((pool) => [
-            {
-                address: pool.address as Address,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'slot0',
-                chainId: effectiveChainId,
-            },
-            {
-                address: pool.address as Address,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'liquidity',
-                chainId: effectiveChainId,
-            },
-        ]),
-        query: {
-            enabled: validPools.length > 0,
-            staleTime: 10_000,
-        },
-    })
-    const pools = useMemo<V3PoolData[]>(() => {
-        if (!poolStates || !sortedToken0 || !sortedToken1) return []
-        return validPools
-            .map((pool, index) => {
-                const slot0 = poolStates[index * 2]?.result as
-                    | [bigint, number, number, number, number, number, boolean]
-                    | undefined
-                const liquidity = poolStates[index * 2 + 1]?.result as bigint | undefined
-                if (!slot0 || liquidity === undefined) return null
-                const [sqrtPriceX96, tick] = slot0
-                return {
-                    address: pool.address as Address,
-                    token0: sortedToken0,
-                    token1: sortedToken1,
-                    fee: pool.fee!,
-                    liquidity,
-                    sqrtPriceX96,
-                    tick,
-                    tickSpacing: getTickSpacing(pool.fee!),
-                }
-            })
-            .filter((p): p is V3PoolData => p !== null && p.liquidity > 0n)
-    }, [poolStates, validPools, sortedToken0, sortedToken1])
-    return {
-        pools,
-        isLoading: isLoadingAddresses || isLoadingStates,
-    }
-}
-
-export function useCommonPools(chainId: number): { pools: V3PoolData[]; isLoading: boolean } {
-    const tokens = TOKEN_LISTS[chainId] ?? []
-    const t0 = tokens[0] as Token | null
-    const t1 = tokens[1] as Token | null
-    const t2 = tokens[2] as Token | null
-    const t3 = tokens[3] as Token | null
-    const t4 = tokens[4] as Token | null
-    const t5 = tokens[5] as Token | null
-
-    const p01 = usePoolsForPair(t0, t1, chainId)
-    const p02 = usePoolsForPair(t0, t2, chainId)
-    const p03 = usePoolsForPair(t0, t3, chainId)
-    const p04 = usePoolsForPair(t0, t4, chainId)
-    const p05 = usePoolsForPair(t0, t5, chainId)
-    const p12 = usePoolsForPair(t1, t2, chainId)
-    const p13 = usePoolsForPair(t1, t3, chainId)
-    const p14 = usePoolsForPair(t1, t4, chainId)
-    const p15 = usePoolsForPair(t1, t5, chainId)
-    const p23 = usePoolsForPair(t2, t3, chainId)
-    const p24 = usePoolsForPair(t2, t4, chainId)
-    const p25 = usePoolsForPair(t2, t5, chainId)
-    const p34 = usePoolsForPair(t3, t4, chainId)
-    const p35 = usePoolsForPair(t3, t5, chainId)
-    const p45 = usePoolsForPair(t4, t5, chainId)
-
-    const poolResults = useMemo(
-        () => [p01, p02, p03, p04, p05, p12, p13, p14, p15, p23, p24, p25, p34, p35, p45],
-        [p01, p02, p03, p04, p05, p12, p13, p14, p15, p23, p24, p25, p34, p35, p45]
-    )
-
-    const allPools = useMemo(() => {
-        const combined = poolResults.flatMap((r) => r.pools)
-        const unique = new Map<string, V3PoolData>()
-        combined.forEach((pool) => {
-            unique.set(pool.address, pool)
-        })
-        return Array.from(unique.values())
-    }, [poolResults])
-    const isLoading = poolResults.some((r) => r.isLoading)
-    return {
-        pools: allPools,
-        isLoading,
     }
 }

@@ -16,7 +16,7 @@ import { usePendingRewards } from '@/hooks/useRewards'
 import { formatRewardAmount } from '@/lib/format'
 import { formatTimeRemaining } from '@/services/mining/incentives'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { removeStakedTokenId } from '@/lib/staked-positions-storage'
+import { markUnstaked } from '@/lib/optimistic-deposits'
 import type { StakedPosition } from '@/types/earn'
 
 interface UnstakeDialogProps {
@@ -48,7 +48,7 @@ export function UnstakeDialog({
     useEffect(() => {
         if (isSuccess && hash && hash !== processedTxHash) {
             if (address && position) {
-                removeStakedTokenId(chainId, address, position.tokenId)
+                markUnstaked(chainId, address, position.tokenId)
             }
             toastSuccess('Position unstaked successfully!')
             setProcessedTxHash(hash)

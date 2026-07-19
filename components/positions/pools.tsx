@@ -21,13 +21,12 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { getDefaultPairTokens, getDisplayToken } from '@/lib/tokens'
-import { useCommonPools } from '@/hooks/usePools'
-import { useGraduatedPools } from '@/hooks/useGraduatedPools'
-import { useAllPools, PONDER_INDEXED_CHAINS } from '@/hooks/useAllPools'
+import { useAllPools } from '@/hooks/useAllPools'
 import { usePoolTvl } from '@/hooks/usePoolTvl'
 import { usePoolVolume } from '@/hooks/usePoolVolume'
 import { formatFeeTier } from '@/lib/liquidity-helpers'
-import { formatTvl, formatApr, calculateApr } from '@/lib/format'
+import { formatTvl, formatApr, calculateApr, formatChartPrice } from '@/lib/format'
+import { priceFromSqrtPriceX96 } from '@coshi190/junoswap-sdk'
 import type { V3PoolData } from '@/types/earn'
 type SortKey = 'tvl' | 'apr' | 'vol1d' | 'vol30d'
 type SortDir = 'asc' | 'desc'
@@ -112,6 +111,17 @@ function PoolRow({
     }
     const d0 = getDisplayToken(display0)
     const d1 = getDisplayToken(display1)
+
+    // Pool price of the displayed base (d0) in units of the displayed quote (d1). sqrtPriceX96 is
+    // token1-per-token0, so flip when the display order is reversed from the pool's token order.
+    const rawPrice = priceFromSqrtPriceX96(
+        pool.sqrtPriceX96,
+        pool.token0.decimals,
+        pool.token1.decimals
+    )
+    const display0IsToken0 = display0.address.toLowerCase() === pool.token0.address.toLowerCase()
+    const price = display0IsToken0 ? rawPrice : rawPrice > 0 ? 1 / rawPrice : 0
+
     return (
         <TableRow className="border-0">
             <TableCell className="p-3">
@@ -130,6 +140,13 @@ function PoolRow({
             </TableCell>
             <TableCell className="p-3">
                 <Badge variant="outline">{formatFeeTier(pool.fee)}</Badge>
+            </TableCell>
+            <TableCell className="p-3">
+                {price > 0 ? (
+                    <span className="text-sm font-medium">{formatChartPrice(price)}</span>
+                ) : (
+                    <span className="text-sm text-muted-foreground">--</span>
+                )}
             </TableCell>
             <TableCell className="p-3">
                 {isLoadingTvl ? (
@@ -330,6 +347,7 @@ function PoolsListContent({
                             <TableRow>
                                 <TableHead className="py-3 px-4">Pool</TableHead>
                                 <TableHead className="py-3 px-4">Fee Tier</TableHead>
+                                <TableHead className="py-3 px-4">Price</TableHead>
                                 <TableHead className="py-3 px-4">TVL</TableHead>
                                 <TableHead className="py-3 px-4">APR</TableHead>
                                 <TableHead className="py-3 px-4">1D Vol</TableHead>
@@ -363,6 +381,7 @@ function PoolsListContent({
                         <TableRow>
                             <TableHead className="py-3 px-4">Pool</TableHead>
                             <TableHead className="py-3 px-4">Fee Tier</TableHead>
+                            <TableHead className="py-3 px-4">Price</TableHead>
                             <SortableHeader
                                 label="TVL"
                                 columnKey="tvl"
@@ -402,7 +421,7 @@ function PoolsListContent({
                         {sortedPools.length === 0 ? (
                             <TableRow className="border-0">
                                 <TableCell
-                                    colSpan={7}
+                                    colSpan={8}
                                     className="p-6 text-center text-sm text-muted-foreground"
                                 >
                                     No pools match &ldquo;{search}&rdquo;
@@ -432,44 +451,8 @@ function PoolsListContent({
     )
 }
 
-function PoolsListPonder({
-    chainId,
-    onAddLiquidity,
-}: {
-    chainId: number
-    onAddLiquidity: (pool?: V3PoolData) => void
-}) {
-    const { pools, isLoading } = useAllPools(chainId)
-    return <PoolsListContent pools={pools} isLoading={isLoading} onAddLiquidity={onAddLiquidity} />
-}
-
-function PoolsListLegacy({
-    chainId,
-    onAddLiquidity,
-}: {
-    chainId: number
-    onAddLiquidity: (pool?: V3PoolData) => void
-}) {
-    const { pools: commonPools, isLoading: isLoadingCommon } = useCommonPools(chainId)
-    const { pools: graduatedPools, isLoading: isLoadingGraduated } = useGraduatedPools(chainId)
-    const pools = useMemo(() => {
-        const unique = new Map<string, V3PoolData>()
-        ;[...commonPools, ...graduatedPools].forEach((p) => unique.set(p.address, p))
-        return Array.from(unique.values())
-    }, [commonPools, graduatedPools])
-    return (
-        <PoolsListContent
-            pools={pools}
-            isLoading={isLoadingCommon || isLoadingGraduated}
-            onAddLiquidity={onAddLiquidity}
-        />
-    )
-}
-
 export function PoolsList({ onAddLiquidity }: { onAddLiquidity: (pool?: V3PoolData) => void }) {
     const chainId = useChainId()
-    if (PONDER_INDEXED_CHAINS.has(chainId)) {
-        return <PoolsListPonder chainId={chainId} onAddLiquidity={onAddLiquidity} />
-    }
-    return <PoolsListLegacy chainId={chainId} onAddLiquidity={onAddLiquidity} />
+    const { pools, isLoading } = useAllPools(chainId)
+    return <PoolsListContent pools={pools} isLoading={isLoading} onAddLiquidity={onAddLiquidity} />
 }

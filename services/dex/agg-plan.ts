@@ -1,9 +1,14 @@
 import type { Address } from 'viem'
 import type { RouteQuote } from '@/types/routing'
-import { ProtocolType, getV2Config, getV3Config, resolveSwapPath } from '@coshi190/junoswap-sdk'
+import {
+    ProtocolType,
+    getV2Config,
+    getV3Config,
+    resolveSwapPath,
+    type CrossDexLeg,
+} from '@coshi190/junoswap-sdk'
 import { legToHops, type Leg, type ResolvedHop } from './agg-router'
 import type { SplitAllocation } from '@/types/routing'
-import type { LegCandidate } from './cross-dex-routing'
 
 export interface PlanLeg {
     amountIn: bigint
@@ -55,7 +60,7 @@ export function splitToPlan(allocation: SplitAllocation, chainId: number): Aggre
 }
 
 export function crossDexToPlan(
-    leg: LegCandidate,
+    leg: CrossDexLeg,
     amountIn: bigint,
     aggFeeBps: number
 ): AggregatorPlan {

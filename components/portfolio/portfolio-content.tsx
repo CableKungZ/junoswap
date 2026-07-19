@@ -104,12 +104,9 @@ export function PortfolioContent() {
         getTokenType
     )
     const { data: swapEvents } = useUserSwapEvents(address, chainId)
-    const {
-        points: nativeUsdHistory,
-        priceAt,
-        isSettled: isNativeUsdHistorySettled,
-    } = useNativeUsdPriceHistory(chainId, nativeUsdPrice)
-    const { pnlByToken, totals: pnlTotals } = usePortfolioPnl(swapEvents, holdings, prices, priceAt)
+    const { points: nativeUsdHistory, isSettled: isNativeUsdHistorySettled } =
+        useNativeUsdPriceHistory(chainId, nativeUsdPrice)
+    const { pnlByToken, totals: pnlTotals } = usePortfolioPnl(address, chainId, holdings)
 
     const portfolioTokens = useMemo<PortfolioToken[]>(() => {
         const result: PortfolioToken[] = []

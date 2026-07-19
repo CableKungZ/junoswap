@@ -2,166 +2,167 @@
 
 import { useMemo } from 'react'
 import { useReadContracts, useChainId } from 'wagmi'
+import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
-import type { Incentive, IncentiveKey } from '@/types/earn'
+import type { Incentive } from '@/types/earn'
 import {
+    fetchIncentives,
+    fetchV3Pools,
     getV3StakerAddress,
     UNISWAP_V3_STAKER_ABI,
-    UNISWAP_V3_POOL_ABI,
-    ERC20_ABI,
+    type V3PoolRow,
 } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
+import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import { findTokenByAddress } from '@/lib/tokens'
-import { computeIncentiveId } from '@/services/mining/staking'
+import { useV3Tokens } from '@/hooks/useV3Tokens'
 import { isIncentiveActive, isIncentiveEnded } from '@/services/mining/incentives'
 
-export function useIncentives(incentiveKeys: IncentiveKey[]): {
+const PONDER_INDEXED_CHAINS = new Set([25925, 96, 8899])
+
+export function useIncentives(): {
     incentives: Incentive[]
     isLoading: boolean
     refetch: () => void
 } {
     const chainId = useChainId()
+    const isIndexed = PONDER_INDEXED_CHAINS.has(chainId)
     const stakerAddress = getV3StakerAddress(chainId)
-    const incentiveIds = useMemo(
-        () => incentiveKeys.map((key) => computeIncentiveId(key)),
-        [incentiveKeys]
-    )
-    const incentiveContracts = useMemo(() => {
+
+    const {
+        data: incentiveRows,
+        isLoading: isLoadingRows,
+        refetch: refetchRows,
+    } = useQuery({
+        queryKey: ['incentives', chainId],
+        queryFn: async () => {
+            try {
+                return await fetchIncentives(ponderClient, { chainId })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
+        },
+        enabled: isIndexed,
+        staleTime: 60_000,
+    })
+
+    const { data: pools, isLoading: isLoadingPools } = useQuery({
+        queryKey: ['v3-pools-all', chainId],
+        queryFn: async () => {
+            try {
+                return await fetchV3Pools(ponderClient, { chainId })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
+        },
+        enabled: isIndexed,
+        staleTime: 60_000,
+    })
+    const { tokens: v3Tokens, isLoading: isLoadingTokens } = useV3Tokens(chainId)
+
+    const rows = useMemo(() => incentiveRows ?? [], [incentiveRows])
+
+    const stateContracts = useMemo(() => {
         if (!stakerAddress) return []
-        return incentiveIds.map((id) => ({
+        return rows.map((row) => ({
             address: stakerAddress,
             abi: UNISWAP_V3_STAKER_ABI,
             functionName: 'incentives' as const,
-            args: [id] as const,
+            args: [row.incentiveId as `0x${string}`] as const,
             chainId,
         }))
-    }, [stakerAddress, incentiveIds, chainId])
+    }, [stakerAddress, rows, chainId])
+
     const {
-        data: incentiveData,
-        isLoading: isLoadingIncentives,
-        refetch: refetchIncentives,
+        data: stateData,
+        isLoading: isLoadingState,
+        refetch: refetchState,
     } = useReadContracts({
-        contracts: incentiveContracts,
+        contracts: stateContracts,
         query: {
-            enabled: incentiveContracts.length > 0,
-            staleTime: 30_000, // 30 seconds
+            enabled: stateContracts.length > 0,
+            staleTime: 30_000,
         },
     })
-    const poolContracts = useMemo(() => {
-        return incentiveKeys.flatMap((key) => [
-            {
-                address: key.pool,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'token0' as const,
-                chainId,
-            },
-            {
-                address: key.pool,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'token1' as const,
-                chainId,
-            },
-            {
-                address: key.pool,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'fee' as const,
-                chainId,
-            },
-        ])
-    }, [incentiveKeys, chainId])
-    const { data: poolData, isLoading: isLoadingPools } = useReadContracts({
-        contracts: poolContracts,
-        query: {
-            enabled: poolContracts.length > 0,
-            staleTime: 60_000, // 1 minute
-        },
-    })
-    const tokenAddresses = useMemo(() => {
-        const addresses = new Set<Address>()
-        incentiveKeys.forEach((key) => addresses.add(key.rewardToken))
-        if (poolData) {
-            for (let i = 0; i < incentiveKeys.length; i++) {
-                const token0 = poolData[i * 3]?.result as Address | undefined
-                const token1 = poolData[i * 3 + 1]?.result as Address | undefined
-                if (token0) addresses.add(token0)
-                if (token1) addresses.add(token1)
-            }
-        }
-        return Array.from(addresses)
-    }, [incentiveKeys, poolData])
-    const tokenContracts = useMemo(() => {
-        return tokenAddresses.flatMap((address) => [
-            { address, abi: ERC20_ABI, functionName: 'symbol' as const, chainId },
-            { address, abi: ERC20_ABI, functionName: 'name' as const, chainId },
-            { address, abi: ERC20_ABI, functionName: 'decimals' as const, chainId },
-        ])
-    }, [tokenAddresses, chainId])
-    const { data: tokenData, isLoading: isLoadingTokens } = useReadContracts({
-        contracts: tokenContracts,
-        query: {
-            enabled: tokenContracts.length > 0,
-            staleTime: 300_000, // 5 minutes
-        },
-    })
-    const tokenInfoMap = useMemo(() => {
-        const map = new Map<string, Token>()
-        if (!tokenData) return map
-        tokenAddresses.forEach((address, index) => {
-            const symbol = tokenData[index * 3]?.result as string | undefined
-            const name = tokenData[index * 3 + 1]?.result as string | undefined
-            const decimals = tokenData[index * 3 + 2]?.result as number | undefined
-            if (symbol && decimals !== undefined) {
-                const tokenFromConfig = findTokenByAddress(chainId, address)
-                map.set(address.toLowerCase(), {
-                    address,
-                    symbol,
-                    name: name ?? symbol,
-                    decimals,
-                    chainId,
-                    logo: tokenFromConfig?.logo,
-                })
-            }
-        })
+
+    const poolByAddress = useMemo(() => {
+        const map = new Map<string, V3PoolRow>()
+        for (const pool of pools ?? []) map.set(pool.address.toLowerCase(), pool)
         return map
-    }, [tokenData, tokenAddresses, chainId])
+    }, [pools])
+
+    const tokenByAddress = useMemo(() => {
+        const map = new Map<string, Token>()
+        for (const t of v3Tokens) {
+            const address = t.address as Address
+            map.set(address.toLowerCase(), {
+                address,
+                symbol: t.symbol || '???',
+                name: t.name || t.symbol || '',
+                decimals: t.decimals ?? 18,
+                chainId,
+                logo: findTokenByAddress(chainId, address)?.logo,
+            })
+        }
+        return map
+    }, [v3Tokens, chainId])
+
     const incentives = useMemo<Incentive[]>(() => {
-        if (!incentiveData || !poolData) return []
-        return incentiveKeys
-            .map((key, index) => {
-                const result = incentiveData[index]?.result as [bigint, bigint, bigint] | undefined
-                if (!result) return null
-                const token0Address = poolData[index * 3]?.result as Address | undefined
-                const token1Address = poolData[index * 3 + 1]?.result as Address | undefined
-                const poolFee = poolData[index * 3 + 2]?.result as number | undefined
-                const rewardTokenInfo = tokenInfoMap.get(key.rewardToken.toLowerCase())
-                const poolToken0 = token0Address
-                    ? tokenInfoMap.get(token0Address.toLowerCase())
-                    : undefined
-                const poolToken1 = token1Address
-                    ? tokenInfoMap.get(token1Address.toLowerCase())
-                    : undefined
-                if (!rewardTokenInfo || !poolToken0 || !poolToken1 || poolFee === undefined) {
-                    return null
+        const stateById = new Map<string, readonly [bigint, bigint, bigint]>()
+        rows.forEach((row, index) => {
+            const result = stateData?.[index]?.result as
+                | readonly [bigint, bigint, bigint]
+                | undefined
+            if (result) stateById.set(row.incentiveId, result)
+        })
+
+        return rows
+            .map((row) => {
+                const pool = poolByAddress.get(row.pool.toLowerCase())
+                const rewardTokenInfo = tokenByAddress.get(row.rewardToken.toLowerCase())
+                const poolToken0 = pool ? tokenByAddress.get(pool.token0.toLowerCase()) : undefined
+                const poolToken1 = pool ? tokenByAddress.get(pool.token1.toLowerCase()) : undefined
+                if (!pool || !rewardTokenInfo || !poolToken0 || !poolToken1) return null
+
+                const state = stateById.get(row.incentiveId)
+                const key = {
+                    rewardToken: row.rewardToken as Address,
+                    pool: row.pool as Address,
+                    startTime: row.startTime,
+                    endTime: row.endTime,
+                    refundee: row.refundee as Address,
                 }
+
                 return {
                     ...key,
-                    incentiveId: incentiveIds[index]!,
-                    totalRewardUnclaimed: result[0],
-                    totalSecondsClaimedX128: result[1],
-                    numberOfStakes: Number(result[2]),
+                    incentiveId: row.incentiveId as `0x${string}`,
+                    totalRewardUnclaimed: state?.[0] ?? BigInt(row.reward),
+                    totalSecondsClaimedX128: state?.[1] ?? 0n,
+                    numberOfStakes: Number(state?.[2] ?? 0n),
                     rewardTokenInfo,
                     poolToken0,
                     poolToken1,
-                    poolFee,
+                    poolFee: pool.fee,
                     isActive: isIncentiveActive(key),
                     isEnded: isIncentiveEnded(key),
                 }
             })
             .filter((i): i is Incentive => i !== null)
-    }, [incentiveKeys, incentiveIds, incentiveData, poolData, tokenInfoMap])
+    }, [rows, stateData, poolByAddress, tokenByAddress])
+
+    const refetch = useMemo(
+        () => () => {
+            void refetchRows()
+            void refetchState()
+        },
+        [refetchRows, refetchState]
+    )
+
     return {
         incentives,
-        isLoading: isLoadingIncentives || isLoadingPools || isLoadingTokens,
-        refetch: refetchIncentives,
+        isLoading: isLoadingRows || isLoadingPools || isLoadingTokens || isLoadingState,
+        refetch,
     }
 }

@@ -1,10 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useReadContracts } from 'wagmi'
 import type { Address } from 'viem'
 import { useQuery } from '@tanstack/react-query'
-import { UNISWAP_V3_POOL_ABI, fetchV3Pools } from '@coshi190/junoswap-sdk'
+import { fetchV3Pools, fetchV3PoolReserves } from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import { getTokensForChain } from '@/lib/tokens'
@@ -12,7 +11,7 @@ import { getTickSpacing } from '@/lib/liquidity-helpers'
 import { useGraduatedTokens } from '@/hooks/useGraduatedTokens'
 import { useV3Tokens } from '@/hooks/useV3Tokens'
 import type { V3PoolData } from '@/types/earn'
-export const PONDER_INDEXED_CHAINS = new Set([25925, 96, 8899])
+const PONDER_INDEXED_CHAINS = new Set([25925, 96, 8899])
 
 export function useAllPools(chainId: number): { pools: V3PoolData[]; isLoading: boolean } {
     const isIndexed = PONDER_INDEXED_CHAINS.has(chainId)
@@ -73,51 +72,55 @@ export function useAllPools(chainId: number): { pools: V3PoolData[]; isLoading: 
     )
 
     const poolList = useMemo(() => ponderPools ?? [], [ponderPools])
-    const { data: poolStateResults, isLoading: isLoadingState } = useReadContracts({
-        contracts: poolList.flatMap((pool) => [
-            {
-                address: pool.address as Address,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'slot0' as const,
-                chainId,
-            },
-            {
-                address: pool.address as Address,
-                abi: UNISWAP_V3_POOL_ABI,
-                functionName: 'liquidity' as const,
-                chainId,
-            },
-        ]),
-        query: {
-            enabled: poolList.length > 0 && isIndexed,
-            staleTime: 10_000,
+    const poolAddresses = useMemo(() => poolList.map((p) => p.address.toLowerCase()), [poolList])
+
+    const { data: reserveRows, isLoading: isLoadingState } = useQuery({
+        queryKey: ['v3-pool-reserves-all', chainId, poolAddresses],
+        queryFn: async () => {
+            try {
+                return await fetchV3PoolReserves(ponderClient, { chainId, poolAddresses })
+            } catch (e) {
+                if (isPonderError(e)) return []
+                throw e
+            }
         },
+        enabled: poolAddresses.length > 0 && isIndexed,
+        staleTime: 30_000,
+        refetchInterval: 30_000,
     })
 
-    const pools = useMemo<V3PoolData[]>(() => {
-        if (!poolStateResults || poolList.length === 0) return []
-        return poolList
-            .map((pool, i) => {
-                const slot0 = poolStateResults[i * 2]?.result as
-                    | [bigint, number, number, number, number, number, boolean]
-                    | undefined
-                const liquidity = poolStateResults[i * 2 + 1]?.result as bigint | undefined
-                if (!slot0 || liquidity === undefined || liquidity === 0n) return null
+    const stateByAddress = useMemo(() => {
+        const map = new Map<string, { sqrtPriceX96: bigint; tick: number; liquidity: bigint }>()
+        for (const r of reserveRows ?? []) {
+            map.set(r.poolAddress.toLowerCase(), {
+                sqrtPriceX96: BigInt(r.sqrtPriceX96),
+                tick: r.tick ?? 0,
+                liquidity: BigInt(r.liquidity),
+            })
+        }
+        return map
+    }, [reserveRows])
 
-                const [sqrtPriceX96, tick] = slot0
+    const pools = useMemo<V3PoolData[]>(() => {
+        if (poolList.length === 0) return []
+        return poolList
+            .map((pool) => {
+                const state = stateByAddress.get(pool.address.toLowerCase())
+                if (!state || state.liquidity === 0n) return null
+
                 return {
                     address: pool.address as Address,
                     token0: getToken(pool.token0),
                     token1: getToken(pool.token1),
                     fee: pool.fee,
-                    liquidity,
-                    sqrtPriceX96,
-                    tick,
+                    liquidity: state.liquidity,
+                    sqrtPriceX96: state.sqrtPriceX96,
+                    tick: state.tick,
                     tickSpacing: getTickSpacing(pool.fee),
                 } satisfies V3PoolData
             })
             .filter((p): p is V3PoolData => p !== null)
-    }, [poolStateResults, poolList, getToken])
+    }, [poolList, stateByAddress, getToken])
 
     if (!isIndexed) {
         return { pools: [], isLoading: false }

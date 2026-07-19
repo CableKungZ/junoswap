@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { useChainId } from 'wagmi'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -8,7 +7,6 @@ import { TokenIconSkeleton } from '@/components/ui/token-icon'
 import { MiningFarmCard } from './farm-card'
 import { useIncentives } from '@/hooks/useIncentives'
 import { getV3StakerAddress } from '@coshi190/junoswap-sdk'
-import { KNOWN_INCENTIVES } from '@/lib/mining-constants'
 import type { Incentive } from '@/types/earn'
 
 function FarmCardSkeleton() {
@@ -48,8 +46,7 @@ function FarmCardSkeleton() {
 export function MiningFarms({ onStake }: { onStake: (incentive: Incentive) => void }) {
     const chainId = useChainId()
     const stakerAddress = getV3StakerAddress(chainId)
-    const incentiveKeys = useMemo(() => KNOWN_INCENTIVES[chainId] ?? [], [chainId])
-    const { incentives, isLoading } = useIncentives(incentiveKeys)
+    const { incentives, isLoading } = useIncentives()
 
     const header = (
         <div className="flex items-center justify-between">

@@ -22,7 +22,7 @@ import { useStakePosition } from '@/hooks/useStaking'
 import { formatTokenAmount } from '@/lib/tokens'
 import { formatTimeRemaining } from '@/services/mining/incentives'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { addStakedTokenId } from '@/lib/staked-positions-storage'
+import { markStaked } from '@/lib/optimistic-deposits'
 import type { PositionWithTokens, Incentive, V3PoolData } from '@/types/earn'
 
 interface StakeDialogProps {
@@ -82,7 +82,7 @@ export function StakeDialog({
         if (isSuccess && hash && pendingTxType && hash !== processedTxHash) {
             if (pendingTxType === 'stake') {
                 if (address && selectedPosition) {
-                    addStakedTokenId(chainId, address, selectedPosition.tokenId)
+                    markStaked(chainId, address, selectedPosition.tokenId)
                 }
                 toastSuccess('Position staked successfully!')
                 setProcessedTxHash(hash)

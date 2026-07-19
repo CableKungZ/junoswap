@@ -1,3 +1,5 @@
+export { sanitizePricePoints } from '@coshi190/junoswap-sdk'
+
 export interface NetWorthPoint {
     timestamp: number
     value: number
@@ -10,14 +12,6 @@ export interface PricePoint {
 
 export const DAY_SECONDS = 86_400
 export const MAX_POINTS = 96
-
-export function sanitizePricePoints<T extends { price: number }>(points: readonly T[]): T[] {
-    const finite = points.filter((p) => Number.isFinite(p.price) && p.price > 0)
-    if (finite.length === 0) return []
-    const sorted = finite.map((p) => p.price).sort((a, b) => a - b)
-    const median = sorted[sorted.length >> 1]!
-    return finite.filter((p) => p.price <= median * 100 && p.price >= median / 100)
-}
 
 export function downsample(
     series: NetWorthPoint[],

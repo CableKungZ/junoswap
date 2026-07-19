@@ -189,13 +189,8 @@ export const DEFAULT_RANGE_CONFIG: RangeConfig = {
     priceUpper: '0',
 }
 
-export interface IncentiveKey {
-    rewardToken: Address
-    pool: Address
-    startTime: number
-    endTime: number
-    refundee: Address
-}
+export type { IncentiveKey } from '@coshi190/junoswap-sdk'
+import type { IncentiveKey } from '@coshi190/junoswap-sdk'
 
 export interface Incentive extends IncentiveKey {
     incentiveId: `0x${string}` // keccak256 hash of IncentiveKey

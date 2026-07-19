@@ -11,21 +11,12 @@ import {
     isLaunchpadChain,
     fetchAllTokenHolders,
     type LeaderboardHolder,
+    type LeaderboardTraderStat,
 } from '@coshi190/junoswap-sdk'
 import { useTokenDiscovery } from '@/hooks/useTokenDiscovery'
 import { useMultiBalances } from '@/hooks/useMultiBalances'
 import { useTokenPrices } from '@/hooks/useTokenPrices'
-import { useNativeUsdPriceHistory } from '@/hooks/useNativeUsdPriceHistory'
-import {
-    computeTraderStatsByAddress,
-    type LeaderboardSwapEvent,
-} from '@/services/portfolio/portfolio-pnl'
-import {
-    getTimeThreshold,
-    fetchSwapEvents,
-    fetchV3SwapEvents,
-    fetchV2SwapEvents,
-} from '@/lib/leaderboard-utils'
+import { fetchLeaderboardTraders } from '@/lib/user-pnl'
 import type { LeaderboardTimePeriod, TraderSortKey, SortDirection } from '@/types/leaderboard'
 
 export interface TraderAgg {
@@ -51,6 +42,11 @@ async function fetchHolders(): Promise<LeaderboardHolder[]> {
     }
 }
 
+/**
+ * Trader PnL/volume/counts come precomputed from the indexer's `/leaderboard` route for every period
+ * (all-time from the cumulative folds, windows folded on the fly server-side). Net worth is assembled
+ * here from live on-chain balances and merged in.
+ */
 export function useLeaderboardTraders(
     timePeriod: LeaderboardTimePeriod,
     sortKey: TraderSortKey,
@@ -68,34 +64,28 @@ export function useLeaderboardTraders(
         [allTokens]
     )
 
-    const { data: raw, isLoading: isPonderLoading } = useQuery({
-        queryKey: ['leaderboard-traders', timePeriod, chainId],
-        queryFn: async () => {
-            const since = getTimeThreshold(timePeriod)
-            const includeLaunchpad = isLaunchpadChain(chainId)
-            const [swapEvents, v3SwapEvents, v2SwapEvents, tokenHolders] = await Promise.all([
-                includeLaunchpad ? fetchSwapEvents(chainId, since) : Promise.resolve([]),
-                fetchV3SwapEvents(chainId, since),
-                fetchV2SwapEvents(chainId, since),
-                includeLaunchpad ? fetchHolders() : Promise.resolve([]),
-            ])
-            return {
-                swapEvents: [...swapEvents, ...v3SwapEvents, ...v2SwapEvents],
-                tokenHolders,
-            }
-        },
+    const { data: holders, isLoading: isHoldersLoading } = useQuery({
+        queryKey: ['leaderboard-holders', chainId],
+        queryFn: () => (isLaunchpadChain(chainId) ? fetchHolders() : Promise.resolve([])),
+        enabled: isSupportedChain,
+        staleTime: 30_000,
+        refetchInterval: 30_000,
+    })
+
+    const { data: traderStats, isLoading: isStatsLoading } = useQuery({
+        queryKey: ['leaderboard-server', chainId, timePeriod],
+        queryFn: () => fetchLeaderboardTraders(chainId, timePeriod),
         enabled: isSupportedChain,
         staleTime: 30_000,
         refetchInterval: 30_000,
     })
 
     const uniqueAddresses = useMemo(() => {
-        if (!raw) return []
         const addrs = new Set<string>()
-        for (const h of raw.tokenHolders) addrs.add(h.address.toLowerCase())
-        for (const e of raw.swapEvents) addrs.add(e.sender.toLowerCase())
+        for (const h of holders ?? []) addrs.add(h.address.toLowerCase())
+        for (const t of traderStats ?? []) addrs.add(t.address.toLowerCase())
         return [...addrs] as Address[]
-    }, [raw])
+    }, [holders, traderStats])
 
     const publicClient = usePublicClient({ chainId })
 
@@ -126,7 +116,6 @@ export function useLeaderboardTraders(
     )
 
     const { prices: priceMap } = useTokenPrices(allTokens, chainId, nativeUsdPrice, getTokenType)
-    const { priceAt } = useNativeUsdPriceHistory(chainId, nativeUsdPrice)
 
     const numericHolderMap = useMemo(() => {
         const map = new Map<string, Map<string, number>>()
@@ -140,35 +129,14 @@ export function useLeaderboardTraders(
         return map
     }, [holdings])
 
-    const decimalsByToken = useMemo(() => {
-        const map = new Map<string, number>()
-        for (const token of erc20Tokens) {
-            map.set(token.address.toLowerCase(), token.decimals)
-        }
+    const statsByAddress = useMemo(() => {
+        const map = new Map<string, LeaderboardTraderStat>()
+        for (const t of traderStats ?? []) map.set(t.address.toLowerCase(), t)
         return map
-    }, [erc20Tokens])
-
-    const perAddressStats = useMemo(() => {
-        const events: LeaderboardSwapEvent[] =
-            raw?.swapEvents.map((e) => ({
-                tokenAddr: e.tokenAddr,
-                sender: e.sender,
-                isBuy: e.isBuy === 1,
-                amountIn: e.amountIn,
-                amountOut: e.amountOut,
-                timestamp: e.timestamp,
-            })) ?? []
-        return computeTraderStatsByAddress(
-            events,
-            numericHolderMap,
-            priceMap,
-            priceAt,
-            decimalsByToken
-        )
-    }, [raw, numericHolderMap, priceMap, priceAt, decimalsByToken])
+    }, [traderStats])
 
     const result = useMemo(() => {
-        if (!raw) return { traders: [], totalCount: 0, totalPages: 0 }
+        if (traderStats === undefined) return { traders: [], totalCount: 0, totalPages: 0 }
 
         const netWorthByAddress = new Map<string, number>()
 
@@ -190,12 +158,12 @@ export function useLeaderboardTraders(
 
         const allAddresses = new Set<string>()
         for (const addr of netWorthByAddress.keys()) allAddresses.add(addr)
-        for (const addr of perAddressStats.keys()) allAddresses.add(addr)
+        for (const addr of statsByAddress.keys()) allAddresses.add(addr)
 
         const traders: TraderAgg[] = []
         for (const addr of allAddresses) {
             const netWorth = netWorthByAddress.get(addr) ?? 0
-            const stats = perAddressStats.get(addr)
+            const stats = statsByAddress.get(addr)
 
             traders.push({
                 rank: 0,
@@ -247,7 +215,7 @@ export function useLeaderboardTraders(
 
         return { traders: paginatedTraders, totalCount: filtered.length, totalPages }
     }, [
-        raw,
+        traderStats,
         sortKey,
         sortDirection,
         searchQuery,
@@ -256,7 +224,7 @@ export function useLeaderboardTraders(
         numericHolderMap,
         priceMap,
         nativeUsdPrice,
-        perAddressStats,
+        statsByAddress,
     ])
 
     if (!isSupportedChain) {
@@ -273,7 +241,7 @@ export function useLeaderboardTraders(
         traders: result.traders,
         totalCount: result.totalCount,
         totalPages: result.totalPages,
-        isLoading: isPonderLoading || isNativeLoading || isErc20Loading,
+        isLoading: isStatsLoading || isHoldersLoading || isNativeLoading || isErc20Loading,
         isSupportedChain,
     }
 }
