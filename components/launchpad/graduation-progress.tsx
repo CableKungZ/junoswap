@@ -1,13 +1,12 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { formatKub, formatKubRounded } from '@/services/launchpad/launchpad'
 import {
     calculateStableGraduationProgress,
     calculateExactGraduationReserve,
     isReadyToGraduate,
-    formatKub,
-    formatKubRounded,
-} from '@/services/launchpad/launchpad'
+} from '@coshi190/junoswap-sdk'
 import { Button } from '@/components/ui/button'
 
 interface GraduationProgressProps {

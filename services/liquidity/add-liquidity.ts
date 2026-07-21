@@ -5,14 +5,14 @@ import type {
     MintCallParams,
     IncreaseLiquidityCallParams,
 } from '@/types/earn'
-import { NONFUNGIBLE_POSITION_MANAGER_ABI } from '@coshi190/junoswap-sdk'
 import {
+    NONFUNGIBLE_POSITION_MANAGER_ABI,
     calculateMinAmounts,
     calculateDeadline,
     sortTokens,
     nearestUsableTick,
-    getTickSpacing,
-} from '@/lib/liquidity-helpers'
+} from '@coshi190/junoswap-sdk'
+import { getTickSpacing } from '@/lib/liquidity-helpers'
 import { isNativeToken } from '@/lib/wagmi'
 import { getWrappedNativeAddress } from '@/lib/tokens'
 

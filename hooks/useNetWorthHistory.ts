@@ -3,13 +3,17 @@
 import { useMemo, useRef } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { formatUnits } from 'viem'
-import { fetchBondingCurvePricesSince, fetchV3PricesSince } from '@coshi190/junoswap-sdk'
+import {
+    fetchBondingCurvePricesSince,
+    fetchV3PricesSince,
+    calculatePrice,
+    calculatePriceFromSqrtPrice,
+} from '@coshi190/junoswap-sdk'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import { isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
 import { isNativeToken } from '@/lib/wagmi'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { isStablecoin } from '@/hooks/useTokenPrices'
-import { calculatePrice, calculatePriceFromSqrtPrice } from '@/services/launchpad/chart'
 import {
     buildLedgerNetWorthSeries,
     type BalanceDelta,

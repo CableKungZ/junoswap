@@ -14,7 +14,13 @@ import type {
     PositionWithTokens,
     PositionDetails,
 } from '@/types/earn'
-import { getV3Config, NONFUNGIBLE_POSITION_MANAGER_ABI } from '@coshi190/junoswap-sdk'
+import {
+    getV3Config,
+    NONFUNGIBLE_POSITION_MANAGER_ABI,
+    calculateMinAmounts,
+    tickToSqrtPriceX96,
+    getAmountsForLiquidity,
+} from '@coshi190/junoswap-sdk'
 import {
     buildMintParams,
     buildMintWithNativeMulticall,
@@ -28,11 +34,6 @@ import {
     buildCollectFeesParams,
 } from '@/services/liquidity/fee-collection'
 import { getWrappedNativeAddress } from '@/lib/tokens'
-import {
-    calculateMinAmounts,
-    tickToSqrtPriceX96,
-    getAmountsForLiquidity,
-} from '@/lib/liquidity-helpers'
 
 export function useAddLiquidity(params: AddLiquidityParams | null, skipSimulation?: boolean) {
     const chainId = useChainId()

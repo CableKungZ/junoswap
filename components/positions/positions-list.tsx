@@ -19,7 +19,8 @@ import { useStakedPositions } from '@/hooks/useStakedPositions'
 import { usePendingRewardsMultiple } from '@/hooks/useRewards'
 import { formatTokenAmount, getDisplayToken } from '@/lib/tokens'
 import { formatLiquidityAmount, formatRewardAmount } from '@/lib/format'
-import { tickToPrice, MIN_TICK, MAX_TICK } from '@/lib/liquidity-helpers'
+import { MIN_TICK, MAX_TICK } from '@coshi190/junoswap-sdk'
+import { tickToPrice } from '@/lib/liquidity-helpers'
 import type { PositionWithTokens, StakedPosition } from '@/types/earn'
 
 const FULL_RANGE_TICK_TOLERANCE = 256

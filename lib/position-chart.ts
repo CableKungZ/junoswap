@@ -1,4 +1,4 @@
-import { calculatePriceFromSqrtPrice } from '@/services/launchpad/chart'
+import { priceFromSqrtPriceX96 } from '@coshi190/junoswap-sdk'
 
 export interface PoolSwapPoint {
     timestamp: number
@@ -33,7 +33,7 @@ export function sqrtPriceX96ToPriceNumber(
     } catch {
         return 0
     }
-    return calculatePriceFromSqrtPrice(sqrt, true) * Math.pow(10, decimals0 - decimals1)
+    return priceFromSqrtPriceX96(sqrt, decimals0, decimals1)
 }
 
 export function buildPoolPriceSeries(params: {

@@ -4,11 +4,10 @@ import { useMemo, useRef, useCallback, useState } from 'react'
 import { Slider } from '@/components/ui/slider'
 import type { RangeConfig, RangePreset } from '@/types/earn'
 import { RANGE_PRESETS } from '@/types/earn'
+import { priceToTick, nearestUsableTick } from '@coshi190/junoswap-sdk'
 import {
     getPresetRange,
     tickToPrice,
-    priceToTick,
-    nearestUsableTick,
     calculateRangePercentage,
     calculateSliderViewport,
 } from '@/lib/liquidity-helpers'

@@ -3,10 +3,15 @@
 import { useMemo } from 'react'
 import { useReadContract, useReadContracts } from 'wagmi'
 import type { Address } from 'viem'
-import { getV3Config, UNISWAP_V3_FACTORY_ABI, UNISWAP_V3_POOL_ABI } from '@coshi190/junoswap-sdk'
+import {
+    getV3Config,
+    UNISWAP_V3_FACTORY_ABI,
+    UNISWAP_V3_POOL_ABI,
+    sortTokens,
+} from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import type { V3PoolData } from '@/types/earn'
-import { getTickSpacing, sortTokens } from '@/lib/liquidity-helpers'
+import { getTickSpacing } from '@/lib/liquidity-helpers'
 
 export function usePool(
     token0: Token | null,

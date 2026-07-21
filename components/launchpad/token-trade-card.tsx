@@ -26,12 +26,8 @@ import {
 import type { Token } from '@/types/token'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { isValidNumberInput } from '@/lib/utils'
-import {
-    formatKub,
-    formatTokenAmount,
-    isReadyToGraduate,
-    calculateGraduationTarget,
-} from '@/services/launchpad/launchpad'
+import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
+import { isReadyToGraduate, calculateGraduationTarget } from '@coshi190/junoswap-sdk'
 import { calculateMinOutput } from '@/services/dex/slippage'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { getChainMetadata } from '@/lib/wagmi'

@@ -1,7 +1,18 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { getV3Config, FEE_TIERS } from '@coshi190/junoswap-sdk'
+import {
+    getV3Config,
+    FEE_TIERS,
+    tickToSqrtPriceX96,
+    priceToSqrtPriceX96,
+    sqrtPriceX96ToTick,
+    calculateAmount1FromAmount0,
+    calculateAmount0FromAmount1,
+    nearestUsableTick,
+    MIN_TICK,
+    MAX_TICK,
+} from '@coshi190/junoswap-sdk'
 import type { Token } from '@/types/token'
 import { useAccount, useChainId } from 'wagmi'
 import { useRouter } from 'next/navigation'
@@ -18,18 +29,7 @@ import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { getChainMetadata } from '@/lib/wagmi'
 import { parseTokenAmount, formatBalance, formatTokenAmount } from '@/lib/tokens'
-import {
-    tickToSqrtPriceX96,
-    priceToSqrtPriceX96,
-    sqrtPriceX96ToTick,
-    calculateAmount1FromAmount0,
-    calculateAmount0FromAmount1,
-    nearestUsableTick,
-    getTickSpacing,
-    getPresetRange,
-    MIN_TICK,
-    MAX_TICK,
-} from '@/lib/liquidity-helpers'
+import { getTickSpacing, getPresetRange } from '@/lib/liquidity-helpers'
 import { useChainTokens } from '@/hooks/useChainTokens'
 import type { AddLiquidityParams, RangeConfig, V3PoolData } from '@/types/earn'
 import { DEFAULT_RANGE_CONFIG } from '@/types/earn'

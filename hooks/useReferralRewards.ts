@@ -10,7 +10,6 @@ import {
 } from '@coshi190/junoswap-sdk'
 import { isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
 import { ponderClient } from '@/lib/ponder-client'
-import { wrappedNativeFor } from '@/lib/swap-events'
 
 export interface ReferralRewards {
     referralPoints: number
@@ -32,7 +31,6 @@ export function useReferralRewards(nativeUsdPrice: number | null): ReferralRewar
             fetchReferralData(ponderClient, {
                 chainId,
                 referrer: address!,
-                wrappedNative: wrappedNativeFor(chainId),
             }),
         enabled,
         staleTime: 30_000,
@@ -50,7 +48,7 @@ export function useReferralRewards(nativeUsdPrice: number | null): ReferralRewar
             }
         }
         return {
-            ...computeReferralRewards(data.referees, data.rows, nativeUsdPrice),
+            ...computeReferralRewards(data.referees, data.stats, nativeUsdPrice),
             isLoading: false,
             isSupportedChain,
         }

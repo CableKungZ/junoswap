@@ -10,15 +10,15 @@ import { useIncreaseLiquidity } from '@/hooks/useLiquidity'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { usePool } from '@/hooks/usePools'
-import { getV3Config } from '@coshi190/junoswap-sdk'
-import { getChainMetadata } from '@/lib/wagmi'
-import { parseTokenAmount, formatBalance, formatTokenAmount } from '@/lib/tokens'
 import {
+    getV3Config,
     tickToSqrtPriceX96,
     calculateAmount1FromAmount0,
     calculateAmount0FromAmount1,
     isInRange,
-} from '@/lib/liquidity-helpers'
+} from '@coshi190/junoswap-sdk'
+import { getChainMetadata } from '@/lib/wagmi'
+import { parseTokenAmount, formatBalance, formatTokenAmount } from '@/lib/tokens'
 import { toastError } from '@/lib/toast'
 import { toast } from 'sonner'
 import type { PositionWithTokens } from '@/types/earn'

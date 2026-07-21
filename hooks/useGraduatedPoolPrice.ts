@@ -2,8 +2,11 @@
 
 import { useReadContract } from 'wagmi'
 import type { Address } from 'viem'
-import { UNISWAP_V3_POOL_ABI } from '@coshi190/junoswap-sdk'
-import { calculatePriceFromSqrtPrice, TOTAL_SUPPLY } from '@/services/launchpad/chart'
+import {
+    UNISWAP_V3_POOL_ABI,
+    calculatePriceFromSqrtPrice,
+    TOTAL_SUPPLY,
+} from '@coshi190/junoswap-sdk'
 
 interface UseGraduatedPoolPriceParams {
     poolAddress?: Address

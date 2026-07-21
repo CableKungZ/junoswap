@@ -13,9 +13,12 @@ import {
     WETH9_ABI,
     ERC20_ABI,
     getV3Config,
+    isReadyToGraduate,
+    isSqrtPriceWithinTolerance,
+    PRICE_TOLERANCE_BPS,
+    calculateGraduationSqrtPriceX96,
 } from '@coshi190/junoswap-sdk'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
-import { calculateGraduationSqrtPriceX96 } from '@/lib/liquidity-helpers'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 
 type PoolStatus = 'no_pool' | 'not_initialized' | 'correct' | 'wrong'
@@ -69,10 +72,6 @@ const STEP_LABELS: Record<GraduationStep, string> = {
     done: 'Graduation complete!',
     error: 'Error',
 }
-
-const PRICE_TOLERANCE_BPS = 400n
-
-const INITIAL_TOKEN = 1_000_000_000n * 10n ** 18n
 
 export function useGraduate({
     tokenAddr,
@@ -160,7 +159,7 @@ export function useGraduate({
             const tokenReserve = (freshReserves as [bigint, bigint])[1]
             const cap = onChainCap as bigint
 
-            if (tokenReserve * cap > INITIAL_TOKEN * nativeReserve) {
+            if (!isReadyToGraduate(nativeReserve, tokenReserve, cap, false)) {
                 throw new Error('Not ready to graduate — bonding curve has not reached the cap')
             }
 
@@ -198,12 +197,13 @@ export function useGraduate({
                 if (currentSqrtPrice === 0n) {
                     poolStatus = 'not_initialized'
                 } else {
-                    const diff =
-                        currentSqrtPrice > correctSqrtPrice
-                            ? currentSqrtPrice - correctSqrtPrice
-                            : correctSqrtPrice - currentSqrtPrice
-                    const tolerance = (correctSqrtPrice * PRICE_TOLERANCE_BPS) / 10000n
-                    poolStatus = diff <= tolerance ? 'correct' : 'wrong'
+                    poolStatus = isSqrtPriceWithinTolerance(
+                        currentSqrtPrice,
+                        correctSqrtPrice,
+                        PRICE_TOLERANCE_BPS
+                    )
+                        ? 'correct'
+                        : 'wrong'
                 }
             }
 
@@ -437,12 +437,11 @@ export function useGraduate({
                     functionName: 'slot0',
                 })) as [bigint, number, number, number, number, number, boolean]
                 const latestSqrtPrice = latestSlot0[0]
-                const latestDiff =
-                    latestSqrtPrice > correctSqrtPrice
-                        ? latestSqrtPrice - correctSqrtPrice
-                        : correctSqrtPrice - latestSqrtPrice
-                const latestTolerance = (correctSqrtPrice * PRICE_TOLERANCE_BPS) / 10000n
-                const priceAlreadyCorrect = latestDiff <= latestTolerance
+                const priceAlreadyCorrect = isSqrtPriceWithinTolerance(
+                    latestSqrtPrice,
+                    correctSqrtPrice,
+                    PRICE_TOLERANCE_BPS
+                )
 
                 if (!priceAlreadyCorrect) {
                     setStep('correcting-price')

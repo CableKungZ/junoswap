@@ -2,16 +2,13 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { usePublicClient } from 'wagmi'
-import { parseEther } from 'viem'
 import type { Address } from 'viem'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
-import { ERC20_ABI, fetchTokenHolders } from '@coshi190/junoswap-sdk'
+import { ERC20_ABI, fetchTokenHolders, INITIAL_TOKEN_SUPPLY } from '@coshi190/junoswap-sdk'
 import { ponderClient } from '@/lib/ponder-client'
 import type { HolderData } from '@/types/launchpad'
 
 export type { HolderData }
-
-const TOTAL_SUPPLY = parseEther('1000000000')
 
 async function fetchRealBalances(
     publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
@@ -39,7 +36,10 @@ async function fetchRealBalances(
             return {
                 address: addresses[i],
                 balance,
-                percentage: TOTAL_SUPPLY > 0n ? Number((balance * 10000n) / TOTAL_SUPPLY) / 100 : 0,
+                percentage:
+                    INITIAL_TOKEN_SUPPLY > 0n
+                        ? Number((balance * 10000n) / INITIAL_TOKEN_SUPPLY) / 100
+                        : 0,
             }
         })
         .filter((h): h is HolderData => h !== null)

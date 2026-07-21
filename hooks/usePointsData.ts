@@ -3,17 +3,9 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAccount, useChainId } from 'wagmi'
-import {
-    getTimeThreshold,
-    fetchSwapEvents,
-    fetchV3SwapEvents,
-    fetchV2SwapEvents,
-    aggregatePointsByAddress,
-    computeReferralPoints,
-    isLeaderboardSupportedChain,
-} from '@/lib/leaderboard-utils'
+import { computeReferralPoints, isLeaderboardSupportedChain } from '@/lib/leaderboard-utils'
 import { fetchAllReferralBindings } from '@/lib/swap-events'
-import { isLaunchpadChain } from '@coshi190/junoswap-sdk'
+import { fetchLeaderboardTraders } from '@/lib/user-pnl'
 import type { PointsTrader, PointsTimePeriod, PointsSortKey, SortDirection } from '@/types/points'
 
 export interface UserPointsSummary {
@@ -56,17 +48,9 @@ export function usePointsData(
     const chainId = useChainId()
     const isSupportedChain = isLeaderboardSupportedChain(chainId)
 
-    const { data: rawSwapEvents } = useQuery({
-        queryKey: ['points-data', timePeriod, chainId],
-        queryFn: async () => {
-            const since = getTimeThreshold(timePeriod)
-            const [bondingCurve, v3, v2] = await Promise.all([
-                isLaunchpadChain(chainId) ? fetchSwapEvents(chainId, since) : Promise.resolve([]),
-                fetchV3SwapEvents(chainId, since),
-                fetchV2SwapEvents(chainId, since),
-            ])
-            return [...bondingCurve, ...v3, ...v2]
-        },
+    const { data: traderStats } = useQuery({
+        queryKey: ['points-leaderboard', timePeriod, chainId],
+        queryFn: () => fetchLeaderboardTraders(chainId, timePeriod),
         enabled: isSupportedChain,
         staleTime: 30_000,
         refetchInterval: 30_000,
@@ -94,7 +78,7 @@ export function usePointsData(
             }
         }
 
-        if (!rawSwapEvents || !referralBindings) {
+        if (!traderStats || !referralBindings) {
             return {
                 traders: [],
                 totalCount: 0,
@@ -109,24 +93,26 @@ export function usePointsData(
 
         const effectiveNativeUsdPrice = nativeUsdPrice ?? 0
 
-        const aggMap = aggregatePointsByAddress(rawSwapEvents)
-        const allTraders: PointsTrader[] = []
-        for (const [addr, agg] of aggMap) {
+        const pointsByAddr = new Map(
+            traderStats.map((t) => [t.address.toLowerCase(), t.points] as const)
+        )
+        const allTraders: PointsTrader[] = traderStats.map((t) => {
+            const addr = t.address.toLowerCase()
             const referees = referralBindings.get(addr) ?? []
-            allTraders.push({
+            return {
                 rank: 0,
                 address: addr,
-                volumeNative: agg.volumeNative,
-                volumeUsd: agg.volumeNative * effectiveNativeUsdPrice,
-                points: agg.points,
+                volumeNative: t.volumeNative,
+                volumeUsd: t.volumeNative * effectiveNativeUsdPrice,
+                points: t.points,
                 referredPoints: computeReferralPoints(
-                    referees.map((a) => aggMap.get(a)?.points ?? 0)
+                    referees.map((a) => pointsByAddr.get(a) ?? 0)
                 ),
-                tradeCount: agg.tradeCount,
-                buyCount: agg.buyCount,
-                sellCount: agg.sellCount,
-            })
-        }
+                tradeCount: t.tradeCount,
+                buyCount: t.buyCount,
+                sellCount: t.sellCount,
+            }
+        })
 
         const sortFn = (a: PointsTrader, b: PointsTrader) => {
             let aVal: number, bVal: number
@@ -194,7 +180,7 @@ export function usePointsData(
             isSupportedChain,
         }
     }, [
-        rawSwapEvents,
+        traderStats,
         referralBindings,
         nativeUsdPrice,
         sortKey,
