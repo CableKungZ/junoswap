@@ -33,7 +33,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const chainId = useLaunchpadChainId()
     const { tokens: allTokens, snapshotMap } = useTokenList()
     const tokenInfo = allTokens.find((t) => t.address.toLowerCase() === tokenAddr.toLowerCase())
-    const athMarketCap = snapshotMap.get(tokenAddr.toLowerCase())?.athMarketCapNative
+    const snapshotAthMarketCap = snapshotMap.get(tokenAddr.toLowerCase())?.athMarketCapNative
 
     const isGraduated = !!tokenInfo?.isGraduated
 
@@ -88,6 +88,19 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const [copied, setCopied] = useState(false)
     const [shareOpen, setShareOpen] = useState(false)
     const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null)
+
+    // The indexer's TokenSnapshot aggregate can stall after graduation on some chains, so it only
+    // sets a floor here — live reserves/swaps (dailyMetrics, liveGraduatedMarketCap) win when present.
+    const athMarketCap = useMemo(() => {
+        const snapshotAth = snapshotAthMarketCap ? parseFloat(snapshotAthMarketCap) : 0
+        const liveMcap = isGraduated ? (liveGraduatedMarketCap ?? parseFloat(marketCap)) : 0
+        return String(Math.max(snapshotAth, liveMcap))
+    }, [snapshotAthMarketCap, isGraduated, liveGraduatedMarketCap, marketCap])
+
+    const priceChange1dPct =
+        dailyMetrics?.priceChange1dPct ??
+        snapshotMap.get(tokenAddr.toLowerCase())?.priceChange1dPct ??
+        null
 
     const copyAddress = () => {
         navigator.clipboard.writeText(tokenAddr)
@@ -190,9 +203,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         name={name}
                         logo={tokenInfo?.logo}
                         marketCap={marketCap}
-                        priceChange1dPct={
-                            snapshotMap.get(tokenAddr.toLowerCase())?.priceChange1dPct ?? null
-                        }
+                        priceChange1dPct={priceChange1dPct}
                         isGraduated={isGraduated}
                     />
 
@@ -201,9 +212,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         symbol={symbol}
                         isGraduated={isGraduated}
                         athMarketCap={athMarketCap}
-                        priceChange1dPct={
-                            snapshotMap.get(tokenAddr.toLowerCase())?.priceChange1dPct ?? null
-                        }
+                        priceChange1dPct={priceChange1dPct}
                         feeBreakdown={dailyMetrics?.feeBreakdown ?? null}
                     />
 

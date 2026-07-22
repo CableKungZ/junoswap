@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedMarketCaps } from '@/hooks/useGraduatedMarketCaps'
+import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import type { LaunchpadSortKey } from '@/types/launchpad'
 import { TokenCard } from './token-card'
@@ -19,16 +20,25 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
     const [sortKey, setSortKey] = useState<LaunchpadSortKey>('last-trade')
     const chainId = useLaunchpadChainId()
 
-    const graduatedAddresses = useMemo(
-        () => tokens.filter((t) => t.isGraduated).map((t) => t.address),
+    const graduatedTokens = useMemo(
+        () =>
+            tokens
+                .filter((t) => t.isGraduated)
+                .map((t) => ({ address: t.address, graduatedAt: t.graduatedAt ?? null })),
         [tokens]
     )
+    const graduatedAddresses = useMemo(
+        () => graduatedTokens.map((t) => t.address),
+        [graduatedTokens]
+    )
     const liveMarketCaps = useGraduatedMarketCaps(graduatedAddresses, chainId)
+    const liveActivity = useGraduatedTokenActivity(graduatedTokens, chainId)
 
     const enrichedTokens = useMemo(() => {
         return tokens.map((token) => {
             const snapshot = snapshotMap.get(token.address.toLowerCase())
             const liveMarketCap = liveMarketCaps.get(token.address.toLowerCase())
+            const activity = liveActivity.get(token.address.toLowerCase())
 
             return {
                 token,
@@ -37,11 +47,15 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                 isGraduated: !!token.isGraduated,
                 marketCap:
                     liveMarketCap !== undefined ? String(liveMarketCap) : snapshot?.marketCapNative,
-                athMarketCap: snapshot?.athMarketCapNative,
-                priceChange1dPct: snapshot?.priceChange1dPct ?? undefined,
+                athMarketCap:
+                    liveMarketCap !== undefined && snapshot?.athMarketCapNative
+                        ? String(Math.max(liveMarketCap, parseFloat(snapshot.athMarketCapNative)))
+                        : snapshot?.athMarketCapNative,
+                priceChange1dPct:
+                    activity?.priceChange1dPct ?? snapshot?.priceChange1dPct ?? undefined,
             }
         })
-    }, [tokens, snapshotMap, liveMarketCaps])
+    }, [tokens, snapshotMap, liveMarketCaps, liveActivity])
 
     const filtered = useMemo(() => {
         if (!searchQuery.trim()) return enrichedTokens
@@ -59,8 +73,14 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
         return [...filtered].sort((a, b) => {
             switch (sortKey) {
                 case 'last-trade': {
-                    const aLast = snapshotMap.get(a.token.address.toLowerCase())?.lastSwapAt ?? 0
-                    const bLast = snapshotMap.get(b.token.address.toLowerCase())?.lastSwapAt ?? 0
+                    const aLast =
+                        liveActivity.get(a.token.address.toLowerCase())?.lastSwapAt ??
+                        snapshotMap.get(a.token.address.toLowerCase())?.lastSwapAt ??
+                        0
+                    const bLast =
+                        liveActivity.get(b.token.address.toLowerCase())?.lastSwapAt ??
+                        snapshotMap.get(b.token.address.toLowerCase())?.lastSwapAt ??
+                        0
                     if (bLast !== aLast) return bLast - aLast
                     return b.token.createdTime - a.token.createdTime
                 }
@@ -75,7 +95,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                     return a.token.createdTime - b.token.createdTime
             }
         })
-    }, [filtered, sortKey, snapshotMap])
+    }, [filtered, sortKey, snapshotMap, liveActivity])
 
     if (isLoading) {
         return <TokenListSkeleton />
