@@ -11,6 +11,8 @@
         "typecheck": "tsc --noEmit",
         "test": "vitest",
         "test:e2e": "playwright test",
+        "e2e:token-staking": "bun run scripts/e2e/token-staking.e2e.ts",
+        "e2e:juno-v3": "bun run scripts/e2e/juno-v3-staker.e2e.ts",
         "prepare": "husky",
         "clean": "rm -rf .next out build tsconfig.tsbuildinfo coverage playwright-report test-results .vercel"
     },
