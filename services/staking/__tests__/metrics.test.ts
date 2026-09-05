@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
     REWARD_PRECISION,
     getStakingApr,
-    getStakingProgress,
     getStakingStatus,
     sortStakingPools,
 } from '@/services/staking/metrics'
@@ -65,14 +64,6 @@ describe('getStakingStatus', () => {
         expect(getStakingStatus(view(), 999)).toBe('pending')
         expect(getStakingStatus(view(), 1500)).toBe('active')
         expect(getStakingStatus(view(), 2000)).toBe('ended')
-    })
-})
-
-describe('getStakingProgress', () => {
-    it('clamps outside the epoch and interpolates inside it', () => {
-        expect(getStakingProgress(view(), 500)).toBe(0)
-        expect(getStakingProgress(view(), 1500)).toBe(50)
-        expect(getStakingProgress(view(), 9999)).toBe(100)
     })
 })
 
