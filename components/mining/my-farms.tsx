@@ -166,7 +166,7 @@ export function MyFarms() {
     return (
         <div className="space-y-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <h2 className="text-lg font-semibold sm:text-xl">My Farms</h2>
+                <h2 className="text-lg font-semibold sm:text-xl">Farms I Created</h2>
                 <FarmListToolbar
                     sort={sort}
                     onSortChange={setSort}
@@ -177,7 +177,7 @@ export function MyFarms() {
                             value={filter}
                             options={MY_FARM_FILTER_OPTIONS}
                             onChange={setFilter}
-                            ariaLabel="Filter my farms"
+                            ariaLabel="Filter farms I created"
                         />
                     }
                 />
@@ -209,7 +209,7 @@ export function MyFarms() {
                     )}
 
                     <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
-                        <p className="text-xs text-muted-foreground">
+                        <p className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                             Showing {rangeStart}–{rangeEnd} of {visible.length}
                         </p>
                         <PaginationControls
