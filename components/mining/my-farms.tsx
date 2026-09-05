@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PaginationControls } from '@/components/ui/pagination'
-import { FarmIdentity, FarmStatusBadge } from './farm-status-badge'
+import { FarmIdentity, FarmStatusBadge, ProgramMark } from './farm-status-badge'
 import { FarmListToolbar, FarmSelectMenu } from './farm-list-toolbar'
 import { MyFarmTable } from './farm-table'
 import { EndFarmButton } from './end-farm-button'
@@ -67,6 +67,9 @@ function MyFarmCard({
                 <Separator className="my-4" />
 
                 <div className="flex flex-1 flex-col gap-3 text-sm">
+                    <DetailRow label="Reward model">
+                        <ProgramMark program={incentive.program} />
+                    </DetailRow>
                     <DetailRow label="Undistributed">
                         <span className="font-mono font-semibold tabular-nums">
                             {formatRewardAmount(

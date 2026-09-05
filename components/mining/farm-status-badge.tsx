@@ -6,6 +6,7 @@ import { formatFeeTier } from '@/lib/liquidity-helpers'
 import { getDisplayToken } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 import type { FarmStatus } from '@/services/mining/farm-list'
+import { EARN_PROGRAM_BADGE, type EarnProgram } from '@/lib/earn-programs'
 import type { Incentive } from '@/types/earn'
 
 const STATUS_LABEL: Record<FarmStatus, { label: string; className: string }> = {
@@ -23,6 +24,22 @@ export function FarmStatusBadge({ status, className }: { status: FarmStatus; cla
     )
 }
 
+/** Which staker pays this farm. A dot rather than another pill: it is provenance, not a status. */
+export function ProgramMark({ program }: { program: EarnProgram }) {
+    const { label, hint } = EARN_PROGRAM_BADGE[program]
+    return (
+        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap" title={hint}>
+            <span
+                className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    program === 'juno-v3' ? 'bg-primary' : 'bg-muted-foreground/40'
+                )}
+            />
+            {label}
+        </span>
+    )
+}
+
 /**
  * Pair icons, symbols, fee tier and the reward token — the identity block shared by card and row.
  * It shrinks rather than pushing whatever sits beside it out of the card.
@@ -30,9 +47,12 @@ export function FarmStatusBadge({ status, className }: { status: FarmStatus; cla
 export function FarmIdentity({
     incentive,
     size = 'md',
+    withProgram = false,
 }: {
     incentive: Incentive
     size?: 'sm' | 'md'
+    /** Only where the row is wide enough for it — cards show the mark in their footer instead. */
+    withProgram?: boolean
 }) {
     const token0 = getDisplayToken(incentive.poolToken0)
     const token1 = getDisplayToken(incentive.poolToken1)
@@ -49,15 +69,12 @@ export function FarmIdentity({
                 className="shrink-0"
             />
             <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-semibold">
-                        {token0.symbol} / {token1.symbol}
-                    </span>
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                        {formatFeeTier(incentive.poolFee)}
-                    </Badge>
+                <div className="truncate font-semibold">
+                    {token0.symbol} / {token1.symbol}
                 </div>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                    <span className="shrink-0">{formatFeeTier(incentive.poolFee)}</span>
+                    <span className="shrink-0 text-muted-foreground/40">·</span>
                     <span className="shrink-0">Earn</span>
                     <TokenIcon
                         src={rewardToken.logo}
@@ -66,6 +83,12 @@ export function FarmIdentity({
                         className="shrink-0"
                     />
                     <span className="truncate">{rewardToken.symbol}</span>
+                    {withProgram && (
+                        <>
+                            <span className="shrink-0 text-muted-foreground/40">·</span>
+                            <ProgramMark program={incentive.program} />
+                        </>
+                    )}
                 </div>
             </div>
         </div>

@@ -68,7 +68,12 @@ export function StakeDialog({
         isSuccess,
         error,
         hash,
-    } = useStakePosition(selectedPosition, selectedIncentive, address)
+    } = useStakePosition(
+        selectedPosition,
+        selectedIncentive,
+        address,
+        selectedIncentive?.program ?? 'v3'
+    )
     useEffect(() => {
         if (open) {
             setSelectedPositionId(null)

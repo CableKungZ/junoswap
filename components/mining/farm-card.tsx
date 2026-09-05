@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ConnectModal } from '@/components/web3/connect-modal'
-import { FarmIdentity, FarmStatusBadge } from './farm-status-badge'
+import { FarmIdentity, FarmStatusBadge, ProgramMark } from './farm-status-badge'
 import { formatTokenAmount, getDisplayToken } from '@/lib/tokens'
 import { formatTvl } from '@/lib/format'
 import { useTokenPriceMap } from '@/hooks/useTokenPriceMap'
@@ -163,7 +163,11 @@ export function MiningFarmCard({
 
                     <div className="mt-auto">
                         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span className="truncate">{barLabel}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                                <ProgramMark program={incentive.program} />
+                                <span className="text-muted-foreground/40">·</span>
+                                <span className="truncate">{barLabel}</span>
+                            </span>
                             <span className="shrink-0 tabular-nums">
                                 {isEnded ? '100%' : `${progress}%`}
                             </span>

@@ -1,5 +1,6 @@
 'use client'
 
+import { getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
 import { useMemo, useCallback, useState, useEffect } from 'react'
 import {
     useWriteContract,
@@ -40,7 +41,8 @@ const SAFE_TRANSFER_FROM_ABI = [
 export function useStakePosition(
     position: PositionWithTokens | null,
     incentiveKey: IncentiveKey | null,
-    owner: Address | undefined
+    owner: Address | undefined,
+    program: EarnProgram
 ): {
     stake: () => void
     approveAndStake: () => void
@@ -54,7 +56,7 @@ export function useStakePosition(
 } {
     const chainId = useChainId()
     const dexConfig = getDexConfig(chainId, undefined, ProtocolType.V3)
-    const stakerAddress = dexConfig?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const positionManager = dexConfig?.positionManager
     const isEnabled =
         !!position && !!incentiveKey && !!owner && !!stakerAddress && !!positionManager
@@ -154,7 +156,8 @@ export function useStakePosition(
 export function useUnstakePositions(
     tokenIds: readonly bigint[],
     incentiveKey: IncentiveKey | null,
-    recipient: Address | undefined
+    recipient: Address | undefined,
+    program: EarnProgram
 ): {
     unstake: () => void
     isPreparing: boolean
@@ -165,7 +168,7 @@ export function useUnstakePositions(
     hash: `0x${string}` | undefined
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const multicallData = useMemo(() => {
         if (!incentiveKey || !recipient || tokenIds.length === 0) return null
         return buildUnstakeManyAndWithdrawMulticall(tokenIds, incentiveKey, recipient)
@@ -214,7 +217,8 @@ export function useUnstakePositions(
  */
 export function useWithdrawPosition(
     tokenId: bigint | undefined,
-    recipient: Address | undefined
+    recipient: Address | undefined,
+    program: EarnProgram
 ): {
     withdraw: () => void
     isPreparing: boolean
@@ -225,7 +229,7 @@ export function useWithdrawPosition(
     hash: `0x${string}` | undefined
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const isEnabled = tokenId !== undefined && !!recipient && !!stakerAddress
     const {
         data: simulation,
@@ -268,6 +272,7 @@ export function useUnstakePosition(
     tokenId: bigint | undefined,
     incentiveKey: IncentiveKey | null,
     recipient: Address | undefined,
+    program: EarnProgram,
     withdrawAfterUnstake: boolean = true
 ): {
     unstake: () => void
@@ -279,7 +284,7 @@ export function useUnstakePosition(
     hash: `0x${string}` | undefined
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const isEnabled = tokenId !== undefined && !!incentiveKey && !!recipient && !!stakerAddress
     const multicallData = useMemo(() => {
         if (!isEnabled || !incentiveKey || !recipient || tokenId === undefined) {

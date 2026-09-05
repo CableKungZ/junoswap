@@ -1,13 +1,15 @@
 'use client'
 
+import { getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
 import { useMemo, useRef } from 'react'
 import { useReadContract, useReadContracts, useChainId } from 'wagmi'
 import type { IncentiveKey, StakedPosition } from '@/types/earn'
-import { ProtocolType, getDexConfig, UNISWAP_V3_STAKER_ABI } from '@coshi190/juno-moneta-sdk'
+import { UNISWAP_V3_STAKER_ABI } from '@coshi190/juno-moneta-sdk'
 import { calculateRewardRate } from '@/services/mining/create-incentive'
 export function usePendingRewards(
     incentiveKey: IncentiveKey | null,
-    tokenId: bigint | undefined
+    tokenId: bigint | undefined,
+    program: EarnProgram
 ): {
     reward: bigint
     secondsInsideX128: bigint
@@ -15,7 +17,7 @@ export function usePendingRewards(
     refetch: () => void
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const isEnabled = !!incentiveKey && tokenId !== undefined && !!stakerAddress
     const { data, isLoading, refetch } = useReadContract({
         address: stakerAddress,
@@ -54,6 +56,7 @@ export function usePendingRewards(
  * Instead this tracks a reward/timestamp baseline per position and derives the rate from how much
  * accrued between polls, extrapolated to a day.
  */
+/** Reward reads follow each position's own staker, so a merged list settles in one batch. */
 export function usePendingRewardsMultiple(stakedPositions: StakedPosition[]): {
     rewards: Map<string, bigint> // Map of tokenId-incentiveId to reward
     dailyRates: Map<string, number> // Map of tokenId-incentiveId to estimated SHK/day
@@ -61,26 +64,30 @@ export function usePendingRewardsMultiple(stakedPositions: StakedPosition[]): {
     refetch: () => void
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
     const contracts = useMemo(() => {
-        if (!stakerAddress || stakedPositions.length === 0) return []
-        return stakedPositions.map((sp) => ({
-            address: stakerAddress,
-            abi: UNISWAP_V3_STAKER_ABI,
-            functionName: 'getRewardInfo' as const,
-            args: [
+        return stakedPositions.flatMap((sp) => {
+            const staker = getStakerAddress(chainId, sp.incentive.program)
+            if (!staker) return []
+            return [
                 {
-                    rewardToken: sp.incentive.rewardToken,
-                    pool: sp.incentive.pool,
-                    startTime: BigInt(sp.incentive.startTime),
-                    endTime: BigInt(sp.incentive.endTime),
-                    refundee: sp.incentive.refundee,
+                    address: staker,
+                    abi: UNISWAP_V3_STAKER_ABI,
+                    functionName: 'getRewardInfo' as const,
+                    args: [
+                        {
+                            rewardToken: sp.incentive.rewardToken,
+                            pool: sp.incentive.pool,
+                            startTime: BigInt(sp.incentive.startTime),
+                            endTime: BigInt(sp.incentive.endTime),
+                            refundee: sp.incentive.refundee,
+                        },
+                        sp.tokenId,
+                    ] as const,
+                    chainId,
                 },
-                sp.tokenId,
-            ] as const,
-            chainId,
-        }))
-    }, [stakerAddress, stakedPositions, chainId])
+            ]
+        })
+    }, [stakedPositions, chainId])
     const { data, isLoading, refetch } = useReadContracts({
         contracts,
         query: {

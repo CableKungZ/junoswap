@@ -1,3 +1,4 @@
+import type { EarnProgram } from '@/lib/earn-programs'
 import type { RangePreset } from '@/lib/range-presets'
 import type { Address } from 'viem'
 import type { Token } from '@/types/token'
@@ -155,6 +156,8 @@ export interface IncentiveKey {
 
 export interface Incentive extends IncentiveKey {
     incentiveId: `0x${string}` // keccak256 hash of IncentiveKey
+    /** Which staker holds this farm — the two run side by side and share the list. */
+    program: EarnProgram
     totalRewardUnclaimed: bigint
     totalSecondsClaimedX128: bigint
     numberOfStakes: number

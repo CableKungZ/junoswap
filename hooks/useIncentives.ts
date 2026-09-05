@@ -17,6 +17,7 @@ import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import { findTokenByAddress } from '@/lib/tokens'
 import { useV3Tokens } from '@/hooks/useV3Tokens'
 import { useV3Pools } from '@/hooks/useV3Pools'
+import { useJunoIncentives } from '@/hooks/useJunoIncentives'
 import {
     extractIncentiveCreatedAt,
     isIncentiveActive,
@@ -25,7 +26,30 @@ import {
 
 const PONDER_INDEXED_CHAINS = new Set([25925, 96, 8899])
 
+/** Every farm from both stakers, in one list. Each carries the `program` it belongs to. */
 export function useIncentives(): {
+    incentives: Incentive[]
+    isLoading: boolean
+    refetch: () => void
+} {
+    const uniswap = useUniswapIncentives(true)
+    const juno = useJunoIncentives(true)
+    const incentives = useMemo(
+        () => [...uniswap.incentives, ...juno.incentives],
+        [uniswap.incentives, juno.incentives]
+    )
+    const refetch = useMemo(
+        () => () => {
+            uniswap.refetch()
+            juno.refetch()
+        },
+        [uniswap, juno]
+    )
+    return { incentives, isLoading: uniswap.isLoading || juno.isLoading, refetch }
+}
+
+/** The indexed, Uniswap-style staker: rows come from ponder, live state from the chain. */
+function useUniswapIncentives(enabled: boolean): {
     incentives: Incentive[]
     isLoading: boolean
     refetch: () => void
@@ -48,11 +72,11 @@ export function useIncentives(): {
                 throw e
             }
         },
-        enabled: isIndexed,
+        enabled: enabled && isIndexed,
         staleTime: 60_000,
     })
 
-    const { pools, isLoading: isLoadingPools } = useV3Pools(chainId, isIndexed)
+    const { pools, isLoading: isLoadingPools } = useV3Pools(chainId, enabled && isIndexed)
     const { tokens: v3Tokens, isLoading: isLoadingTokens } = useV3Tokens(chainId)
 
     const rows = useMemo(() => incentiveRows ?? [], [incentiveRows])
@@ -75,7 +99,7 @@ export function useIncentives(): {
     } = useReadContracts({
         contracts: stateContracts,
         query: {
-            enabled: stateContracts.length > 0,
+            enabled: enabled && stateContracts.length > 0,
             staleTime: 30_000,
         },
     })
@@ -112,7 +136,7 @@ export function useIncentives(): {
         })
 
         return rows
-            .map((row) => {
+            .map((row): Incentive | null => {
                 const pool = poolByAddress.get(row.pool.toLowerCase())
                 const rewardTokenInfo = tokenByAddress.get(row.rewardToken.toLowerCase())
                 const poolToken0 = pool ? tokenByAddress.get(pool.token0.toLowerCase()) : undefined
@@ -131,6 +155,7 @@ export function useIncentives(): {
                 return {
                     ...key,
                     incentiveId: row.incentiveId as `0x${string}`,
+                    program: 'v3',
                     totalRewardUnclaimed: state?.[0] ?? BigInt(row.reward),
                     totalSecondsClaimedX128: state?.[1] ?? 0n,
                     numberOfStakes: Number(state?.[2] ?? 0n),

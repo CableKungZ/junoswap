@@ -24,6 +24,7 @@ import { getChainMetadata } from '@/lib/wagmi'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { PositionWithTokens, StakedPosition } from '@/types/earn'
+import type { EarnProgram } from '@/lib/earn-programs'
 
 const POSITIONS_PER_PAGE = 6
 
@@ -164,16 +165,18 @@ function StakedPositionCard({
 
 function IdlePositionCard({
     position,
+    program,
     onWithdrawn,
 }: {
     position: PositionWithTokens
+    program: EarnProgram
     onWithdrawn: () => void
 }) {
     const { address } = useAccount()
     const chainId = useChainId()
     const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
     const { withdraw, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useWithdrawPosition(position.tokenId, address)
+        useWithdrawPosition(position.tokenId, address, program)
 
     useEffect(() => {
         if (!isSuccess || !hash || hash === processedTxHash) return
@@ -258,12 +261,11 @@ export function MyPositions({ onUnstake }: { onUnstake: (staked: StakedPosition)
         return deposits
             .filter((d) => d.depositor.toLowerCase() === owner)
             .filter((d) => !stakedTokenIds.has(d.position.tokenId.toString()))
-            .map((d) => d.position)
     }, [deposits, myStakes, owner])
 
     type Entry =
         | { kind: 'staked'; key: string; staked: StakedPosition }
-        | { kind: 'idle'; key: string; position: PositionWithTokens }
+        | { kind: 'idle'; key: string; position: PositionWithTokens; program: EarnProgram }
 
     const entries = useMemo<Entry[]>(() => {
         const staked = stakedPositions.map<Entry>((s) => ({
@@ -271,10 +273,11 @@ export function MyPositions({ onUnstake }: { onUnstake: (staked: StakedPosition)
             key: `${s.tokenId.toString()}-${s.incentiveId}`,
             staked: s,
         }))
-        const idle = idlePositions.map<Entry>((p) => ({
+        const idle = idlePositions.map<Entry>((d) => ({
             kind: 'idle',
-            key: `idle-${p.tokenId.toString()}`,
-            position: p,
+            key: `idle-${d.program}-${d.position.tokenId.toString()}`,
+            position: d.position,
+            program: d.program,
         }))
         return [...staked, ...idle]
     }, [stakedPositions, idlePositions])
@@ -310,6 +313,7 @@ export function MyPositions({ onUnstake }: { onUnstake: (staked: StakedPosition)
                         <IdlePositionCard
                             key={entry.key}
                             position={entry.position}
+                            program={entry.program}
                             onWithdrawn={refetch}
                         />
                     )

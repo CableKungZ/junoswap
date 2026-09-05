@@ -45,6 +45,7 @@ function farm({
 }: FarmSpec): Incentive {
     return {
         incentiveId: id as `0x${string}`,
+        program: 'v3',
         rewardToken: token.address as `0x${string}`,
         pool: pool as `0x${string}`,
         startTime,
