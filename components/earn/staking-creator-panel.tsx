@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAccount, useChainId, useReadContract } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
-import { zeroAddress } from 'viem'
+import { formatUnits, zeroAddress } from 'viem'
 import { ERC20_ABI } from '@coshi190/juno-moneta-sdk'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { useStakingPoolActions, useStartEpoch } from '@/hooks/useStakingActions'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { DurationField, unitSeconds, type ScheduleUnit } from '@/components/earn/duration-field'
@@ -16,6 +15,7 @@ import { useNowSeconds } from '@/hooks/useNowSeconds'
 import { getStakingStatus } from '@/services/staking/metrics'
 import { formatBalance, parseTokenAmount } from '@/lib/tokens'
 import { formatDuration } from '@/lib/duration'
+import { formatRateAmount } from '@/lib/format'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { StakingPool } from '@/types/staking'
 
@@ -66,6 +66,11 @@ export function StakingCreatorPanel({
     const duration = Number(durationValue || '0') * unitSeconds(durationUnit)
     const lock = Number(lockValue || '0') * unitSeconds(lockUnit)
     const needsApproval = rewardWei > 0n && ((allowance as bigint | undefined) ?? 0n) < rewardWei
+    const perDay =
+        duration > 0
+            ? Number(formatUnits(rewardWei, pool.rewardTokenInfo.decimals)) /
+              (duration / SECONDS_PER_DAY)
+            : 0
     const isBusy = epoch.isPending || epoch.isConfirming
 
     const submitEpoch = () => {
@@ -114,66 +119,106 @@ export function StakingCreatorPanel({
     })()
 
     return (
-        <div className="space-y-4">
-            <Separator />
-            <div className="flex items-baseline justify-between">
-                <h4 className="text-sm font-semibold">Creator controls</h4>
-                <span className="text-[11px] text-muted-foreground">
-                    epoch {pool.epoch} · {isClosed ? 'retired' : status}
-                </span>
+        <div className="space-y-5">
+            <div className="rounded-2xl border border-border/50 bg-muted/20 p-3 text-xs">
+                <div className="flex items-baseline justify-between">
+                    <span className="text-muted-foreground">Running epoch</span>
+                    <span className="font-medium">
+                        {pool.epoch} · {isClosed ? 'retired' : status}
+                    </span>
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between">
+                    <span className="text-muted-foreground">Budget</span>
+                    <span className="font-medium tabular-nums">
+                        {formatBalance(pool.view.rewardForDuration, pool.rewardTokenInfo.decimals)}{' '}
+                        {pool.rewardTokenInfo.symbol}
+                    </span>
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between">
+                    <span className="text-muted-foreground">Unearned so far</span>
+                    <span className="font-medium tabular-nums">
+                        {formatBalance(pool.view.unallocatedRewards, pool.rewardTokenInfo.decimals)}{' '}
+                        {pool.rewardTokenInfo.symbol}
+                    </span>
+                </div>
             </div>
 
             {!isClosed && (
                 <div className="space-y-3">
-                    <div className="space-y-2">
-                        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                            Next epoch reward ({pool.rewardTokenInfo.symbol})
-                        </Label>
-                        <Input
-                            type="number"
-                            min="0"
-                            step="any"
-                            inputMode="decimal"
-                            placeholder="0.0"
-                            value={rewardAmount}
-                            onChange={(e) => setRewardAmount(e.target.value)}
-                            disabled={!isBetweenEpochs}
-                        />
+                    <h4 className="text-sm font-semibold">Fund the next epoch</h4>
+                    <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/10 p-3">
+                        <div className="space-y-2">
+                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                                Reward ({pool.rewardTokenInfo.symbol})
+                            </Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                inputMode="decimal"
+                                placeholder="0.0"
+                                value={rewardAmount}
+                                onChange={(e) => setRewardAmount(e.target.value)}
+                                disabled={!isBetweenEpochs}
+                                className="border-border/60 bg-background/60"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <DurationField
+                                label="Duration"
+                                value={durationValue}
+                                unit={durationUnit}
+                                onValueChange={setDurationValue}
+                                onUnitChange={setDurationUnit}
+                                disabled={!isBetweenEpochs}
+                                min="1"
+                            />
+                            <DurationField
+                                label="Lock"
+                                value={lockValue}
+                                unit={lockUnit}
+                                onValueChange={setLockValue}
+                                onUnitChange={setLockUnit}
+                                disabled={!isBetweenEpochs}
+                            />
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <DurationField
-                            label="Duration"
-                            value={durationValue}
-                            unit={durationUnit}
-                            onValueChange={setDurationValue}
-                            onUnitChange={setDurationUnit}
-                            disabled={!isBetweenEpochs}
-                            min="1"
-                        />
-                        <DurationField
-                            label="Lock"
-                            value={lockValue}
-                            unit={lockUnit}
-                            onValueChange={setLockValue}
-                            onUnitChange={setLockUnit}
-                            disabled={!isBetweenEpochs}
-                        />
-                    </div>
-                    {duration > 0 && (
-                        <p className="text-[11px] text-muted-foreground">
-                            Runs for {formatDuration(duration)}
-                            {lock > 0 ? `, stakes locked ${formatDuration(lock)}` : ', no lock'}.
-                            Existing stakes stay in place.
+
+                    <div className="space-y-1.5 rounded-2xl bg-muted/20 px-3 py-2 text-xs">
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">New epoch</span>
+                            <span className="font-medium">{pool.epoch + 1}</span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">Runs for</span>
+                            <span className="font-medium">
+                                {duration > 0 ? formatDuration(duration) : '—'}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">Stakes locked</span>
+                            <span className="font-medium">
+                                {lock > 0 ? formatDuration(lock) : 'no lock'}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">Daily reward</span>
+                            <span className="font-medium tabular-nums">
+                                {perDay > 0
+                                    ? `${formatRateAmount(perDay, pool.rewardTokenInfo.symbol)} / day`
+                                    : '—'}
+                            </span>
+                        </div>
+                        <p className="pt-1 text-[11px] text-muted-foreground">
+                            Existing stakes stay in place; nobody has to unstake between epochs.
                         </p>
-                    )}
+                    </div>
+
                     <Button
                         className="w-full"
-                        variant="outline"
+                        size="lg"
                         disabled={isBusy || epochBlocker !== null}
                         isLoading={isBusy}
-                        loadingText={
-                            lastAction.current === 'approve' ? 'Approving...' : 'Funding epoch...'
-                        }
                         onClick={() => {
                             if (epochBlocker) return
                             if (needsApproval) {
@@ -184,40 +229,50 @@ export function StakingCreatorPanel({
                             submitEpoch()
                         }}
                     >
-                        {epochBlocker ?? 'Fund next epoch'}
+                        {isBusy
+                            ? lastAction.current === 'approve'
+                                ? 'Approving...'
+                                : 'Funding epoch...'
+                            : (epochBlocker ?? 'Fund next epoch')}
                     </Button>
                 </div>
             )}
 
-            <div className="flex gap-2">
-                {!isClosed && (
-                    <Button
-                        variant="outline"
-                        className="flex-1"
-                        disabled={!isBetweenEpochs || actions.isPending || actions.isConfirming}
-                        onClick={() => actions.close()}
-                        title="Retire the pool for good. Withdrawing and claiming stay open forever."
-                    >
-                        Retire pool
-                    </Button>
-                )}
-                {isClosed && pool.view.unallocatedRewards > 0n && (
-                    <Button
-                        variant="outline"
-                        className="flex-1"
-                        disabled={actions.isPending || actions.isConfirming}
-                        onClick={() => actions.recoverUnallocated()}
-                    >
-                        Recover{' '}
-                        {formatBalance(pool.view.unallocatedRewards, pool.rewardTokenInfo.decimals)}{' '}
-                        {pool.rewardTokenInfo.symbol}
-                    </Button>
-                )}
-            </div>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Retiring blocks further epochs and unlocks recovery of the budget that ran while
-                nothing was staked. It can never cut an epoch short, and never blocks a withdrawal.
-            </p>
+            {isClosed && pool.view.unallocatedRewards > 0n && (
+                <Button
+                    className="w-full"
+                    size="lg"
+                    disabled={actions.isPending || actions.isConfirming}
+                    isLoading={actions.isPending || actions.isConfirming}
+                    onClick={() => actions.recoverUnallocated()}
+                >
+                    Recover{' '}
+                    {formatBalance(pool.view.unallocatedRewards, pool.rewardTokenInfo.decimals)}{' '}
+                    {pool.rewardTokenInfo.symbol}
+                </Button>
+            )}
+
+            {!isClosed && (
+                <div className="space-y-2 rounded-2xl border border-destructive/25 bg-destructive/5 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-semibold">Retire this pool</h4>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                            disabled={!isBetweenEpochs || actions.isPending || actions.isConfirming}
+                            onClick={() => actions.close()}
+                        >
+                            Retire
+                        </Button>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        Permanent: no further epochs, and it unlocks recovery of the budget that ran
+                        while nothing was staked. It can never cut an epoch short, and withdrawing
+                        and claiming stay open forever.
+                    </p>
+                </div>
+            )}
         </div>
     )
 }
