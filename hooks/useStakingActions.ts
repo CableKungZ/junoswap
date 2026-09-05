@@ -17,8 +17,17 @@ interface TxState {
 
 function useTx(): TxState & { write: ReturnType<typeof useWriteContract>['writeContract'] } {
     const { writeContract, data: hash, isPending, error } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
-    return { write: writeContract, hash, isPending, isConfirming, isSuccess, error }
+    const { isLoading, isSuccess } = useWaitForTransactionReceipt({ hash })
+    // Without a hash the receipt query is idle, and its isLoading must not read as "confirming"
+    // — that spun the submit button of every form the moment it opened.
+    return {
+        write: writeContract,
+        hash,
+        isPending,
+        isConfirming: !!hash && isLoading,
+        isSuccess,
+        error,
+    }
 }
 
 /** Approve, stake, withdraw and claim against one pool. The lens already reports the
