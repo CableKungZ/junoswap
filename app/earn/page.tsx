@@ -21,6 +21,7 @@ import {
 import { CreateEarnProgramDialog } from '@/components/earn/create-earn-program-dialog'
 import { CreateStakingPoolDialog } from '@/components/earn/create-staking-pool-dialog'
 import { StakingPools } from '@/components/earn/staking-pools'
+import { EmptyState } from '@/components/ui/empty-state'
 import { getAvailablePrograms, getStakingRewards, type EarnProgram } from '@/lib/earn-programs'
 import { incentiveToPoolData } from '@/services/mining/incentives'
 import type { Incentive, StakedPosition, V3PoolData } from '@/types/earn'
@@ -33,24 +34,32 @@ const TABS = [
 
 type TabValue = (typeof TABS)[number]['value']
 
-/** A tab whose contracts are not deployed on this chain is hidden, not shown empty. */
-function availableTabs(chainId: number) {
-    return TABS.filter((tab) => {
-        if (tab.value === 'lp-farming') return getAvailablePrograms(chainId).length > 0
-        if (tab.value === 'token-staking') return !!getStakingRewards(chainId)
-        return true
-    })
+/** A tab still waiting on its contracts stays visible, marked "Soon" rather than hidden. */
+function isTabReady(tab: TabValue, chainId: number) {
+    if (tab === 'lp-farming') return getAvailablePrograms(chainId).length > 0
+    if (tab === 'token-staking') return !!getStakingRewards(chainId)
+    return true
+}
+
+function ComingSoon({ label }: { label: string }) {
+    return (
+        <EmptyState
+            title="Coming soon"
+            description={`${label} is not live on this network yet. Switch to a supported network to use it today — it is on the way here.`}
+        />
+    )
 }
 
 function EarnContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const chainId = useChainId()
-    const tabs = availableTabs(chainId)
     const tabParam = searchParams.get('tab')
-    const tab: TabValue = tabs.some((t) => t.value === tabParam)
+    const tab: TabValue = TABS.some((t) => t.value === tabParam)
         ? (tabParam as TabValue)
         : 'liquidity'
+    const farmingReady = isTabReady('lp-farming', chainId)
+    const stakingReady = isTabReady('token-staking', chainId)
     const [createProgram, setCreateProgram] = useState<EarnProgram>('v3')
 
     const [selectedIncentive, setSelectedIncentive] = useState<Incentive | null>(null)
@@ -108,13 +117,18 @@ function EarnContent() {
                 >
                     <div className="flex items-center justify-between gap-2 border-b border-border/50">
                         <TabsList className="w-full justify-start gap-4">
-                            {tabs.map((t) => (
+                            {TABS.map((t) => (
                                 <TabsTrigger
                                     key={t.value}
                                     value={t.value}
                                     className="rounded-none border-b-2 border-transparent px-1 pb-3 data-[state=active]:border-primary"
                                 >
                                     {t.label}
+                                    {!isTabReady(t.value, chainId) && (
+                                        <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            Soon
+                                        </span>
+                                    )}
                                 </TabsTrigger>
                             ))}
                         </TabsList>
@@ -133,20 +147,29 @@ function EarnContent() {
                     </TabsContent>
 
                     <TabsContent value="lp-farming" className="space-y-6">
-                        <MiningFarms
-                            onStake={openStakeDialog}
-                            onUnstake={openFarmUnstakeDialog}
-                            onAddLiquidity={(incentive) =>
-                                openAddLiquidity(incentiveToPoolData(incentive))
-                            }
-                            onCreate={() => setIsProgramPickerOpen(true)}
-                        />
-                        <MyPositions onUnstake={openUnstakeDialog} />
-                        <MyFarms />
+                        {!farmingReady && <ComingSoon label="LP Farming" />}
+                        {farmingReady && (
+                            <>
+                                <MiningFarms
+                                    onStake={openStakeDialog}
+                                    onUnstake={openFarmUnstakeDialog}
+                                    onAddLiquidity={(incentive) =>
+                                        openAddLiquidity(incentiveToPoolData(incentive))
+                                    }
+                                    onCreate={() => setIsProgramPickerOpen(true)}
+                                />
+                                <MyPositions onUnstake={openUnstakeDialog} />
+                                <MyFarms />
+                            </>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="token-staking">
-                        <StakingPools onCreate={() => setIsProgramPickerOpen(true)} />
+                        {stakingReady ? (
+                            <StakingPools onCreate={() => setIsProgramPickerOpen(true)} />
+                        ) : (
+                            <ComingSoon label="Token Staking" />
+                        )}
                     </TabsContent>
                 </Tabs>
 

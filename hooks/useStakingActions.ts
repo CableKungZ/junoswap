@@ -1,7 +1,14 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useChainId, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
+import { useCallback, useState } from 'react'
+import {
+    useAccount,
+    useChainId,
+    usePublicClient,
+    useReadContracts,
+    useWaitForTransactionReceipt,
+    useWriteContract,
+} from 'wagmi'
 import { maxUint256, type Address } from 'viem'
 import { ERC20_ABI } from '@coshi190/juno-moneta-sdk'
 import { STAKING_REWARDS_ABI, STAKING_REWARDS_FACTORY_ABI } from '@/lib/abis/staking-rewards'
@@ -15,10 +22,51 @@ interface TxState {
     hash: `0x${string}` | undefined
 }
 
-function useTx(): TxState & { write: ReturnType<typeof useWriteContract>['writeContract'] } {
+type WriteArgs = Parameters<ReturnType<typeof useWriteContract>['writeContract']>[0]
+
+function useTx(): TxState & { write: (params: WriteArgs) => void } {
     const { writeContract, data: hash, isPending, error } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
-    return { write: writeContract, hash, isPending, isConfirming, isSuccess, error }
+    const publicClient = usePublicClient()
+    const { address: account } = useAccount()
+    const [simulationError, setSimulationError] = useState<Error | null>(null)
+    const [isSimulating, setIsSimulating] = useState(false)
+    // KUB's RPC is load balanced and a node that has not caught up answers eth_getTransactionReceipt
+    // with null, so the default watch can poll past the point of being useful. The timeout ends the
+    // wait with an error the form can report, instead of a button that spins for good.
+    const {
+        isLoading,
+        isSuccess,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash, pollingInterval: 2_000, timeout: 120_000 })
+    // Without a hash the receipt query is idle, and its isLoading must not read as "confirming"
+    // — that spun the submit button of every form the moment it opened.
+    // Simulate first: a revert then surfaces with its reason before the wallet ever opens, instead
+    // of asking the user to sign a transaction that cannot succeed.
+    const write = useCallback(
+        (params: WriteArgs) => {
+            setSimulationError(null)
+            if (!publicClient || !account) {
+                writeContract(params)
+                return
+            }
+            setIsSimulating(true)
+            publicClient
+                .simulateContract({ ...params, account } as never)
+                .then(({ request }) => writeContract(request as WriteArgs))
+                .catch((cause) => setSimulationError(cause as Error))
+                .finally(() => setIsSimulating(false))
+        },
+        [publicClient, account, writeContract]
+    )
+
+    return {
+        write,
+        hash,
+        isPending: isPending || isSimulating,
+        isConfirming: !!hash && isLoading,
+        isSuccess,
+        error: simulationError ?? error ?? receiptError,
+    }
 }
 
 /** Approve, stake, withdraw and claim against one pool. The lens already reports the
@@ -79,6 +127,17 @@ export function useStakingPoolActions(
         })
     }, [tx, pool, chainId])
 
+    /** Everything unlocked plus every reward, in one transaction. Locked lots simply stay put. */
+    const exit = useCallback(() => {
+        if (!pool) return
+        tx.write({
+            address: pool,
+            abi: STAKING_REWARDS_ABI,
+            functionName: 'exit',
+            chainId,
+        })
+    }, [tx, pool, chainId])
+
     /** Withdraw from one deposit lot directly, instead of draining unlocked lots oldest first. */
     const withdrawFrom = useCallback(
         (index: bigint, amount: bigint) => {
@@ -116,7 +175,17 @@ export function useStakingPoolActions(
         })
     }, [tx, pool, chainId])
 
-    return { approve, stake, withdraw, withdrawFrom, claim, close, recoverUnallocated, ...tx }
+    return {
+        approve,
+        stake,
+        withdraw,
+        withdrawFrom,
+        exit,
+        claim,
+        close,
+        recoverUnallocated,
+        ...tx,
+    }
 }
 
 /** Harvests several pools in one transaction, through the factory. */

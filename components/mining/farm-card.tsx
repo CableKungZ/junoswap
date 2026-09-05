@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { FarmIdentity, FarmStatusBadge, ProgramMark } from './farm-status-badge'
 import { formatTokenAmount, getDisplayToken } from '@/lib/tokens'
-import { formatTvl } from '@/lib/format'
+import { formatAprPercent, formatTvl } from '@/lib/format'
 import { useTokenPriceMap } from '@/hooks/useTokenPriceMap'
 import {
     formatTimeRemaining,
@@ -32,13 +32,6 @@ function formatUsd(value: number): string {
     if (value >= 1_000)
         return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     return `$${value.toFixed(2)}`
-}
-
-function formatAprPercent(apr: number | undefined): string {
-    if (apr === undefined) return '—'
-    if (apr >= 1000) return `${Math.round(apr).toLocaleString('en-US')}%`
-    if (apr >= 1) return `${apr.toFixed(1)}%`
-    return apr > 0 ? '<1%' : '0%'
 }
 
 function Metric({

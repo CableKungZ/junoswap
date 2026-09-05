@@ -1,3 +1,4 @@
+import { formatUnits } from 'viem'
 import type { ReactNode } from 'react'
 
 export function formatTvl(tvlUsd: number): string {
@@ -47,9 +48,28 @@ export function formatRewardAmount(value: bigint, decimals: number): string {
     return num.toFixed(leadingZeros + 3)
 }
 
-export function formatRateAmount(amount: number, symbol: string): string {
+/**
+ * The whole number with thousands separators. For limits and caps, where an abbreviation like
+ * "2.00K" hides the exact figure the contract enforces.
+ */
+export function formatExactAmount(amount: bigint, decimals: number): string {
+    return Number(formatUnits(amount, decimals)).toLocaleString('en-US', {
+        maximumFractionDigits: 6,
+    })
+}
+
+/** Shared APR reading: thousands separated, one decimal, and a floor so 0.4% never reads as 0%. */
+export function formatAprPercent(apr: number | null | undefined): string {
+    if (apr === null || apr === undefined || !Number.isFinite(apr)) return '—'
+    if (apr >= 1000) return `${Math.round(apr).toLocaleString('en-US')}%`
+    if (apr >= 1)
+        return `${apr.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+    return apr > 0 ? '<1%' : '0%'
+}
+
+export function formatRateAmount(amount: number, symbol = ''): string {
     const digits = amount >= 100 ? 0 : amount >= 1 ? 2 : 6
-    return `${amount.toLocaleString('en-US', { maximumFractionDigits: digits })} ${symbol}`
+    return `${amount.toLocaleString('en-US', { maximumFractionDigits: digits })} ${symbol}`.trim()
 }
 
 export function formatChartPrice(value: number): string {

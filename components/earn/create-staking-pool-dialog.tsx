@@ -7,16 +7,28 @@ import { zeroAddress, type Address } from 'viem'
 import { ERC20_ABI } from '@coshi190/juno-moneta-sdk'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { TokenSelect } from '@/components/swap/token-select'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { useCreateStakingPool } from '@/hooks/useStakingActions'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
-import { DurationField, unitSeconds, type ScheduleUnit } from '@/components/earn/duration-field'
-import { formatBalance, formatTokenAmount, getTokensForChain, parseTokenAmount } from '@/lib/tokens'
+import {
+    DurationField,
+    FIELD_CLASS,
+    FieldShell,
+    StartField,
+    startTimeSeconds,
+    unitSeconds,
+    type ScheduleUnit,
+    type StartMode,
+} from '@/components/earn/duration-field'
+import { formatBalance, formatTokenAmount, parseTokenAmount } from '@/lib/tokens'
+import { useChainTokens } from '@/hooks/useChainTokens'
 import { isNativeToken } from '@/lib/wagmi'
-import { formatDuration } from '@/lib/duration'
+import { formatDateTime, formatDuration } from '@/lib/duration'
+import { formatExactAmount } from '@/lib/format'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { Token } from '@/types/token'
 
@@ -45,6 +57,9 @@ export function CreateStakingPoolDialog({
     const [durationUnit, setDurationUnit] = useState<ScheduleUnit>('days')
     const [lockValue, setLockValue] = useState('0')
     const [lockUnit, setLockUnit] = useState<ScheduleUnit>('days')
+    const [startMode, setStartMode] = useState<StartMode>('now')
+    const [startAt, setStartAt] = useState('')
+    const [capValue, setCapValue] = useState('')
     const [isConnectOpen, setIsConnectOpen] = useState(false)
     // What the shared write hook is currently carrying — the allowance read lags a confirmed
     // approval by a block or two, so it cannot be used to tell the two transactions apart.
@@ -57,15 +72,20 @@ export function CreateStakingPoolDialog({
         setRewardAmount('')
         setDurationValue('30')
         setDurationUnit('days')
+        setStartMode('now')
+        setStartAt('')
+        setCapValue('')
         setLockValue('0')
         setLockUnit('days')
         lastAction.current = null
     }, [open])
 
-    // The pool moves both tokens with transferFrom, so the native coin can never be used.
+    // Same list the swap picker offers — static, graduated, v3 and imported tokens. The pool moves
+    // both tokens with transferFrom, so the native coin can never be used.
+    const { tokens: chainTokens } = useChainTokens(chainId)
     const tokenOptions = useMemo(
-        () => getTokensForChain(chainId).filter((t) => !isNativeToken(t.address as Address)),
-        [chainId]
+        () => chainTokens.filter((t) => !isNativeToken(t.address as Address)),
+        [chainTokens]
     )
 
     const { data: balances } = useReadContracts({
@@ -116,6 +136,9 @@ export function CreateStakingPoolDialog({
     const needsFeeApproval = !!create.fee && feeAllowance < create.fee.amount
     const isBusy = create.isPending || create.isConfirming
 
+    const startTime = startTimeSeconds(startMode, startAt)
+    const cap = capValue && stakingToken ? parseTokenAmount(capValue, stakingToken.decimals) : 0n
+
     const blocker = (() => {
         if (!stakingToken) return 'Select the staking token'
         if (!rewardsToken) return 'Select the reward token'
@@ -124,6 +147,9 @@ export function CreateStakingPoolDialog({
         if (duration <= 0) return 'Enter the duration'
         if (duration > MAX_DURATION_DAYS * SECONDS_PER_DAY) return 'At most 365 days'
         if (lock > duration) return 'Lock cannot outlast the epoch'
+        if (startMode === 'scheduled' && startTime === 0n) return 'Pick the start time'
+        if (startTime > BigInt(Math.floor(Date.now() / 1000) + MAX_DURATION_DAYS * SECONDS_PER_DAY))
+            return 'Start within 365 days'
         return null
     })()
 
@@ -134,12 +160,12 @@ export function CreateStakingPoolDialog({
             stakingToken: stakingToken.address as Address,
             rewardsToken: rewardsToken.address as Address,
             rewardAmount: rewardWei,
-            startTime: 0n,
+            startTime,
             rewardsDuration: BigInt(duration),
             lockDuration: BigInt(lock),
-            maxStakingPower: 0n,
+            maxStakingPower: cap,
         })
-    }, [create, stakingToken, rewardsToken, rewardWei, duration, lock])
+    }, [create, stakingToken, rewardsToken, rewardWei, duration, lock, startTime, cap])
 
     const submitNext = useCallback(() => {
         if (needsFeeApproval && create.fee) {
@@ -287,6 +313,29 @@ export function CreateStakingPoolDialog({
                             />
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3">
+                            <StartField
+                                mode={startMode}
+                                value={startAt}
+                                onModeChange={setStartMode}
+                                onValueChange={setStartAt}
+                            />
+                            <FieldShell
+                                label={`Max staked${stakingToken ? ` (${stakingToken.symbol})` : ''}`}
+                            >
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    inputMode="decimal"
+                                    placeholder="Unlimited"
+                                    value={capValue}
+                                    onChange={(e) => setCapValue(e.target.value)}
+                                    className={FIELD_CLASS}
+                                />
+                            </FieldShell>
+                        </div>
+
                         <Separator />
 
                         <div className="space-y-2 text-sm">
@@ -302,6 +351,22 @@ export function CreateStakingPoolDialog({
                                     {lock > 0 ? formatDuration(lock) : 'no lock'}
                                 </span>
                             </div>
+                            <div className="flex items-baseline justify-between gap-4">
+                                <span className="text-muted-foreground">Starts</span>
+                                <span className="font-medium">
+                                    {startTime > 0n
+                                        ? formatDateTime(Number(startTime))
+                                        : 'immediately'}
+                                </span>
+                            </div>
+                            <div className="flex items-baseline justify-between gap-4">
+                                <span className="text-muted-foreground">Max staked</span>
+                                <span className="font-medium tabular-nums">
+                                    {cap > 0n && stakingToken
+                                        ? `${formatExactAmount(cap, stakingToken.decimals)} ${stakingToken.symbol}`
+                                        : 'unlimited'}
+                                </span>
+                            </div>
                             {create.fee && (
                                 <div className="flex items-baseline justify-between gap-4">
                                     <span className="text-muted-foreground">Creation fee</span>
@@ -314,8 +379,8 @@ export function CreateStakingPoolDialog({
 
                         <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                             The reward is pulled from your wallet into the new pool when it is
-                            created, and the first epoch starts right away. When it ends you can
-                            fund another epoch on the same pool — stakers never have to unstake.
+                            created. When the epoch ends you can fund another one on the same pool —
+                            stakers never have to unstake.
                         </p>
 
                         <Button

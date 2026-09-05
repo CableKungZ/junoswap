@@ -16,7 +16,7 @@ import { FarmIdentity, FarmStatusBadge } from './farm-status-badge'
 import { EndFarmButton } from './end-farm-button'
 import { getFarmStatusAt } from '@/services/mining/farm-list'
 import { formatRelativeTimeShort } from '@/lib/duration'
-import { formatRewardAmount, formatTvl } from '@/lib/format'
+import { formatAprPercent, formatRewardAmount, formatTvl } from '@/lib/format'
 import { getDisplayToken } from '@/lib/tokens'
 import type { FarmStats } from '@/hooks/useFarmStats'
 import type { Incentive } from '@/types/earn'
@@ -63,15 +63,7 @@ function ScheduleCell({ incentive, now }: { incentive: Incentive; now: number })
 
 function AprCell({ apr }: { apr: number | undefined }) {
     if (apr === undefined) return <span className="text-muted-foreground">—</span>
-    if (apr >= 1000)
-        return (
-            <span className="font-semibold text-positive tabular-nums">
-                {Math.round(apr).toLocaleString('en-US')}%
-            </span>
-        )
-    if (apr >= 1)
-        return <span className="font-semibold text-positive tabular-nums">{apr.toFixed(1)}%</span>
-    return <span className="font-semibold text-positive tabular-nums">&lt;1%</span>
+    return <span className="font-semibold text-positive tabular-nums">{formatAprPercent(apr)}</span>
 }
 
 export function FarmTable({
@@ -103,7 +95,6 @@ export function FarmTable({
                         <TableHead className="py-3 px-4">Remaining</TableHead>
                         <TableHead className="py-3 px-4">Value</TableHead>
                         <TableHead className="py-3 px-4">Status</TableHead>
-                        <TableHead className="py-3 px-4">Schedule</TableHead>
                         <TableHead className="py-3 px-4 text-right">Action</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -114,7 +105,12 @@ export function FarmTable({
                         return (
                             <TableRow key={incentive.incentiveId} className="border-0">
                                 <TableCell className="p-3 px-4">
-                                    <FarmIdentity incentive={incentive} size="sm" withProgram />
+                                    <FarmIdentity
+                                        incentive={incentive}
+                                        size="sm"
+                                        withProgram
+                                        schedule={<ScheduleCell incentive={incentive} now={now} />}
+                                    />
                                 </TableCell>
                                 <TableCell className="p-3 px-4">
                                     <AprCell apr={stats?.aprPercent} />
@@ -130,9 +126,6 @@ export function FarmTable({
                                 </TableCell>
                                 <TableCell className="p-3 px-4">
                                     <FarmStatusBadge status={status} />
-                                </TableCell>
-                                <TableCell className="p-3 px-4">
-                                    <ScheduleCell incentive={incentive} now={now} />
                                 </TableCell>
                                 <TableCell className="p-3 px-4">
                                     <div className="flex items-center justify-end gap-1.5">
@@ -206,7 +199,6 @@ export function MyFarmTable({
                         <TableHead className="py-3 px-4">Undistributed</TableHead>
                         <TableHead className="py-3 px-4">Value</TableHead>
                         <TableHead className="py-3 px-4">Status</TableHead>
-                        <TableHead className="py-3 px-4">Schedule</TableHead>
                         <TableHead className="py-3 px-4 text-right">Staked</TableHead>
                         <TableHead className="py-3 px-4 text-right">Action</TableHead>
                     </TableRow>
@@ -215,7 +207,12 @@ export function MyFarmTable({
                     {incentives.map((incentive) => (
                         <TableRow key={incentive.incentiveId} className="border-0">
                             <TableCell className="p-3 px-4">
-                                <FarmIdentity incentive={incentive} size="sm" withProgram />
+                                <FarmIdentity
+                                    incentive={incentive}
+                                    size="sm"
+                                    withProgram
+                                    schedule={<ScheduleCell incentive={incentive} now={now} />}
+                                />
                             </TableCell>
                             <TableCell className="p-3 px-4">
                                 <RewardCell incentive={incentive} />
@@ -225,9 +222,6 @@ export function MyFarmTable({
                             </TableCell>
                             <TableCell className="p-3 px-4">
                                 <FarmStatusBadge status={getFarmStatusAt(incentive, now)} />
-                            </TableCell>
-                            <TableCell className="p-3 px-4">
-                                <ScheduleCell incentive={incentive} now={now} />
                             </TableCell>
                             <TableCell className="p-3 px-4 text-right tabular-nums">
                                 {incentive.numberOfStakes}

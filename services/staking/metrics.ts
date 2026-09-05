@@ -18,16 +18,6 @@ export function rewardPerSecond(view: StakingPoolView, rewardDecimals: number): 
     return Number(formatUnits(view.rewardRate / REWARD_PRECISION, rewardDecimals))
 }
 
-/** How far through the running epoch the pool is, 0–100. */
-export function getStakingProgress(view: StakingPoolView, nowSeconds: number): number {
-    const start = Number(view.startTime)
-    const end = Number(view.periodFinish)
-    if (end <= start) return 0
-    if (nowSeconds <= start) return 0
-    if (nowSeconds >= end) return 100
-    return Math.round(((nowSeconds - start) / (end - start)) * 100)
-}
-
 /**
  * Annualised reward value over staked value, in percent. Needs both token prices; returns null
  * when either is unknown or nothing is staked yet (an APR against a zero stake is meaningless).

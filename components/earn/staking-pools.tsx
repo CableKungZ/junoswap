@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Settings2 } from 'lucide-react'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PaginationControls } from '@/components/ui/pagination'
 import { TokenIcon } from '@/components/ui/token-icon'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ConnectModal } from '@/components/web3/connect-modal'
@@ -22,22 +23,32 @@ import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { useNowSeconds } from '@/hooks/useNowSeconds'
 import { useTokenPriceMap } from '@/hooks/useTokenPriceMap'
 import { getStakingRewards } from '@/lib/earn-programs'
+import { clampPage, getTotalPages, paginate } from '@/services/mining/farm-list'
 import {
     filterStakingPools,
     getStakingApr,
-    getStakingProgress,
     getStakingStatus,
     rewardPerSecond,
     sortStakingPools,
 } from '@/services/staking/metrics'
 import { formatDuration, formatRelativeTime } from '@/lib/duration'
-import { formatRateAmount, formatRewardAmount } from '@/lib/format'
+import {
+    formatAprPercent,
+    formatExactAmount,
+    formatRateAmount,
+    formatRewardAmount,
+} from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { formatBalance, formatTokenAmount, parseTokenAmount } from '@/lib/tokens'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { StakingPool, StakingPoolFilter, StakingPoolStatus } from '@/types/staking'
 
 const SECONDS_PER_DAY = 86_400
+const LOTS_PER_PAGE = 4
+
+function min(a: bigint, b: bigint): bigint {
+    return a < b ? a : b
+}
 
 const FILTERS: { value: StakingPoolFilter; label: string }[] = [
     { value: 'all', label: 'All pools' },
@@ -65,29 +76,55 @@ function StatusBadge({ status }: { status: StakingPoolStatus }) {
 
 function Metric({
     label,
+    unit,
     value,
     sub,
+    subHint,
     hint,
+    accent,
 }: {
     label: string
+    unit?: string
     value: string
     sub?: string
+    /** The exact figure behind an abbreviated `sub`, on hover. */
+    subHint?: string
     hint?: string
+    accent?: boolean
 }) {
     return (
         <div className="min-w-0">
             <div
                 className={cn(
-                    'text-[10px] uppercase tracking-wider text-muted-foreground',
+                    'truncate text-[10px] uppercase tracking-wider text-muted-foreground',
                     hint && 'cursor-help underline decoration-dotted underline-offset-2'
                 )}
                 title={hint}
             >
                 {label}
             </div>
-            <div className="mt-1 truncate text-base font-bold tracking-tight">{value}</div>
+            <div className="mt-1 flex items-baseline gap-1">
+                <span
+                    className={cn(
+                        'truncate text-base font-bold tracking-tight',
+                        accent && 'text-positive'
+                    )}
+                >
+                    {value}
+                </span>
+                {unit && (
+                    <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                        {unit}
+                    </span>
+                )}
+            </div>
             {sub && (
-                <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{sub}</div>
+                <div
+                    className="mt-0.5 truncate font-mono text-xs text-muted-foreground"
+                    title={subHint}
+                >
+                    {sub}
+                </div>
             )}
         </div>
     )
@@ -111,13 +148,33 @@ function PoolCard({
     const { address: account, isConnected } = useAccount()
     const isCreator = !!account && account.toLowerCase() === pool.view.creator.toLowerCase()
     const status = getStakingStatus(pool.view, now)
-    const progress = getStakingProgress(pool.view, now)
+    // Every creator action is only legal between epochs, so the gear stays hidden until then.
+    const canManagePool = status === 'ended' || status === 'closed'
+    const claim = useStakingPoolActions(pool.address, pool.view.stakingToken)
+    const queryClient = useQueryClient()
+    useOnTxSuccess(true, claim.isSuccess, claim.hash, () => {
+        toastSuccess('Rewards claimed')
+        queryClient.invalidateQueries()
+    })
+    useEffect(() => {
+        if (claim.error) toastError(claim.error)
+    }, [claim.error])
     const perDay = rewardPerSecond(pool.view, pool.rewardTokenInfo.decimals) * SECONDS_PER_DAY
+    // A cap is a limit a staker can actually hit, so the card says how close it is.
+    const capPercent =
+        pool.view.maxStakingPower > 0n
+            ? Number((pool.view.totalSupply * 10_000n) / pool.view.maxStakingPower) / 100
+            : null
+    // Share of the pool is what actually sets this account's cut of the daily reward.
+    const sharePercent =
+        pool.user.balance > 0n && pool.view.totalSupply > 0n
+            ? Number((pool.user.balance * 10_000n) / pool.view.totalSupply) / 100
+            : null
     const endsIn =
         status === 'active'
-            ? formatRelativeTime(Number(pool.view.periodFinish), now)
+            ? `Ends ${formatRelativeTime(Number(pool.view.periodFinish), now)}`
             : status === 'pending'
-              ? `starts ${formatRelativeTime(Number(pool.view.startTime), now)}`
+              ? `Starts ${formatRelativeTime(Number(pool.view.startTime), now)}`
               : STATUS_LABEL[status]
 
     return (
@@ -140,6 +197,7 @@ function PoolCard({
                                     ? `${formatDuration(Number(pool.view.lockDuration))} lock`
                                     : 'no lock'}
                             </div>
+                            <div className="truncate text-xs text-muted-foreground">{endsIn}</div>
                         </div>
                     </div>
                     <StatusBadge status={status} />
@@ -151,59 +209,57 @@ function PoolCard({
                     <div className="grid grid-cols-2 gap-4">
                         <Metric
                             label="APR"
-                            value={aprPercent === null ? '—' : `${aprPercent.toFixed(2)}%`}
+                            value={formatAprPercent(aprPercent)}
                             sub={pool.view.totalSupply === 0n ? 'no stakers yet' : undefined}
                         />
                         <Metric
                             label="Total staked"
-                            value={`${formatBalance(pool.view.totalSupply, pool.stakingTokenInfo.decimals)} ${pool.stakingTokenInfo.symbol}`}
+                            unit={pool.stakingTokenInfo.symbol}
+                            value={formatBalance(
+                                pool.view.totalSupply,
+                                pool.stakingTokenInfo.decimals
+                            )}
                             sub={
-                                pool.view.maxStakingPower > 0n
-                                    ? `cap ${formatBalance(pool.view.maxStakingPower, pool.stakingTokenInfo.decimals)}`
-                                    : undefined
+                                capPercent === null
+                                    ? undefined
+                                    : `${capPercent.toFixed(capPercent >= 10 ? 0 : 1)}% of ${formatBalance(
+                                          pool.view.maxStakingPower,
+                                          pool.stakingTokenInfo.decimals
+                                      )} cap`
+                            }
+                            subHint={
+                                capPercent === null
+                                    ? undefined
+                                    : `${formatExactAmount(pool.view.totalSupply, pool.stakingTokenInfo.decimals)} of ${formatExactAmount(
+                                          pool.view.maxStakingPower,
+                                          pool.stakingTokenInfo.decimals
+                                      )} ${pool.stakingTokenInfo.symbol} staked`
                             }
                         />
                     </div>
-                    <Metric
-                        label="Emission"
-                        value={
-                            perDay > 0
-                                ? `${formatRateAmount(perDay, pool.rewardTokenInfo.symbol)} / day`
-                                : '—'
-                        }
-                        sub={`epoch ${pool.epoch} · ${formatRewardAmount(
-                            pool.view.rewardForDuration,
-                            pool.rewardTokenInfo.decimals
-                        )} ${pool.rewardTokenInfo.symbol} budget`}
-                        hint="The epoch's whole budget spread evenly over its duration, then split between everyone staked at that moment — so your share moves with the total staked, not with the clock."
-                    />
-
-                    <div className="mt-auto">
-                        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span className="truncate">{endsIn}</span>
-                            <span className="shrink-0 tabular-nums">{progress}%</span>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                            <div
-                                className="h-full rounded-full bg-primary/70 transition-all duration-300"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Metric
+                            label="Daily Reward"
+                            unit={pool.rewardTokenInfo.symbol}
+                            value={perDay > 0 ? formatRateAmount(perDay) : '—'}
+                            hint="The epoch's whole budget spread evenly over its duration, then split between everyone staked at that moment — so your share moves with the total staked, not with the clock."
+                        />
+                        <Metric
+                            label="Your staked power"
+                            unit={pool.stakingTokenInfo.symbol}
+                            value={formatBalance(pool.user.balance, pool.stakingTokenInfo.decimals)}
+                            sub={
+                                sharePercent === null
+                                    ? 'nothing staked yet'
+                                    : `${sharePercent.toFixed(2)}% of the pool`
+                            }
+                            accent={pool.user.balance > 0n}
+                        />
                     </div>
 
-                    {(pool.user.balance > 0n || pool.user.earned > 0n) && (
-                        <div className="rounded-xl bg-muted/30 px-3 py-2 text-xs">
+                    {pool.user.earned > 0n && (
+                        <div className="mt-auto rounded-xl bg-muted/30 px-3 py-2 text-xs">
                             <div className="flex items-baseline justify-between">
-                                <span className="text-muted-foreground">Your stake</span>
-                                <span className="font-medium tabular-nums">
-                                    {formatBalance(
-                                        pool.user.balance,
-                                        pool.stakingTokenInfo.decimals
-                                    )}{' '}
-                                    {pool.stakingTokenInfo.symbol}
-                                </span>
-                            </div>
-                            <div className="mt-1 flex items-baseline justify-between">
                                 <span className="text-muted-foreground">Earned</span>
                                 <span className="font-medium tabular-nums text-positive">
                                     {formatRewardAmount(
@@ -218,14 +274,25 @@ function PoolCard({
                 </div>
 
                 <div className="mt-4 flex gap-2">
+                    {isConnected && pool.user.earned > 0n && (
+                        <Button
+                            className="flex-1"
+                            variant="outline"
+                            disabled={claim.isPending || claim.isConfirming}
+                            isLoading={claim.isPending || claim.isConfirming}
+                            onClick={() => claim.claim()}
+                        >
+                            Claim
+                        </Button>
+                    )}
                     <Button
                         className="flex-1"
                         variant={status === 'active' ? 'default' : 'outline'}
                         onClick={() => (isConnected ? onManage(pool) : onConnect())}
                     >
-                        {!isConnected ? 'Connect Wallet' : status === 'active' ? 'Stake' : 'Manage'}
+                        {isConnected ? 'Manage' : 'Connect Wallet'}
                     </Button>
-                    {isCreator && (
+                    {isCreator && canManagePool && (
                         <Button
                             variant="outline"
                             size="icon"
@@ -260,14 +327,30 @@ function ManagePoolDialog({
     const [amount, setAmount] = useState('')
     const actions = useStakingPoolActions(pool?.address, pool?.view.stakingToken)
     const { lots } = useStakingLots(pool?.address, open)
+    const [lotPage, setLotPage] = useState(1)
+    const lotPages = getTotalPages(lots.length, LOTS_PER_PAGE)
+    const safeLotPage = clampPage(lotPage, lotPages)
+    const pagedLots = paginate(lots, safeLotPage, LOTS_PER_PAGE)
 
     useEffect(() => {
         if (!open) return
         setMode('stake')
         setAmount('')
+        setLotPage(1)
+        queuedStake.current = null
     }, [open, pool?.address])
 
+    // One click: the approval carries the stake it was for, so the wallet asks twice but the
+    // user never has to come back and press the button again.
+    const queuedStake = useRef<bigint | null>(null)
+
     useOnTxSuccess(open, actions.isSuccess, actions.hash, () => {
+        const queued = queuedStake.current
+        queuedStake.current = null
+        if (queued !== null) {
+            actions.stake(queued)
+            return
+        }
         setAmount('')
         toastSuccess('Transaction confirmed')
         onSuccess()
@@ -280,17 +363,32 @@ function ManagePoolDialog({
     if (!pool) return null
 
     const decimals = pool.stakingTokenInfo.decimals
-    const max = mode === 'stake' ? pool.user.stakingBalance : pool.user.withdrawable
+    // Nothing staked means there is nothing to withdraw, so that side is not offered.
+    const canWithdraw = pool.user.balance > 0n
+    const activeMode = canWithdraw ? mode : 'stake'
+    // A capped pool refuses anything past its remaining power, so the cap bounds the input the
+    // same way the wallet balance does — the amount can never be one the chain would reject.
+    const capped = pool.view.maxStakingPower > 0n
+    const room = capped
+        ? min(pool.user.stakingBalance, pool.view.remainingStakingPower)
+        : pool.user.stakingBalance
+    const max = activeMode === 'stake' ? room : pool.user.withdrawable
     const parsed = amount ? parseTokenAmount(amount, decimals) : 0n
-    const needsApproval = mode === 'stake' && parsed > 0n && pool.user.stakingAllowance < parsed
+    const needsApproval =
+        activeMode === 'stake' && parsed > 0n && pool.user.stakingAllowance < parsed
     const isBusy = actions.isPending || actions.isConfirming
     const locked = pool.user.balance - pool.user.withdrawable
 
     const label = () => {
         if (parsed <= 0n) return 'Enter an amount'
-        if (parsed > max) return mode === 'stake' ? 'Insufficient balance' : 'Still locked'
-        if (needsApproval) return `Approve ${pool.stakingTokenInfo.symbol}`
-        return mode === 'stake' ? 'Stake' : 'Withdraw'
+        if (parsed > max) {
+            if (activeMode === 'withdraw') return 'Still locked'
+            return capped && pool.view.remainingStakingPower < pool.user.stakingBalance
+                ? 'Over the pool cap'
+                : 'Insufficient balance'
+        }
+        if (needsApproval) return `Approve & Stake`
+        return activeMode === 'stake' ? 'Stake' : 'Withdraw'
     }
 
     return (
@@ -302,25 +400,28 @@ function ManagePoolDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/30 p-1">
-                        {(['stake', 'withdraw'] as const).map((m) => (
-                            <button
-                                key={m}
-                                type="button"
-                                onClick={() => {
-                                    setMode(m)
-                                    setAmount('')
-                                }}
-                                className={`rounded-lg py-1.5 text-sm font-medium capitalize transition-colors ${
-                                    mode === m
-                                        ? 'bg-background text-foreground'
-                                        : 'text-muted-foreground'
-                                }`}
-                            >
-                                {m}
-                            </button>
-                        ))}
-                    </div>
+                    {canWithdraw && (
+                        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/30 p-1">
+                            {(['stake', 'withdraw'] as const).map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => {
+                                        setMode(m)
+                                        setAmount('')
+                                        setLotPage(1)
+                                    }}
+                                    className={`rounded-lg py-1.5 text-sm font-medium capitalize transition-colors ${
+                                        mode === m
+                                            ? 'bg-background text-foreground'
+                                            : 'text-muted-foreground'
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <div className="flex items-baseline justify-between">
@@ -332,8 +433,13 @@ function ManagePoolDialog({
                                 className="text-xs text-muted-foreground hover:text-foreground"
                                 onClick={() => setAmount(formatTokenAmount(max, decimals))}
                             >
-                                {mode === 'stake' ? 'Balance' : 'Unlocked'}:{' '}
-                                {formatBalance(max, decimals)}
+                                {activeMode === 'stake'
+                                    ? capped &&
+                                      pool.view.remainingStakingPower < pool.user.stakingBalance
+                                        ? 'Cap room'
+                                        : 'Balance'
+                                    : 'Unlocked'}
+                                : {formatBalance(max, decimals)}
                             </button>
                         </div>
                         <Input
@@ -347,7 +453,21 @@ function ManagePoolDialog({
                         />
                     </div>
 
-                    {mode === 'withdraw' && locked > 0n && (
+                    {activeMode === 'withdraw' && pool.user.withdrawable > 0n && (
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            disabled={isBusy}
+                            onClick={() => actions.exit()}
+                        >
+                            Withdraw all
+                            {pool.user.earned > 0n ? ' & claim' : ''} (
+                            {formatBalance(pool.user.withdrawable, decimals)}{' '}
+                            {pool.stakingTokenInfo.symbol})
+                        </Button>
+                    )}
+
+                    {activeMode === 'withdraw' && locked > 0n && (
                         <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                             {formatBalance(locked, decimals)} {pool.stakingTokenInfo.symbol} is
                             still locked
@@ -363,33 +483,20 @@ function ManagePoolDialog({
                         size="lg"
                         disabled={isBusy || parsed <= 0n || parsed > max}
                         isLoading={isBusy}
-                        loadingText={label()}
                         onClick={() => {
                             if (needsApproval) {
+                                queuedStake.current = parsed
                                 actions.approve()
                                 return
                             }
-                            if (mode === 'stake') actions.stake(parsed)
+                            if (activeMode === 'stake') actions.stake(parsed)
                             else actions.withdraw(parsed)
                         }}
                     >
                         {label()}
                     </Button>
 
-                    {pool.user.earned > 0n && (
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            disabled={isBusy}
-                            onClick={() => actions.claim()}
-                        >
-                            Claim{' '}
-                            {formatRewardAmount(pool.user.earned, pool.rewardTokenInfo.decimals)}{' '}
-                            {pool.rewardTokenInfo.symbol}
-                        </Button>
-                    )}
-
-                    {lots.length > 0 && (
+                    {activeMode === 'withdraw' && lots.length > 0 && (
                         <div className="space-y-2">
                             <div className="flex items-baseline justify-between">
                                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">
@@ -402,8 +509,8 @@ function ManagePoolDialog({
                                     {lots.length} lot{lots.length === 1 ? '' : 's'}
                                 </span>
                             </div>
-                            <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                                {lots.map((lot) => {
+                            <div className="space-y-1">
+                                {pagedLots.map((lot) => {
                                     const unlocked = lot.unlockAt <= now
                                     return (
                                         <div
@@ -438,6 +545,13 @@ function ManagePoolDialog({
                                     )
                                 })}
                             </div>
+                            {lotPages > 1 && (
+                                <PaginationControls
+                                    currentPage={safeLotPage}
+                                    totalPages={lotPages}
+                                    onPageChange={setLotPage}
+                                />
+                            )}
                         </div>
                     )}
                 </div>

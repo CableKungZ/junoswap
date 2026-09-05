@@ -279,7 +279,7 @@ export function MiningFarms({
                         />
                     )}
                     <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
-                        <p className="text-xs text-muted-foreground">
+                        <p className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                             Showing {rangeStart}–{rangeEnd} of {visible.length}
                         </p>
                         <PaginationControls

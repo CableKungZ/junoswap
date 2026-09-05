@@ -364,7 +364,7 @@ export function CreateFarmDialog({
                         <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                             Rewards stream to in-range liquidity for the whole period. Anything left
                             over when the farm ends comes back to your wallet — you can claim it
-                            from My Farms once every position has unstaked.
+                            from Farms I Created once every position has unstaked.
                         </p>
 
                         <Button

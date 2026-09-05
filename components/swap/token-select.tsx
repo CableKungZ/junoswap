@@ -18,7 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { TokenIcon, TokenIconSkeleton } from '@/components/ui/token-icon'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ChevronDown, Search, Copy, Loader2, Trash2, Plus } from 'lucide-react'
+import { ChevronDown, Search, Copy, Loader2, Trash2, Plus, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatBalance, isValidTokenAddress } from '@/lib/tokens'
 import { toastSuccess } from '@/lib/toast'
@@ -102,11 +102,18 @@ function TokenList({ tokens, selectedToken, disabledToken, onSelect }: TokenList
     const customTokens = useCustomTokensStore((s) => s.customTokens)
     const removeCustomToken = useCustomTokensStore((s) => s.removeCustomToken)
     const [searchQuery, setSearchQuery] = useState('')
+    const [isImporting, setIsImporting] = useState(false)
+    const [importAddress, setImportAddress] = useState('')
+    // A pasted address arrives with whitespace often enough that trimming is the difference
+    // between offering the import row and showing "No tokens found".
+    const query = searchQuery.trim().toLowerCase()
     const filteredTokens = tokens.filter(
         (token) =>
-            token.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            token.address.toLowerCase().includes(searchQuery.toLowerCase())
+            token.symbol.toLowerCase().includes(query) ||
+            token.address.toLowerCase().includes(query)
     )
+    const canImport =
+        isValidTokenAddress(query) && !tokens.some((t) => t.address.toLowerCase() === query)
     const {
         balances: _balances,
         rawBalances,
@@ -129,13 +136,66 @@ function TokenList({ tokens, selectedToken, disabledToken, onSelect }: TokenList
         }
         return '0'
     }
+    const closeImport = () => {
+        setIsImporting(false)
+        setImportAddress('')
+    }
+
+    if (isImporting) {
+        const address = importAddress.trim()
+        const listed = tokens.some((t) => t.address.toLowerCase() === address.toLowerCase())
+        return (
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2 py-2">
+                    <Button variant="ghost" size="icon" onClick={closeImport} aria-label="Back">
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <Input
+                        autoFocus
+                        placeholder="Paste token address (0x...)"
+                        value={importAddress}
+                        onChange={(e) => setImportAddress(e.target.value)}
+                        spellCheck={false}
+                    />
+                </div>
+                <div className="min-h-24 py-2">
+                    {!address ? (
+                        <EmptyState
+                            title="Import a token"
+                            description="Paste the contract address of the token on this network."
+                        />
+                    ) : !isValidTokenAddress(address) ? (
+                        <EmptyState
+                            title="Not a token address"
+                            description="An address is 0x followed by 40 characters."
+                        />
+                    ) : listed ? (
+                        <EmptyState
+                            title="Already listed"
+                            description="This token is already in the list."
+                        />
+                    ) : (
+                        <ImportTokenRow
+                            address={address}
+                            chainId={chainId}
+                            onImport={(token) => {
+                                onSelect(token)
+                                closeImport()
+                            }}
+                        />
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="flex flex-col">
             <div className="py-2">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                        placeholder="Search token..."
+                        placeholder="Search name or paste address..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9"
@@ -144,19 +204,20 @@ function TokenList({ tokens, selectedToken, disabledToken, onSelect }: TokenList
             </div>
             <ScrollArea className="h-96">
                 <div className="py-2 pr-4">
-                    {filteredTokens.length === 0 ? (
-                        isValidTokenAddress(searchQuery) ? (
-                            <ImportTokenRow
-                                address={searchQuery}
-                                chainId={chainId}
-                                onImport={(token) => {
-                                    onSelect(token)
-                                    setSearchQuery('')
-                                }}
-                            />
-                        ) : (
-                            <EmptyState title="No tokens found" />
-                        )
+                    {canImport ? (
+                        <ImportTokenRow
+                            address={query}
+                            chainId={chainId}
+                            onImport={(token) => {
+                                onSelect(token)
+                                setSearchQuery('')
+                            }}
+                        />
+                    ) : filteredTokens.length === 0 ? (
+                        <EmptyState
+                            title="No tokens found"
+                            description="Import it by address if it isn't listed yet."
+                        />
                     ) : (
                         <div className="space-y-1">
                             {filteredTokens.map((token) => {
@@ -252,6 +313,14 @@ function TokenList({ tokens, selectedToken, disabledToken, onSelect }: TokenList
                     )}
                 </div>
             </ScrollArea>
+            <button
+                type="button"
+                onClick={() => setIsImporting(true)}
+                className="flex w-full items-center justify-center gap-1.5 border-t border-border/50 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+                <Plus className="h-4 w-4" />
+                Import new token address
+            </button>
         </div>
     )
 }
