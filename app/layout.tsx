@@ -49,7 +49,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Providers>
                     <TooltipProvider delayDuration={200}>
                         <Header />
-                        <main>{children}</main>
+                        <main className="pb-[calc(min(18vw,71px)+env(safe-area-inset-bottom))] md:pb-0">
+                            {children}
+                        </main>
                         <Toaster />
                     </TooltipProvider>
                 </Providers>
