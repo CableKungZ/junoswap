@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import {
     Dialog,
@@ -16,6 +16,7 @@ import { usePendingRewards } from '@/hooks/useRewards'
 import { formatRewardAmount } from '@/lib/format'
 import { formatTimeRemaining } from '@/services/mining/incentives'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import type { StakedPosition } from '@/types/earn'
 
@@ -35,27 +36,22 @@ export function UnstakeDialog({
     const { address } = useAccount()
     const chainId = useChainId()
     const { position, incentive } = selectedStakedPosition ?? { position: null, incentive: null }
+    const program = incentive?.program ?? 'v3'
     const { reward: pendingRewards, isLoading: isLoadingRewards } = usePendingRewards(
         incentive,
-        position?.tokenId
+        position?.tokenId,
+        program
     )
     const { unstake, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useUnstakePosition(position?.tokenId, incentive, address, true)
-    const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
-    useEffect(() => {
-        if (open) setProcessedTxHash(null)
-    }, [open])
-    useEffect(() => {
-        if (isSuccess && hash && hash !== processedTxHash) {
-            if (address && position) {
-                markUnstaked(chainId, address, position.tokenId)
-            }
-            toastSuccess('Position unstaked successfully!')
-            setProcessedTxHash(hash)
-            onSuccess?.()
-            onClose()
+        useUnstakePosition(position?.tokenId, incentive, address, program, true)
+    useOnTxSuccess(open, isSuccess, hash, () => {
+        if (address && position) {
+            markUnstaked(chainId, address, position.tokenId)
         }
-    }, [isSuccess, hash, processedTxHash, onClose, onSuccess, address, chainId, position])
+        toastSuccess('Position unstaked successfully!')
+        onSuccess?.()
+        onClose()
+    })
     useEffect(() => {
         if (error) {
             toastError(error)
