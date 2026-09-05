@@ -10,12 +10,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useStakingPoolActions, useStartEpoch } from '@/hooks/useStakingActions'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
-import { DurationField, unitSeconds, type ScheduleUnit } from '@/components/earn/duration-field'
+import {
+    DurationField,
+    FIELD_CLASS,
+    FieldShell,
+    StartField,
+    startTimeSeconds,
+    unitSeconds,
+    type ScheduleUnit,
+    type StartMode,
+} from '@/components/earn/duration-field'
 import { useNowSeconds } from '@/hooks/useNowSeconds'
 import { getStakingStatus } from '@/services/staking/metrics'
 import { formatBalance, parseTokenAmount } from '@/lib/tokens'
-import { formatDuration } from '@/lib/duration'
-import { formatRateAmount } from '@/lib/format'
+import { formatDateTime, formatDuration } from '@/lib/duration'
+import { formatExactAmount, formatRateAmount } from '@/lib/format'
 import { toastError, toastSuccess } from '@/lib/toast'
 import type { StakingPool } from '@/types/staking'
 
@@ -44,6 +53,9 @@ export function StakingCreatorPanel({
     const [durationUnit, setDurationUnit] = useState<ScheduleUnit>('days')
     const [lockValue, setLockValue] = useState('0')
     const [lockUnit, setLockUnit] = useState<ScheduleUnit>('days')
+    const [startMode, setStartMode] = useState<StartMode>('now')
+    const [startAt, setStartAt] = useState('')
+    const [capValue, setCapValue] = useState('')
     const lastAction = useRef<'approve' | 'epoch' | null>(null)
 
     const epoch = useStartEpoch()
@@ -66,6 +78,8 @@ export function StakingCreatorPanel({
     const duration = Number(durationValue || '0') * unitSeconds(durationUnit)
     const lock = Number(lockValue || '0') * unitSeconds(lockUnit)
     const needsApproval = rewardWei > 0n && ((allowance as bigint | undefined) ?? 0n) < rewardWei
+    const startTime = startTimeSeconds(startMode, startAt)
+    const cap = capValue ? parseTokenAmount(capValue, pool.stakingTokenInfo.decimals) : 0n
     const perDay =
         duration > 0
             ? Number(formatUnits(rewardWei, pool.rewardTokenInfo.decimals)) /
@@ -77,10 +91,10 @@ export function StakingCreatorPanel({
         lastAction.current = 'epoch'
         epoch.startEpoch(pool.address, {
             rewardAmount: rewardWei,
-            startTime: 0n,
+            startTime,
             rewardsDuration: BigInt(duration),
             lockDuration: BigInt(lock),
-            maxStakingPower: 0n,
+            maxStakingPower: cap,
         })
     }
 
@@ -92,6 +106,9 @@ export function StakingCreatorPanel({
         toastSuccess('Next epoch funded')
         queryClient.invalidateQueries()
         setRewardAmount('')
+        setStartMode('now')
+        setStartAt('')
+        setCapValue('')
         onSettled()
     })
 
@@ -115,6 +132,9 @@ export function StakingCreatorPanel({
         if (duration <= 0) return 'Enter the duration'
         if (duration > MAX_DURATION_DAYS * SECONDS_PER_DAY) return 'At most 365 days'
         if (lock > duration) return 'Lock cannot outlast the epoch'
+        if (startMode === 'scheduled' && startTime === 0n) return 'Pick the start time'
+        if (startTime > BigInt(Math.floor(Date.now() / 1000) + MAX_DURATION_DAYS * SECONDS_PER_DAY))
+            return 'Start within 365 days'
         return null
     })()
 
@@ -160,7 +180,7 @@ export function StakingCreatorPanel({
                                 value={rewardAmount}
                                 onChange={(e) => setRewardAmount(e.target.value)}
                                 disabled={!isBetweenEpochs}
-                                className="border-border/60 bg-background/60"
+                                className={FIELD_CLASS}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -182,6 +202,28 @@ export function StakingCreatorPanel({
                                 disabled={!isBetweenEpochs}
                             />
                         </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <StartField
+                                mode={startMode}
+                                value={startAt}
+                                onModeChange={setStartMode}
+                                onValueChange={setStartAt}
+                                disabled={!isBetweenEpochs}
+                            />
+                            <FieldShell label={`Max staked (${pool.stakingTokenInfo.symbol})`}>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    inputMode="decimal"
+                                    placeholder="Unlimited"
+                                    value={capValue}
+                                    onChange={(e) => setCapValue(e.target.value)}
+                                    disabled={!isBetweenEpochs}
+                                    className={FIELD_CLASS}
+                                />
+                            </FieldShell>
+                        </div>
                     </div>
 
                     <div className="space-y-1.5 rounded-2xl bg-muted/20 px-3 py-2 text-xs">
@@ -199,6 +241,20 @@ export function StakingCreatorPanel({
                             <span className="text-muted-foreground">Stakes locked</span>
                             <span className="font-medium">
                                 {lock > 0 ? formatDuration(lock) : 'no lock'}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">Starts</span>
+                            <span className="font-medium">
+                                {startTime > 0n ? formatDateTime(Number(startTime)) : 'immediately'}
+                            </span>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                            <span className="text-muted-foreground">Max staked</span>
+                            <span className="font-medium tabular-nums">
+                                {cap > 0n
+                                    ? `${formatExactAmount(cap, pool.stakingTokenInfo.decimals)} ${pool.stakingTokenInfo.symbol}`
+                                    : 'unlimited'}
                             </span>
                         </div>
                         <div className="flex items-baseline justify-between gap-4">
