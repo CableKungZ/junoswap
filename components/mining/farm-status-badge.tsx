@@ -48,11 +48,14 @@ export function FarmIdentity({
     incentive,
     size = 'md',
     withProgram = false,
+    schedule,
 }: {
     incentive: Incentive
     size?: 'sm' | 'md'
     /** Only where the row is wide enough for it — cards show the mark in their footer instead. */
     withProgram?: boolean
+    /** Table rows hang the schedule here instead of spending a whole column on it. */
+    schedule?: React.ReactNode
 }) {
     const token0 = getDisplayToken(incentive.poolToken0)
     const token1 = getDisplayToken(incentive.poolToken1)
@@ -90,6 +93,9 @@ export function FarmIdentity({
                         </>
                     )}
                 </div>
+                {schedule && (
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{schedule}</div>
+                )}
             </div>
         </div>
     )
