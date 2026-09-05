@@ -235,6 +235,104 @@ function LoadingState() {
     )
 }
 
+const HIGHLIGHT_COUNT = 10
+
+function HighlightChip({
+    pool,
+    tvlUsd,
+    apr,
+    onSelect,
+}: {
+    pool: V3PoolData
+    tvlUsd: number
+    apr: number | null
+    onSelect: (pool: V3PoolData) => void
+}) {
+    const t0 = getDisplayToken(pool.token0)
+    const t1 = getDisplayToken(pool.token1)
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(pool)}
+            className="flex shrink-0 items-center gap-2.5 rounded-2xl border border-border/40 bg-card/60 py-2 pl-2.5 pr-3.5 transition-colors hover:border-primary/30 hover:bg-card"
+        >
+            <TokenIconPair
+                src0={t0.logo}
+                symbol0={t0.symbol}
+                src1={t1.logo}
+                symbol1={t1.symbol}
+                size="sm"
+            />
+            <div className="text-left">
+                <div className="flex items-center gap-1.5 text-sm font-semibold">
+                    {t0.symbol} / {t1.symbol}
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                        {formatFeeTier(pool.fee)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+                    <span>{formatTvl(tvlUsd)} TVL</span>
+                    {apr !== null && apr > 0 && (
+                        <span className="text-positive">{apr.toFixed(2)}% APR</span>
+                    )}
+                </div>
+            </div>
+        </button>
+    )
+}
+
+/** Top pools by TVL, scrolling right-to-left. The row is rendered twice so the
+ * -50% translate loops seamlessly. */
+function PoolHighlights({
+    pools,
+    tvlOf,
+    aprOf,
+    onSelect,
+}: {
+    pools: V3PoolData[]
+    tvlOf: (addr: string) => number | null
+    aprOf: (addr: string) => number | null
+    onSelect: (pool: V3PoolData) => void
+}) {
+    const top = useMemo(
+        () =>
+            pools
+                .map((pool) => ({
+                    pool,
+                    tvlUsd: tvlOf(pool.address) ?? 0,
+                    apr: aprOf(pool.address),
+                }))
+                .filter((entry) => entry.tvlUsd > 0)
+                .sort((a, b) => b.tvlUsd - a.tvlUsd)
+                .slice(0, HIGHLIGHT_COUNT),
+        [pools, tvlOf, aprOf]
+    )
+    if (top.length === 0) return null
+    const row = (copy: number) => (
+        <div className="flex gap-3 pr-3" aria-hidden={copy > 0}>
+            {top.map((entry) => (
+                <HighlightChip
+                    key={entry.pool.address}
+                    pool={entry.pool}
+                    tvlUsd={entry.tvlUsd}
+                    apr={entry.apr}
+                    onSelect={onSelect}
+                />
+            ))}
+        </div>
+    )
+    return (
+        <div className="relative overflow-hidden">
+            <div className="flex w-max animate-pool-marquee">
+                {row(0)}
+                {row(1)}
+            </div>
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-background to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-background to-transparent" />
+        </div>
+    )
+}
+
 function PoolsListContent({
     pools,
     metricsByAddress,
@@ -373,6 +471,7 @@ function PoolsListContent({
     return (
         <div className="space-y-4">
             {header}
+            <PoolHighlights pools={pools} tvlOf={tvlOf} aprOf={aprOf} onSelect={onAddLiquidity} />
             <Card>
                 <Table>
                     <TableHeader>
