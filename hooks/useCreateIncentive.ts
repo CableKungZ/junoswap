@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     useAccount,
     useChainId,
@@ -9,7 +10,6 @@ import {
     useWriteContract,
 } from 'wagmi'
 import type { Address, Hex } from 'viem'
-import { ProtocolType, getDexConfig } from '@coshi190/juno-moneta-sdk'
 import { useNowSeconds } from '@/hooks/useNowSeconds'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
@@ -59,6 +59,9 @@ interface UseCreateIncentiveResult {
     needsApproval: boolean
     approve: () => void
     create: () => void
+    /** Approve if needed and create in one click; the create fires once the allowance lands. */
+    submit: () => void
+    isAwaitingApproval: boolean
     isApproving: boolean
     isPreparing: boolean
     isExecuting: boolean
@@ -69,18 +72,20 @@ interface UseCreateIncentiveResult {
 }
 
 /**
- * Approve-then-create against the UniswapV3Staker. The simulate stays disabled until the form is
- * valid and the allowance is in place, so the confirm button never hands the wallet a call that is
- * already known to revert.
+ * Approve-then-create against the staker, behind one `submit()`. The simulate stays disabled until
+ * the form is valid and the allowance is in place, so the confirm button never hands the wallet a
+ * call that is already known to revert — which is also why the create waits for the simulation
+ * that the approval unblocks rather than firing straight after the approval receipt.
  */
 export function useCreateIncentive(
     form: CreateIncentiveForm,
-    limits: StakerLimits
+    limits: StakerLimits,
+    program: EarnProgram = 'v3'
 ): UseCreateIncentiveResult {
     const { address } = useAccount()
     const chainId = useChainId()
     const now = useNowSeconds()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
 
     const { balance } = useTokenBalance({ token: form.rewardToken, address })
 
@@ -109,6 +114,7 @@ export function useCreateIncentive(
         approve: approveReward,
         isApproving,
         isConfirming: isConfirmingApproval,
+        error: approvalError,
     } = useTokenApproval({
         token: form.rewardToken,
         owner: address,
@@ -162,6 +168,29 @@ export function useCreateIncentive(
         writeContract(simulation.request)
     }, [simulation, writeContract])
 
+    // One click for the whole thing: approve, then send the create the moment the allowance has
+    // landed and the simulation it unblocks is ready. Nothing to click twice.
+    const [isAwaitingApproval, setIsAwaitingApproval] = useState(false)
+
+    useEffect(() => {
+        if (!isAwaitingApproval || needsApproval || !simulation?.request) return
+        setIsAwaitingApproval(false)
+        writeContract(simulation.request)
+    }, [isAwaitingApproval, needsApproval, simulation, writeContract])
+
+    useEffect(() => {
+        if (writeError || approvalError) setIsAwaitingApproval(false)
+    }, [writeError, approvalError])
+
+    const submit = useCallback(() => {
+        if (needsApproval) {
+            setIsAwaitingApproval(true)
+            approveReward()
+            return
+        }
+        create()
+    }, [needsApproval, approveReward, create])
+
     return {
         errors,
         incentiveKey,
@@ -172,6 +201,8 @@ export function useCreateIncentive(
         needsApproval,
         approve: approveReward,
         create,
+        submit,
+        isAwaitingApproval,
         isApproving: isApproving || isConfirmingApproval,
         isPreparing: canSimulate && isPreparing,
         isExecuting,

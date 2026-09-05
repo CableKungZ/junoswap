@@ -1,8 +1,8 @@
 'use client'
 
+import { getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
 import { useMemo } from 'react'
 import { useChainId, useReadContracts } from 'wagmi'
-import { ProtocolType, getDexConfig } from '@coshi190/juno-moneta-sdk'
 import { FALLBACK_STAKER_LIMITS } from '@/services/mining/create-incentive'
 import type { StakerLimits } from '@/types/earn'
 
@@ -28,13 +28,13 @@ const STAKER_LIMITS_ABI = [
  * A staker that does not answer falls back to the canonical values and says so, so the form can
  * present the cap without claiming a number it never verified.
  */
-export function useStakerLimits(): {
+export function useStakerLimits(program: EarnProgram = 'v3'): {
     limits: StakerLimits
     isLoading: boolean
     isFallback: boolean
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
 
     const { data, isLoading } = useReadContracts({
         contracts: [

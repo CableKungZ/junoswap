@@ -1,9 +1,9 @@
 'use client'
 
+import { getStakerAbi, getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
 import { useCallback, useMemo } from 'react'
 import { useAccount, useChainId, useReadContracts } from 'wagmi'
 import { zeroAddress, type Address } from 'viem'
-import { ProtocolType, getDexConfig, UNISWAP_V3_STAKER_ABI } from '@coshi190/juno-moneta-sdk'
 import { useUserPositions } from '@/hooks/useUserPositions'
 import type { PositionWithTokens } from '@/types/earn'
 
@@ -11,6 +11,8 @@ export interface StakerDeposit {
     position: PositionWithTokens
     /** The wallet that deposited the NFT, which is who may unstake and withdraw it. */
     depositor: Address
+    /** Which staker is holding it — the two run side by side. */
+    program: EarnProgram
 }
 
 /**
@@ -26,9 +28,27 @@ export function useStakerDeposits(): {
     isLoading: boolean
     refetch: () => void
 } {
+    const uniswap = useStakerDepositsFor('v3')
+    const juno = useStakerDepositsFor('juno-v3')
+    const deposits = useMemo(
+        () => [...uniswap.deposits, ...juno.deposits],
+        [uniswap.deposits, juno.deposits]
+    )
+    const refetch = useCallback(() => {
+        uniswap.refetch()
+        juno.refetch()
+    }, [uniswap, juno])
+    return { deposits, isLoading: uniswap.isLoading || juno.isLoading, refetch }
+}
+
+function useStakerDepositsFor(program: EarnProgram): {
+    deposits: StakerDeposit[]
+    isLoading: boolean
+    refetch: () => void
+} {
     const chainId = useChainId()
     const { address } = useAccount()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
 
     const stakerHeld = useUserPositions(stakerAddress, chainId)
     const walletHeld = useUserPositions(address, chainId)
@@ -49,12 +69,12 @@ export function useStakerDeposits(): {
         if (!stakerAddress) return []
         return candidates.map((position) => ({
             address: stakerAddress,
-            abi: UNISWAP_V3_STAKER_ABI,
+            abi: getStakerAbi(program),
             functionName: 'deposits' as const,
             args: [position.tokenId] as const,
             chainId,
         }))
-    }, [candidates, stakerAddress, chainId])
+    }, [candidates, stakerAddress, program, chainId])
 
     const {
         data,
@@ -73,10 +93,10 @@ export function useStakerDeposits(): {
                 | undefined
             const depositor = row?.[0]
             if (!depositor || depositor === zeroAddress) return
-            result.push({ position, depositor })
+            result.push({ position, depositor, program })
         })
         return result
-    }, [candidates, data])
+    }, [candidates, data, program])
 
     const refetch = useCallback(() => {
         void stakerHeld.refetch()

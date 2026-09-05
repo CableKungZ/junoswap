@@ -114,7 +114,7 @@ export function FarmTable({
                         return (
                             <TableRow key={incentive.incentiveId} className="border-0">
                                 <TableCell className="p-3 px-4">
-                                    <FarmIdentity incentive={incentive} size="sm" />
+                                    <FarmIdentity incentive={incentive} size="sm" withProgram />
                                 </TableCell>
                                 <TableCell className="p-3 px-4">
                                     <AprCell apr={stats?.aprPercent} />
@@ -215,7 +215,7 @@ export function MyFarmTable({
                     {incentives.map((incentive) => (
                         <TableRow key={incentive.incentiveId} className="border-0">
                             <TableCell className="p-3 px-4">
-                                <FarmIdentity incentive={incentive} size="sm" />
+                                <FarmIdentity incentive={incentive} size="sm" withProgram />
                             </TableCell>
                             <TableCell className="p-3 px-4">
                                 <RewardCell incentive={incentive} />

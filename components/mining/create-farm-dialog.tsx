@@ -14,6 +14,7 @@ import { ConnectModal } from '@/components/web3/connect-modal'
 import { FarmPoolPicker } from './farm-pool-picker'
 import { FarmScheduleInput } from './farm-schedule-input'
 import { useCreateIncentive } from '@/hooks/useCreateIncentive'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { useStakerLimits } from '@/hooks/useStakerLimits'
 import { useNowSeconds } from '@/hooks/useNowSeconds'
 import { useV3Tokens } from '@/hooks/useV3Tokens'
@@ -31,6 +32,7 @@ import { formatBalance, formatTokenAmount, getTokensForChain } from '@/lib/token
 import { formatRateAmount } from '@/lib/format'
 import { getChainMetadata, isNativeToken } from '@/lib/wagmi'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { EARN_PROGRAM_LABEL, type EarnProgram } from '@/lib/earn-programs'
 import type { CreateIncentiveForm, V3PoolData } from '@/types/earn'
 import type { Token } from '@/types/token'
 
@@ -39,6 +41,8 @@ const INDEXER_SETTLE_MS = 5000
 interface CreateFarmDialogProps {
     open: boolean
     initialPool?: V3PoolData | null
+    /** Which staker the farm is created on — picked in the Create Earn Program dialog. */
+    program?: EarnProgram
     onClose: () => void
     onSuccess?: () => void
 }
@@ -52,21 +56,25 @@ function SummaryRow({ label, value }: { label: React.ReactNode; value: React.Rea
     )
 }
 
-export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: CreateFarmDialogProps) {
+export function CreateFarmDialog({
+    open,
+    initialPool,
+    program = 'v3',
+    onClose,
+    onSuccess,
+}: CreateFarmDialogProps) {
     const { isConnected } = useAccount()
     const chainId = useChainId()
     const queryClient = useQueryClient()
     const now = useNowSeconds()
-    const { limits } = useStakerLimits()
+    const { limits } = useStakerLimits(program)
 
     const [form, setForm] = useState<CreateIncentiveForm>(createEmptyIncentiveForm)
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
-    const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
 
     useEffect(() => {
         if (!open) return
         setForm({ ...createEmptyIncentiveForm(), pool: initialPool ?? null })
-        setProcessedTxHash(null)
     }, [open, initialPool])
 
     const { tokens: v3Tokens } = useV3Tokens(chainId)
@@ -94,9 +102,8 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
         errors,
         rewardAmount,
         balance,
-        needsApproval,
-        approve,
-        create,
+        submit,
+        isAwaitingApproval,
         isApproving,
         isPreparing,
         isExecuting,
@@ -104,11 +111,9 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
         isSuccess,
         error,
         hash,
-    } = useCreateIncentive(form, limits)
+    } = useCreateIncentive(form, limits, program)
 
-    useEffect(() => {
-        if (!isSuccess || !hash || hash === processedTxHash) return
-        setProcessedTxHash(hash)
+    useOnTxSuccess(open, isSuccess, hash, (hash) => {
         const explorer = getChainMetadata(chainId).explorer
         toastSuccess('Mining farm created!', {
             action: {
@@ -124,7 +129,7 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
             INDEXER_SETTLE_MS
         )
         onClose()
-    }, [isSuccess, hash, processedTxHash, chainId, queryClient, onSuccess, onClose])
+    })
 
     useEffect(() => {
         if (error) toastError(error)
@@ -162,11 +167,12 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
         return { perDay: rate.perDay * fraction, perHour: rate.perHour * fraction }
     }, [form.pool, burnedLiquidity, rate])
     const blocking = primaryError(errors)
-    const isBusy = isApproving || isPreparing || isExecuting || isConfirming
+    const isBusy = isApproving || isAwaitingApproval || isPreparing || isExecuting || isConfirming
 
     const buttonLabel = () => {
         if (!isConnected) return 'Connect Wallet'
-        if (isApproving) return 'Approving...'
+        if (isApproving) return `Approving ${rewardToken?.symbol ?? 'token'}...`
+        if (isAwaitingApproval) return 'Approved — creating farm...'
         if (isExecuting) return 'Confirm in wallet...'
         if (isConfirming) return 'Creating farm...'
         if (blocking && blocking !== 'NO_ACCOUNT') {
@@ -175,7 +181,6 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
                 rewardSymbol: rewardToken?.symbol,
             })
         }
-        if (needsApproval) return `Approve ${rewardToken?.symbol ?? 'token'}`
         if (isPreparing) return 'Checking...'
         return 'Create Farm'
     }
@@ -185,11 +190,7 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
             setIsConnectModalOpen(true)
             return
         }
-        if (needsApproval) {
-            approve()
-            return
-        }
-        create()
+        submit()
     }
 
     const isSubmitDisabled = isConnected && (isBusy || errors.length > 0)
@@ -199,7 +200,12 @@ export function CreateFarmDialog({ open, initialPool, onClose, onSuccess }: Crea
             <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
                 <DialogContent className="sm:max-w-lg max-h-[90vh] bg-card/95 backdrop-blur-md border-border/50">
                     <DialogHeader>
-                        <DialogTitle className="text-lg">Create Mining Farm</DialogTitle>
+                        <DialogTitle className="text-lg">
+                            Create Mining Farm
+                            <span className="ml-2 align-middle text-xs font-normal text-muted-foreground">
+                                {EARN_PROGRAM_LABEL[program]}
+                            </span>
+                        </DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-9rem)] pr-1">
