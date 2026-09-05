@@ -5,7 +5,12 @@ import type {
     IncentiveKey,
     StakerLimits,
 } from '@/types/earn'
-import { SECONDS_PER_DAY, SECONDS_PER_HOUR, formatDuration } from '@/lib/duration'
+import {
+    SECONDS_PER_DAY,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+    formatDuration,
+} from '@/lib/duration'
 
 /**
  * A "start now" incentive still has to clear `startTime >= block.timestamp` when the tx mines, so
@@ -32,6 +37,14 @@ export const DURATION_PRESETS: readonly DurationPreset[] = [
     { label: '14 days', seconds: 14 * SECONDS_PER_DAY },
     { label: '30 days', seconds: 30 * SECONDS_PER_DAY },
     { label: '90 days', seconds: 90 * SECONDS_PER_DAY },
+]
+
+/** Short enough to watch a farm start, pay out and end inside one test session. */
+export const TESTNET_DURATION_PRESETS: readonly DurationPreset[] = [
+    { label: '10 min', seconds: 10 * SECONDS_PER_MINUTE },
+    { label: '1 hour', seconds: SECONDS_PER_HOUR },
+    { label: '1 day', seconds: SECONDS_PER_DAY },
+    { label: '7 days', seconds: 7 * SECONDS_PER_DAY },
 ]
 
 export const DEFAULT_DURATION_SECONDS = 30 * SECONDS_PER_DAY
