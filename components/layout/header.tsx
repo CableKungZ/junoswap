@@ -74,6 +74,15 @@ const socialLinks = [
     },
 ]
 
+const NAV_ICON_GRADIENT = 'nav-icon-gradient'
+// Inline, not a Tailwind arbitrary class: the class name would be built from a template literal
+// and the JIT scanner only matches literals, so the rule would never be generated.
+const NAV_ICON_STROKE = { stroke: `url(#${NAV_ICON_GRADIENT})` }
+const NAV_ICON_CLASS =
+    'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] transition-[filter,transform] duration-300 ' +
+    'group-hover:-translate-y-0.5 group-hover:[filter:drop-shadow(0_0_7px_rgba(255,122,61,0.75))] ' +
+    'group-active:[filter:drop-shadow(0_0_10px_rgba(245,72,75,0.85))]'
+
 export function Header() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const pathname = usePathname()
@@ -109,9 +118,11 @@ export function Header() {
         { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
         { href: '/points', label: 'Points', icon: Sparkles },
     ]
-    const primaryNav = navLinks.filter((l) =>
-        ['/swap', '/portfolio', '/earn', '/launchpad'].includes(l.href)
-    )
+    // The mobile bar has its own order — Launchpad sits in the middle, under the thumb.
+    const mobileOrder = ['/swap', '/portfolio', '/launchpad', '/earn']
+    const primaryNav = mobileOrder
+        .map((href) => navLinks.find((l) => l.href === href))
+        .filter((l): l is (typeof navLinks)[number] => !!l)
     const moreNav = navLinks.filter((l) => !primaryNav.some((p) => p.href === l.href))
     const moreActive = moreNav.some((l) => l.href === pathname)
     return (
@@ -206,6 +217,17 @@ export function Header() {
             </header>
 
             <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-border/60 bg-background/95 pt-[min(2vw,8px)] pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                {/* A paint server the icons below reference by id — lucide strokes with
+                    currentColor, which cannot hold a gradient on its own. */}
+                <svg aria-hidden className="pointer-events-none absolute h-0 w-0">
+                    <defs>
+                        <linearGradient id={NAV_ICON_GRADIENT} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#FFB347" />
+                            <stop offset="55%" stopColor="#FF7A3D" />
+                            <stop offset="100%" stopColor="#F5484B" />
+                        </linearGradient>
+                    </defs>
+                </svg>
                 {primaryNav.map((link) => {
                     const isActive = pathname === link.href
                     const Icon = link.icon
@@ -213,24 +235,24 @@ export function Header() {
                         <Link
                             key={link.href}
                             href={navHref(link.href)}
-                            className={`flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium transition-colors ${
+                            className={`group flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium transition-colors ${
                                 isActive ? 'text-foreground' : 'text-muted-foreground'
                             }`}
                         >
-                            <Icon className="h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] text-[#FF914D]" />
+                            <Icon className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
                             <span className="max-w-full truncate">{link.label}</span>
                         </Link>
                     )
                 })}
                 <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
                     <SheetTrigger
-                        className={`flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium outline-none transition-colors ${
+                        className={`group flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium outline-none transition-colors ${
                             moreActive || isMobileMenuOpen
                                 ? 'text-foreground'
                                 : 'text-muted-foreground'
                         }`}
                     >
-                        <LayoutGrid className="h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] text-[#FF914D]" />
+                        <LayoutGrid className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
                         <span className="max-w-full truncate">More</span>
                     </SheetTrigger>
                     <SheetContent
@@ -251,7 +273,7 @@ export function Header() {
                                             isActive ? 'text-foreground' : 'text-muted-foreground'
                                         }`}
                                     >
-                                        <Icon className="h-5 w-5 text-[#FF914D]" />
+                                        <Icon className="h-5 w-5" style={NAV_ICON_STROKE} />
                                         {link.label}
                                     </Link>
                                 )
