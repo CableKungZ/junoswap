@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Token } from '@/types/token'
 import { cn } from '@/lib/utils'
 import { useAccount, useChainId } from 'wagmi'
@@ -235,26 +235,30 @@ function LoadingState() {
     )
 }
 
-const HIGHLIGHT_COUNT = 10
+const HIGHLIGHT_COUNT = 3
+const HIGHLIGHT_ROTATE_MS = 4000
 
-function HighlightChip({
-    pool,
-    tvlUsd,
-    apr,
-    onSelect,
-}: {
+type Highlight = {
     pool: V3PoolData
     tvlUsd: number
     apr: number | null
+    label: string
+}
+
+function HighlightLine({
+    entry,
+    onSelect,
+}: {
+    entry: Highlight
     onSelect: (pool: V3PoolData) => void
 }) {
-    const t0 = getDisplayToken(pool.token0)
-    const t1 = getDisplayToken(pool.token1)
+    const t0 = getDisplayToken(entry.pool.token0)
+    const t1 = getDisplayToken(entry.pool.token1)
     return (
         <button
             type="button"
-            onClick={() => onSelect(pool)}
-            className="flex shrink-0 items-center gap-2.5 rounded-2xl border border-border/40 bg-card/60 py-2 pl-2.5 pr-3.5 transition-colors hover:border-primary/30 hover:bg-card"
+            onClick={() => onSelect(entry.pool)}
+            className="notif-enter flex min-w-0 flex-1 items-center gap-2.5 text-left text-xs"
         >
             <TokenIconPair
                 src0={t0.logo}
@@ -263,26 +267,35 @@ function HighlightChip({
                 symbol1={t1.symbol}
                 size="sm"
             />
-            <div className="text-left">
-                <div className="flex items-center gap-1.5 text-sm font-semibold">
-                    {t0.symbol} / {t1.symbol}
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                        {formatFeeTier(pool.fee)}
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                <span className="flex items-center gap-2 truncate">
+                    <span className="font-semibold text-foreground">
+                        {t0.symbol} / {t1.symbol}
                     </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
-                    <span>{formatTvl(tvlUsd)} TVL</span>
-                    {apr !== null && apr > 0 && (
-                        <span className="text-positive">{apr.toFixed(2)}% APR</span>
+                    <span className="hidden text-muted-foreground sm:inline">
+                        {formatFeeTier(entry.pool.fee)}
+                    </span>
+                </span>
+                <span className="flex items-center gap-2">
+                    <span className="font-mono tabular-nums text-foreground/80">
+                        {formatTvl(entry.tvlUsd)} TVL
+                    </span>
+                    {entry.apr !== null && entry.apr > 0 && (
+                        <span className="tabular-nums text-positive">
+                            {entry.apr.toFixed(2)}% APR
+                        </span>
                     )}
-                </div>
-            </div>
+                </span>
+            </span>
+            <span className="ml-auto shrink-0 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {entry.label}
+            </span>
         </button>
     )
 }
 
-/** Top pools by TVL, scrolling right-to-left. The row is rendered twice so the
- * -50% translate loops seamlessly. */
+/** Top 3 by TVL and top 3 by APR, rotating one at a time. A pool already in the
+ * TVL set is skipped in the APR set, so the next-best pool takes its place. */
 function PoolHighlights({
     pools,
     tvlOf,
@@ -294,41 +307,55 @@ function PoolHighlights({
     aprOf: (addr: string) => number | null
     onSelect: (pool: V3PoolData) => void
 }) {
-    const top = useMemo(
-        () =>
-            pools
-                .map((pool) => ({
-                    pool,
-                    tvlUsd: tvlOf(pool.address) ?? 0,
-                    apr: aprOf(pool.address),
-                }))
-                .filter((entry) => entry.tvlUsd > 0)
-                .sort((a, b) => b.tvlUsd - a.tvlUsd)
-                .slice(0, HIGHLIGHT_COUNT),
-        [pools, tvlOf, aprOf]
-    )
-    if (top.length === 0) return null
-    const row = (copy: number) => (
-        <div className="flex gap-3 pr-3" aria-hidden={copy > 0}>
-            {top.map((entry) => (
-                <HighlightChip
-                    key={entry.pool.address}
-                    pool={entry.pool}
-                    tvlUsd={entry.tvlUsd}
-                    apr={entry.apr}
-                    onSelect={onSelect}
-                />
-            ))}
-        </div>
-    )
+    const highlights = useMemo<Highlight[]>(() => {
+        const entries = pools
+            .map((pool) => ({
+                pool,
+                tvlUsd: tvlOf(pool.address) ?? 0,
+                apr: aprOf(pool.address),
+            }))
+            .filter((entry) => entry.tvlUsd > 0)
+        const byTvl = [...entries].sort((a, b) => b.tvlUsd - a.tvlUsd).slice(0, HIGHLIGHT_COUNT)
+        const taken = new Set(byTvl.map((e) => e.pool.address))
+        const byApr = entries
+            .filter((e) => (e.apr ?? 0) > 0 && !taken.has(e.pool.address))
+            .sort((a, b) => (b.apr ?? 0) - (a.apr ?? 0))
+            .slice(0, HIGHLIGHT_COUNT)
+        return [
+            ...byTvl.map((e) => ({ ...e, label: 'Top TVL' })),
+            ...byApr.map((e) => ({ ...e, label: 'Top APR' })),
+        ]
+    }, [pools, tvlOf, aprOf])
+
+    const [index, setIndex] = useState(0)
+    const hoverRef = useRef(false)
+
+    useEffect(() => {
+        if (highlights.length < 2) return
+        const id = setInterval(() => {
+            if (!hoverRef.current) setIndex((i) => i + 1)
+        }, HIGHLIGHT_ROTATE_MS)
+        return () => clearInterval(id)
+    }, [highlights.length])
+
+    const entry = highlights[index % highlights.length]
+    if (!entry) return null
+
     return (
-        <div className="relative overflow-hidden">
-            <div className="flex w-max animate-pool-marquee">
-                {row(0)}
-                {row(1)}
-            </div>
-            <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-background to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-background to-transparent" />
+        <div
+            className="flex min-h-12 min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border/50 bg-card/40 px-3 py-2 sm:px-4"
+            onMouseEnter={() => {
+                hoverRef.current = true
+            }}
+            onMouseLeave={() => {
+                hoverRef.current = false
+            }}
+        >
+            <HighlightLine
+                key={`${entry.pool.address}-${index}`}
+                entry={entry}
+                onSelect={onSelect}
+            />
         </div>
     )
 }

@@ -800,29 +800,3 @@
         opacity: 0 !important;
     }
 }
-
-@layer utilities {
-    @keyframes pool-marquee {
-        from {
-            transform: translateX(0);
-        }
-        to {
-            transform: translateX(-50%);
-        }
-    }
-
-    .animate-pool-marquee {
-        animation: pool-marquee 60s linear infinite;
-        will-change: transform;
-    }
-
-    .animate-pool-marquee:hover {
-        animation-play-state: paused;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .animate-pool-marquee {
-        animation: none !important;
-    }
-}
