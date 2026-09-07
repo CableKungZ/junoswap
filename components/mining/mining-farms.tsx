@@ -1,5 +1,6 @@
 'use client'
 
+import { EARN_PROGRAM_BADGE, getAvailablePrograms, type EarnProgram } from '@/lib/earn-programs'
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { Plus } from 'lucide-react'
@@ -29,7 +30,6 @@ import {
     paginate,
     sortFarms,
 } from '@/services/mining/farm-list'
-import { ProtocolType, getDexConfig } from '@coshi190/juno-moneta-sdk'
 import type {
     FarmOwnershipFilter,
     FarmSortKey,
@@ -100,7 +100,15 @@ export function MiningFarms({
 }) {
     const chainId = useChainId()
     const { isConnected } = useAccount()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const availablePrograms = getAvailablePrograms(chainId)
+    const hasStaker = availablePrograms.length > 0
+    const programOptions: readonly { key: EarnProgram | 'all'; label: string }[] = [
+        { key: 'all', label: 'All Rewards' },
+        ...availablePrograms.map((program) => ({
+            key: program,
+            label: EARN_PROGRAM_BADGE[program].label,
+        })),
+    ]
     const now = useNowSeconds()
 
     const { incentives, isLoading } = useIncentives()
@@ -111,6 +119,7 @@ export function MiningFarms({
     const [sort, setSort] = useState<FarmSortKey>(DEFAULT_FARM_SORT)
     const [status, setStatus] = useState<FarmStatusFilter>('all')
     const [ownership, setOwnership] = useState<FarmOwnershipFilter>('all')
+    const [programFilter, setProgramFilter] = useState<EarnProgram | 'all'>('all')
     const [page, setPage] = useState(1)
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
 
@@ -122,7 +131,15 @@ export function MiningFarms({
 
     useEffect(() => {
         setPage(1)
-    }, [view, sort, status, ownership])
+    }, [view, sort, status, ownership, programFilter])
+
+    const byProgram = useMemo(
+        () =>
+            programFilter === 'all'
+                ? incentives
+                : incentives.filter((i) => i.program === programFilter),
+        [incentives, programFilter]
+    )
 
     const visible = useMemo(() => {
         const ctx = {
@@ -131,9 +148,9 @@ export function MiningFarms({
             stakedIncentiveIds,
             myPoolAddresses,
         }
-        return sortFarms(filterFarms(incentives, { status, ownership }, ctx), sort, ctx)
+        return sortFarms(filterFarms(byProgram, { status, ownership }, ctx), sort, ctx)
     }, [
-        incentives,
+        byProgram,
         status,
         ownership,
         sort,
@@ -160,11 +177,11 @@ export function MiningFarms({
             }}
         >
             <Plus />
-            Create Farm
+            Create Program
         </Button>
     )
 
-    if (!stakerAddress) {
+    if (!hasStaker) {
         return (
             <div className="space-y-4">
                 <h2 className="text-lg font-semibold sm:text-xl">Mining Farms</h2>
@@ -191,6 +208,14 @@ export function MiningFarms({
                     onViewChange={setView}
                     filters={
                         <>
+                            {programOptions.length > 2 && (
+                                <FarmSelectMenu
+                                    value={programFilter}
+                                    options={programOptions}
+                                    onChange={setProgramFilter}
+                                    ariaLabel="Filter by reward model"
+                                />
+                            )}
                             <FarmSelectMenu
                                 value={status}
                                 options={FARM_STATUS_OPTIONS}
@@ -254,7 +279,7 @@ export function MiningFarms({
                         />
                     )}
                     <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
-                        <p className="text-xs text-muted-foreground">
+                        <p className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                             Showing {rangeStart}–{rangeEnd} of {visible.length}
                         </p>
                         <PaginationControls

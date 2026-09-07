@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatChartPrice } from '@/lib/format'
+import { formatAprPercent, formatChartPrice, formatExactAmount } from '@/lib/format'
 
 describe('formatChartPrice', () => {
     it('expands leading zeros in full for tiny values', () => {
@@ -28,5 +28,24 @@ describe('formatChartPrice', () => {
     it('returns "0" for non-finite input', () => {
         expect(formatChartPrice(Infinity)).toBe('0')
         expect(formatChartPrice(NaN)).toBe('0')
+    })
+})
+
+describe('formatAprPercent', () => {
+    it('separates thousands, keeps one decimal and floors tiny rates', () => {
+        expect(formatAprPercent(12_345.6)).toBe('12,346%')
+        expect(formatAprPercent(1234.5)).toBe('1,235%')
+        expect(formatAprPercent(42.55)).toBe('42.6%')
+        expect(formatAprPercent(0.4)).toBe('<1%')
+        expect(formatAprPercent(0)).toBe('0%')
+        expect(formatAprPercent(null)).toBe('—')
+    })
+})
+
+describe('formatExactAmount', () => {
+    it('separates thousands and never abbreviates', () => {
+        expect(formatExactAmount(2000n * 10n ** 18n, 18)).toBe('2,000')
+        expect(formatExactAmount(1_234_567n * 10n ** 18n, 18)).toBe('1,234,567')
+        expect(formatExactAmount(1500000n, 6)).toBe('1.5')
     })
 })

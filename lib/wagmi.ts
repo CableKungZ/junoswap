@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi'
 import { cookieStorage, createStorage } from 'wagmi'
-import { walletConnect } from 'wagmi/connectors'
+import { injected, walletConnect } from 'wagmi/connectors'
 import { bsc, bitkub, jbc, base, worldchain } from 'wagmi/chains'
 
 export { bsc, bitkub, jbc, base, worldchain }
@@ -32,6 +32,7 @@ const rpcUrls = {
 export const wagmiConfig = createConfig({
     chains: supportedChains,
     connectors: [
+        injected(),
         walletConnect({
             projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
             showQrModal: true,
@@ -50,6 +51,13 @@ export const wagmiConfig = createConfig({
         storage: cookieStorage,
     }),
 })
+
+/** Test chains get minute-scale schedules, so a farm or epoch can be watched end to end. */
+export function isTestnetChain(chainId: number): boolean {
+    return supportedChains.some(
+        (chain) => chain.id === chainId && 'testnet' in chain && chain.testnet
+    )
+}
 
 export const chainMetadata = {
     [bsc.id]: {

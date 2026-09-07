@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useChainId } from 'wagmi'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -13,8 +14,15 @@ import {
     toDateTimeLocalValue,
     type DurationUnit,
 } from '@/lib/duration'
-import { DURATION_PRESETS } from '@/services/mining/create-incentive'
+import { DURATION_PRESETS, TESTNET_DURATION_PRESETS } from '@/services/mining/create-incentive'
+import { isTestnetChain } from '@/lib/wagmi'
 import type { CreateIncentiveForm, StakerLimits, StartMode } from '@/types/earn'
+
+const UNIT_LABEL: Record<DurationUnit, string> = {
+    minutes: 'Minutes',
+    hours: 'Hours',
+    days: 'Days',
+}
 
 interface FarmScheduleInputProps {
     startMode: StartMode
@@ -63,7 +71,11 @@ export function FarmScheduleInput({
     now,
     onChange,
 }: FarmScheduleInputProps) {
-    const matchedPreset = DURATION_PRESETS.find((p) => p.seconds === durationSeconds)
+    const chainId = useChainId()
+    const allowMinutes = isTestnetChain(chainId)
+    const presets = allowMinutes ? TESTNET_DURATION_PRESETS : DURATION_PRESETS
+    const units: DurationUnit[] = allowMinutes ? ['minutes', 'hours', 'days'] : ['hours', 'days']
+    const matchedPreset = presets.find((p) => p.seconds === durationSeconds)
     const [isCustom, setIsCustom] = useState(!matchedPreset)
     const [customUnit, setCustomUnit] = useState<DurationUnit>(
         durationSeconds > 0 && durationSeconds < SECONDS_PER_DAY ? 'hours' : 'days'
@@ -136,7 +148,7 @@ export function FarmScheduleInput({
                     Runs for
                 </Label>
                 <div className="flex flex-wrap gap-2">
-                    {DURATION_PRESETS.map((preset) => (
+                    {presets.map((preset) => (
                         <ChoiceChip
                             key={preset.seconds}
                             active={!isCustom && durationSeconds === preset.seconds}
@@ -166,13 +178,13 @@ export function FarmScheduleInput({
                             className="h-11 flex-1 rounded-xl border border-border/40 bg-muted/30 px-3 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
                         <div className="flex gap-1">
-                            {(['hours', 'days'] as const).map((unit) => (
+                            {units.map((unit) => (
                                 <ChoiceChip
                                     key={unit}
                                     active={customUnit === unit}
                                     onClick={() => setCustomUnit(unit)}
                                 >
-                                    {unit === 'hours' ? 'Hours' : 'Days'}
+                                    {UNIT_LABEL[unit]}
                                 </ChoiceChip>
                             ))}
                         </div>

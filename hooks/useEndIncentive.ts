@@ -1,5 +1,6 @@
 'use client'
 
+import { getStakerAddress } from '@/lib/earn-programs'
 import { useCallback, useMemo } from 'react'
 import {
     useChainId,
@@ -8,7 +9,6 @@ import {
     useWriteContract,
 } from 'wagmi'
 import type { Hex } from 'viem'
-import { ProtocolType, getDexConfig } from '@coshi190/juno-moneta-sdk'
 import { canEndIncentive } from '@/services/mining/incentives'
 import type { Incentive } from '@/types/earn'
 
@@ -49,7 +49,7 @@ export function useEndIncentive(incentive: Incentive | null): {
     hash: Hex | undefined
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, incentive?.program ?? 'v3')
     const isEligible = !!incentive && canEndIncentive(incentive)
 
     const args = useMemo(() => {

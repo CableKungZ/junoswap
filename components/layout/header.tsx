@@ -18,8 +18,17 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
-import { Menu, ChevronDown } from 'lucide-react'
+import {
+    ChevronDown,
+    ArrowLeftRight,
+    Wallet,
+    Coins,
+    Rocket,
+    LayoutGrid,
+    Route,
+    Trophy,
+    Sparkles,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 const socialLinks = [
@@ -65,6 +74,15 @@ const socialLinks = [
     },
 ]
 
+const NAV_ICON_GRADIENT = 'nav-icon-gradient'
+// Inline, not a Tailwind arbitrary class: the class name would be built from a template literal
+// and the JIT scanner only matches literals, so the rule would never be generated.
+const NAV_ICON_STROKE = { stroke: `url(#${NAV_ICON_GRADIENT})` }
+const NAV_ICON_CLASS =
+    'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] transition-[filter,transform] duration-300 ' +
+    'group-hover:-translate-y-0.5 group-hover:[filter:drop-shadow(0_0_7px_rgba(255,122,61,0.75))] ' +
+    'group-active:[filter:drop-shadow(0_0_10px_rgba(245,72,75,0.85))]'
+
 export function Header() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const pathname = usePathname()
@@ -92,154 +110,192 @@ export function Header() {
 
     const transparent = isLanding && !scrolled
     const navLinks = [
-        { href: '/swap', label: 'Swap' },
-        { href: '/portfolio', label: 'Portfolio' },
-        { href: '/earn', label: 'Earn' },
-        { href: '/bridge', label: 'Bridge' },
-        { href: '/launchpad', label: 'Launchpad' },
-        { href: '/leaderboard', label: 'Leaderboard' },
-        { href: '/points', label: 'Points' },
+        { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
+        { href: '/portfolio', label: 'Portfolio', icon: Wallet },
+        { href: '/earn', label: 'Earn', icon: Coins },
+        { href: '/bridge', label: 'Bridge', icon: Route },
+        { href: '/launchpad', label: 'Launchpad', icon: Rocket },
+        { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
+        { href: '/points', label: 'Points', icon: Sparkles },
     ]
+    // The mobile bar has its own order — Launchpad sits in the middle, under the thumb.
+    const mobileOrder = ['/swap', '/portfolio', '/launchpad', '/earn']
+    const primaryNav = mobileOrder
+        .map((href) => navLinks.find((l) => l.href === href))
+        .filter((l): l is (typeof navLinks)[number] => !!l)
+    const moreNav = navLinks.filter((l) => !primaryNav.some((p) => p.href === l.href))
+    const moreActive = moreNav.some((l) => l.href === pathname)
     return (
-        <header
-            className={`sticky top-0 z-50 w-full transition-colors duration-300 ${
-                transparent
-                    ? 'dark bg-transparent text-foreground'
-                    : 'bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'
-            }`}
-        >
-            <div className="flex h-16 items-center px-4 lg:px-6">
-                <div className="flex items-center gap-1 md:gap-6 lg:gap-8">
-                    <Link href="/" className="flex items-center space-x-2">
-                        <div
-                            className="bg-gradient-to-br from-primary to-[#FF914D]"
-                            style={{
-                                width: 28,
-                                height: 28,
-                                WebkitMaskImage: 'url(/logo.svg)',
-                                maskImage: 'url(/logo.svg)',
-                                WebkitMaskSize: 'contain',
-                                maskSize: 'contain',
-                                WebkitMaskRepeat: 'no-repeat',
-                                maskRepeat: 'no-repeat',
-                            }}
-                        />
-                        <span className="relative -top-px hidden md:inline text-xl font-bold leading-none bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent">
-                            Junoswap
-                        </span>
-                    </Link>
+        <>
+            <header
+                className={`sticky top-0 z-50 w-full transition-colors duration-300 ${
+                    transparent
+                        ? 'dark bg-transparent text-foreground'
+                        : 'bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'
+                }`}
+            >
+                <div className="flex h-16 items-center px-4 lg:px-6">
+                    <div className="flex items-center gap-1 md:gap-6 lg:gap-8">
+                        <Link href="/" className="flex items-center space-x-2">
+                            <div
+                                className="bg-gradient-to-br from-primary to-[#FF914D]"
+                                style={{
+                                    width: 28,
+                                    height: 28,
+                                    WebkitMaskImage: 'url(/logo.svg)',
+                                    maskImage: 'url(/logo.svg)',
+                                    WebkitMaskSize: 'contain',
+                                    maskSize: 'contain',
+                                    WebkitMaskRepeat: 'no-repeat',
+                                    maskRepeat: 'no-repeat',
+                                }}
+                            />
+                            <span className="relative -top-px hidden md:inline text-xl font-bold leading-none bg-gradient-to-r from-primary to-[#FF914D] bg-clip-text text-transparent">
+                                Junoswap
+                            </span>
+                        </Link>
 
-                    <NavigationMenu className="hidden md:flex">
-                        <NavigationMenuList className="!justify-start gap-1">
-                            {navLinks.map((link) => {
-                                const isActive = pathname === link.href
-                                return (
-                                    <NavigationMenuItem key={link.href}>
-                                        <NavigationMenuLink asChild>
-                                            <Link
-                                                href={navHref(link.href)}
-                                                className={`relative inline-flex items-center px-4 py-2 text-[13px] font-medium leading-none rounded-lg transition-all duration-200 ease-out ${
-                                                    isActive
-                                                        ? 'text-foreground'
-                                                        : 'text-muted-foreground'
-                                                }`}
-                                            >
-                                                {link.label}
-                                            </Link>
-                                        </NavigationMenuLink>
-                                    </NavigationMenuItem>
-                                )
-                            })}
-                            <NavigationMenuItem>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger className="group inline-flex cursor-pointer items-center gap-1 px-4 py-2 text-[13px] font-medium leading-none rounded-lg text-muted-foreground outline-none transition-all duration-200 ease-out hover:text-foreground data-[state=open]:text-foreground">
-                                        More
-                                        <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="start"
-                                        sideOffset={8}
-                                        className="w-48 rounded-xl border-border/60 bg-popover/95 p-1.5 backdrop-blur"
-                                    >
-                                        {socialLinks.map((social) => (
-                                            <DropdownMenuItem key={social.label} asChild>
-                                                <a
-                                                    href={social.href}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-muted-foreground transition-colors focus:text-foreground"
-                                                >
-                                                    {social.icon}
-                                                    {social.label}
-                                                </a>
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </NavigationMenuItem>
-                        </NavigationMenuList>
-                    </NavigationMenu>
-                </div>
-
-                <div className="flex-1" />
-
-                <div className="flex items-center gap-2">
-                    <NetworkSwitcher />
-                    <ConnectButton />
-                    <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="md:hidden -mr-2 ml-1">
-                                <Menu className="h-5 w-5" />
-                                <span className="sr-only">Toggle menu</span>
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent
-                            side="top"
-                            className="bg-background/95 backdrop-blur top-16 max-h-[calc(100vh-4rem)] overflow-y-auto"
-                        >
-                            <SheetTitle className="sr-only">Navigation menu</SheetTitle>
-
-                            <nav className="flex flex-col gap-1">
+                        <NavigationMenu className="hidden md:flex">
+                            <NavigationMenuList className="!justify-start gap-1">
                                 {navLinks.map((link) => {
                                     const isActive = pathname === link.href
                                     return (
-                                        <Link
-                                            key={link.href}
-                                            href={navHref(link.href)}
-                                            className={`flex items-center min-h-[48px] px-4 py-3 text-[15px] font-medium transition-all duration-150 ${
-                                                isActive
-                                                    ? 'text-foreground'
-                                                    : 'text-muted-foreground border-transparent'
-                                            }`}
-                                            onClick={() => setIsMobileMenuOpen(false)}
-                                        >
-                                            {link.label}
-                                        </Link>
+                                        <NavigationMenuItem key={link.href}>
+                                            <NavigationMenuLink asChild>
+                                                <Link
+                                                    href={navHref(link.href)}
+                                                    className={`relative inline-flex items-center px-4 py-2 text-[13px] font-medium leading-none rounded-lg transition-all duration-200 ease-out ${
+                                                        isActive
+                                                            ? 'text-foreground'
+                                                            : 'text-muted-foreground'
+                                                    }`}
+                                                >
+                                                    {link.label}
+                                                </Link>
+                                            </NavigationMenuLink>
+                                        </NavigationMenuItem>
                                     )
                                 })}
-                            </nav>
-
-                            <div className="mt-3 border-t border-border/60 px-4 pt-4">
-                                <div className="flex items-center gap-2">
-                                    {socialLinks.map((social) => (
-                                        <a
-                                            key={social.label}
-                                            href={social.href}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            aria-label={social.label}
-                                            className="flex h-10 w-10 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
-                                            onClick={() => setIsMobileMenuOpen(false)}
+                                <NavigationMenuItem>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger className="group inline-flex cursor-pointer items-center gap-1 px-4 py-2 text-[13px] font-medium leading-none rounded-lg text-muted-foreground outline-none transition-all duration-200 ease-out hover:text-foreground data-[state=open]:text-foreground">
+                                            More
+                                            <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="start"
+                                            sideOffset={8}
+                                            className="w-48 rounded-xl border-border/60 bg-popover/95 p-1.5 backdrop-blur"
                                         >
-                                            {social.icon}
-                                        </a>
-                                    ))}
-                                </div>
-                            </div>
-                        </SheetContent>
-                    </Sheet>
+                                            {socialLinks.map((social) => (
+                                                <DropdownMenuItem key={social.label} asChild>
+                                                    <a
+                                                        href={social.href}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-muted-foreground transition-colors focus:text-foreground"
+                                                    >
+                                                        {social.icon}
+                                                        {social.label}
+                                                    </a>
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </NavigationMenuItem>
+                            </NavigationMenuList>
+                        </NavigationMenu>
+                    </div>
+
+                    <div className="flex-1" />
+
+                    <div className="flex items-center gap-2">
+                        <NetworkSwitcher />
+                        <ConnectButton />
+                    </div>
                 </div>
-            </div>
-        </header>
+            </header>
+
+            <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-border/60 bg-background/95 pt-[min(2vw,8px)] pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                {/* A paint server the icons below reference by id — lucide strokes with
+                    currentColor, which cannot hold a gradient on its own. */}
+                <svg aria-hidden className="pointer-events-none absolute h-0 w-0">
+                    <defs>
+                        <linearGradient id={NAV_ICON_GRADIENT} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#FFB347" />
+                            <stop offset="55%" stopColor="#FF7A3D" />
+                            <stop offset="100%" stopColor="#F5484B" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                {primaryNav.map((link) => {
+                    const isActive = pathname === link.href
+                    const Icon = link.icon
+                    return (
+                        <Link
+                            key={link.href}
+                            href={navHref(link.href)}
+                            className={`group flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium transition-colors ${
+                                isActive ? 'text-foreground' : 'text-muted-foreground'
+                            }`}
+                        >
+                            <Icon className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
+                            <span className="max-w-full truncate">{link.label}</span>
+                        </Link>
+                    )
+                })}
+                <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                    <SheetTrigger
+                        className={`group flex min-w-0 flex-col items-center justify-center gap-[min(1.4vw,6px)] py-[min(2.4vw,10px)] text-[min(2.9vw,11px)] font-medium outline-none transition-colors ${
+                            moreActive || isMobileMenuOpen
+                                ? 'text-foreground'
+                                : 'text-muted-foreground'
+                        }`}
+                    >
+                        <LayoutGrid className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
+                        <span className="max-w-full truncate">More</span>
+                    </SheetTrigger>
+                    <SheetContent
+                        side="bottom"
+                        className="rounded-t-2xl bg-background/95 pb-[calc(1.5rem+env(safe-area-inset-bottom))] backdrop-blur"
+                    >
+                        <SheetTitle className="sr-only">More navigation</SheetTitle>
+                        <nav className="mt-2 flex flex-col">
+                            {moreNav.map((link) => {
+                                const isActive = pathname === link.href
+                                const Icon = link.icon
+                                return (
+                                    <Link
+                                        key={link.href}
+                                        href={navHref(link.href)}
+                                        onClick={() => setIsMobileMenuOpen(false)}
+                                        className={`flex min-h-[48px] items-center gap-3 px-2 text-[15px] font-medium transition-colors ${
+                                            isActive ? 'text-foreground' : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        <Icon className="h-5 w-5" style={NAV_ICON_STROKE} />
+                                        {link.label}
+                                    </Link>
+                                )
+                            })}
+                        </nav>
+                        <div className="mt-3 flex items-center gap-2 border-t border-border/60 px-2 pt-4">
+                            {socialLinks.map((social) => (
+                                <a
+                                    key={social.label}
+                                    href={social.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label={social.label}
+                                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                                >
+                                    {social.icon}
+                                </a>
+                            ))}
+                        </div>
+                    </SheetContent>
+                </Sheet>
+            </nav>
+        </>
     )
 }

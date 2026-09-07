@@ -1,16 +1,17 @@
 'use client'
 
+import {
+    EARN_PROGRAMS,
+    getStakerAbi,
+    getStakerAddress,
+    type EarnProgram,
+} from '@/lib/earn-programs'
 import { useMemo } from 'react'
 import { useReadContracts, useChainId } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import type { StakedPosition, Incentive, DepositInfo, PositionWithTokens } from '@/types/earn'
-import {
-    ProtocolType,
-    getDexConfig,
-    UNISWAP_V3_STAKER_ABI,
-    fetchPositionsByTokenIds,
-} from '@coshi190/juno-moneta-sdk'
+import { UNISWAP_V3_STAKER_ABI, fetchPositionsByTokenIds } from '@coshi190/juno-moneta-sdk'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
 export function useStakedPositions(
     positions: PositionWithTokens[],
@@ -23,7 +24,13 @@ export function useStakedPositions(
     refetch: () => void
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddresses = useMemo(
+        () =>
+            EARN_PROGRAMS.map((program) => getStakerAddress(chainId, program)).filter(
+                (a): a is Address => !!a
+            ),
+        [chainId]
+    )
     const tokenIdKey = useMemo(() => positions.map((p) => p.tokenId.toString()), [positions])
     const {
         data: depositRows,
@@ -42,37 +49,37 @@ export function useStakedPositions(
                 throw e
             }
         },
-        enabled: !!owner && !!stakerAddress && positions.length > 0,
+        enabled: !!owner && stakerAddresses.length > 0 && positions.length > 0,
         staleTime: 15_000, // 15 seconds
     })
     const depositedPositionIds = useMemo(() => {
-        if (!depositRows || !stakerAddress) return new Set<string>()
-        const staker = stakerAddress.toLowerCase()
+        if (!depositRows) return new Set<string>()
+        const stakers = new Set(stakerAddresses.map((a) => a.toLowerCase()))
         const deposited = new Set<string>()
         for (const row of depositRows) {
-            if (row.owner.toLowerCase() === staker) deposited.add(row.tokenId.toString())
+            if (stakers.has(row.owner.toLowerCase())) deposited.add(row.tokenId.toString())
         }
         return deposited
-    }, [depositRows, stakerAddress])
+    }, [depositRows, stakerAddresses])
     const depositedPositions = useMemo(() => {
         return positions.filter((p) => depositedPositionIds.has(p.tokenId.toString()))
     }, [positions, depositedPositionIds])
     const stakeContracts = useMemo(() => {
-        if (!stakerAddress || depositedPositions.length === 0 || incentives.length === 0) {
-            return []
-        }
+        if (depositedPositions.length === 0 || incentives.length === 0) return []
         const contracts: Array<{
             address: Address
-            abi: typeof UNISWAP_V3_STAKER_ABI
+            abi: ReturnType<typeof getStakerAbi>
             functionName: 'stakes'
             args: readonly [bigint, `0x${string}`]
             chainId: number
         }> = []
         depositedPositions.forEach((position) => {
             incentives.forEach((incentive) => {
+                const staker = getStakerAddress(chainId, incentive.program)
+                if (!staker) return
                 contracts.push({
-                    address: stakerAddress,
-                    abi: UNISWAP_V3_STAKER_ABI,
+                    address: staker,
+                    abi: getStakerAbi(incentive.program),
                     functionName: 'stakes' as const,
                     args: [position.tokenId, incentive.incentiveId] as const,
                     chainId,
@@ -80,7 +87,7 @@ export function useStakedPositions(
             })
         })
         return contracts
-    }, [stakerAddress, depositedPositions, incentives, chainId])
+    }, [depositedPositions, incentives, chainId])
     const {
         data: stakeData,
         isLoading: isLoadingStakes,
@@ -100,14 +107,16 @@ export function useStakedPositions(
         let stakeIndex = 0
         depositedPositions.forEach((position) => {
             incentives.forEach((incentive) => {
-                const stake = stakeData[stakeIndex]?.result as [bigint, bigint] | undefined
+                const stake = stakeData[stakeIndex]?.result as readonly bigint[] | undefined
                 stakeIndex++
-                if (stake && stake[1] > 0n) {
+                // Juno returns (rewardPerLiquidityInitialX128, …, liquidity at 3); Uniswap (…, liquidity at 1)
+                const liquidity = stake?.[incentive.program === 'juno-v3' ? 3 : 1]
+                if (stake && liquidity !== undefined && liquidity > 0n) {
                     result.push({
                         tokenId: position.tokenId,
                         incentiveId: incentive.incentiveId,
-                        liquidity: stake[1],
-                        secondsPerLiquidityInsideInitialX128: stake[0],
+                        liquidity,
+                        secondsPerLiquidityInsideInitialX128: stake[0] ?? 0n,
                         position,
                         incentive,
                         pendingRewards: 0n, // Fetched separately via useRewards
@@ -129,13 +138,16 @@ export function useStakedPositions(
     }
 }
 
-export function useDepositInfo(tokenId: bigint | undefined): {
+export function useDepositInfo(
+    tokenId: bigint | undefined,
+    program: EarnProgram = 'v3'
+): {
     deposit: DepositInfo | null
     isDeposited: boolean
     isLoading: boolean
 } {
     const chainId = useChainId()
-    const stakerAddress = getDexConfig(chainId, undefined, ProtocolType.V3)?.staker
+    const stakerAddress = getStakerAddress(chainId, program)
     const { data, isLoading } = useReadContracts({
         contracts: [
             {

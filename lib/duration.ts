@@ -2,9 +2,10 @@ export const SECONDS_PER_MINUTE = 60
 export const SECONDS_PER_HOUR = 3600
 export const SECONDS_PER_DAY = 86400
 
-export type DurationUnit = 'hours' | 'days'
+export type DurationUnit = 'minutes' | 'hours' | 'days'
 
 const UNIT_SECONDS: Record<DurationUnit, number> = {
+    minutes: SECONDS_PER_MINUTE,
     hours: SECONDS_PER_HOUR,
     days: SECONDS_PER_DAY,
 }

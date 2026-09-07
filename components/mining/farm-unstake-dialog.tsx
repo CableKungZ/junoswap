@@ -21,6 +21,7 @@ import { usePendingRewardsMultiple } from '@/hooks/useRewards'
 import { useUnstakePositions } from '@/hooks/useStaking'
 import { formatRewardAmount } from '@/lib/format'
 import { formatBalance, getDisplayToken } from '@/lib/tokens'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { cn } from '@/lib/utils'
@@ -57,7 +58,6 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
     const chainId = useChainId()
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [hasTouchedSelection, setHasTouchedSelection] = useState(false)
-    const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
 
     const { incentives } = useIncentives()
     const { deposits } = useStakerDeposits()
@@ -78,7 +78,6 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
 
     useEffect(() => {
         if (!open) return
-        setProcessedTxHash(null)
         setSelectedIds([])
         setHasTouchedSelection(false)
     }, [open])
@@ -97,11 +96,9 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
     }, [myStakes, selectedIds])
 
     const { unstake, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useUnstakePositions(selectedTokenIds, incentive, address)
+        useUnstakePositions(selectedTokenIds, incentive, address, incentive?.program ?? 'v3')
 
-    useEffect(() => {
-        if (!isSuccess || !hash || hash === processedTxHash) return
-        setProcessedTxHash(hash)
+    useOnTxSuccess(open, isSuccess, hash, () => {
         if (address) {
             for (const tokenId of selectedTokenIds) markUnstaked(chainId, address, tokenId)
         }
@@ -113,7 +110,7 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
         )
         onSuccess?.()
         onClose()
-    }, [isSuccess, hash, processedTxHash, address, chainId, selectedTokenIds, onSuccess, onClose])
+    })
 
     useEffect(() => {
         if (error) toastError(error)
