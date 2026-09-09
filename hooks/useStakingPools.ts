@@ -33,7 +33,8 @@ export function useStakingPools(): {
         functionName: 'statesByFactory',
         args: [deployment?.factory ?? zeroAddress, account ?? zeroAddress, 0n, PAGE_SIZE],
         chainId,
-        query: { enabled: !!deployment, staleTime: 15_000 },
+        // Earned accrues per second on-chain; poll on the same cadence as farm rewards.
+        query: { enabled: !!deployment, staleTime: 15_000, refetchInterval: 15_000 },
     })
 
     const [, addresses, infos, poolViews, userViews] = useMemo(

@@ -67,8 +67,8 @@ export interface Ctx {
     explorer: string
 }
 
-export function makeCtx(): Ctx {
-    const key = requireEnv('PRIVATE_KEY')
+export function makeCtx(keyEnv = 'PRIVATE_KEY'): Ctx {
+    const key = requireEnv(keyEnv)
     const account = privateKeyToAccount((key.startsWith('0x') ? key : `0x${key}`) as Hex)
     const rpc = env('RPC_URL') ?? KUB_TESTNET.rpcUrls.default.http[0]
     const transport = http(rpc)
@@ -78,6 +78,11 @@ export function makeCtx(): Ctx {
         account: account.address,
         explorer: KUB_TESTNET.blockExplorers.default.url,
     }
+}
+
+/** A second signer, when one is configured. Lets a script drive both sides of a transfer. */
+export function optionalCtx(keyEnv: string): Ctx | undefined {
+    return env(keyEnv) ? makeCtx(keyEnv) : undefined
 }
 
 /* ------------------------------------------------------------------ reporting */
@@ -151,6 +156,19 @@ export function checkEqual(actual: unknown, expected: unknown, label: string) {
     console.log(`      ok — ${label} = ${a}`)
 }
 
+/** Compares two amounts within a percentage tolerance, for values that drift with block time. */
+export function checkClose(actual: bigint, expected: bigint, tolerancePct: number, label: string) {
+    const diff = actual > expected ? actual - expected : expected - actual
+    const allowed = (expected * BigInt(Math.round(tolerancePct * 100))) / 10_000n
+    if (expected === 0n ? actual !== 0n : diff > allowed) {
+        throw new Error(
+            `${label}: expected ~${expected}, got ${actual} (off by ${diff}, allowed ${allowed})`
+        )
+    }
+    const offPct = expected === 0n ? 0 : (Number(diff) / Number(expected)) * 100
+    console.log(`      ok — ${label} = ${actual} vs ${expected} (${offPct.toFixed(2)}% off)`)
+}
+
 /** Asserts that a call reverts. Used for the guards the contracts are supposed to enforce. */
 export async function checkReverts(fn: () => Promise<unknown>, label: string) {
     try {
@@ -176,15 +194,69 @@ export interface ContractCall {
     args?: readonly unknown[]
 }
 
-/** KUB has no EIP-1559, so every transaction is forced to the legacy type. */
+/**
+ * KUB has no EIP-1559, so every transaction is forced to the legacy type. The account is taken
+ * from the wallet client, not from the simulated request: the request carries a bare address,
+ * which viem would send to the node to sign (`unknown account`) instead of signing it here.
+ */
 export async function send(ctx: Ctx, request: unknown, label: string) {
+    const base = request as Record<string, unknown>
+    // KUB's estimate is tight enough that a state change between the estimate and the block the
+    // transaction lands in runs it out of gas — which surfaces as a revert with no reason at all.
+    let gas: bigint | undefined
+    try {
+        const estimate = await ctx.publicClient.estimateContractGas({
+            ...base,
+            account: ctx.account,
+        } as Parameters<PublicClient['estimateContractGas']>[0])
+        // A flat cushion, not a multiplier. These pools take a different, more expensive branch once
+        // a reward has accrued — an estimate taken a second earlier priced a claim that transfers
+        // nothing — but that branch costs tens of thousands of gas, not multiples. A 3x cushion on
+        // a 3M-gas pool deployment reserves most of a wallet's balance for gas that is never used.
+        const cushioned = estimate + 250_000n
+        gas = cushioned > 200_000n ? cushioned : 200_000n
+    } catch {
+        gas = undefined
+    }
     const hash = await ctx.walletClient.writeContract({
-        ...(request as Record<string, unknown>),
+        ...base,
+        ...(gas ? { gas } : {}),
+        account: ctx.walletClient.account,
         type: 'legacy',
     } as WriteRequest)
     console.log(`      tx ${label}: ${ctx.explorer}/tx/${hash}`)
-    const receipt = await ctx.publicClient.waitForTransactionReceipt({ hash })
-    if (receipt.status !== 'success') throw new Error(`${label} reverted on chain (${hash})`)
+    // The public KUB RPC sometimes stops answering for a while mid-run; the transaction is fine,
+    // the node is not. Five minutes with a slow poll rides that out instead of failing the step.
+    const receipt = await ctx.publicClient.waitForTransactionReceipt({
+        hash,
+        timeout: 300_000,
+        pollingInterval: 2_000,
+        retryCount: 10,
+    })
+    if (receipt.status !== 'success') {
+        // The simulation passed, so something changed before the transaction was mined. Replay the
+        // call at the block it failed in — that block is seconds old, so its state is usually still
+        // served — and at the head. `gasUsed` at the limit means it simply ran out of gas.
+        const replay = async (blockNumber?: bigint) => {
+            try {
+                await ctx.publicClient.call({
+                    ...base,
+                    account: ctx.account,
+                    ...(blockNumber ? { blockNumber } : {}),
+                } as Parameters<PublicClient['call']>[0])
+                return 'succeeded on replay'
+            } catch (error) {
+                const first = error instanceof Error ? error.message.split('\n')[0] : ''
+                return first || String(error)
+            }
+        }
+        const atBlock = await replay(receipt.blockNumber)
+        const atHead = await replay()
+        throw new Error(
+            `${label} reverted on chain (${hash}) — gasUsed ${receipt.gasUsed}/${gas ?? 'auto'}; ` +
+                `at block ${receipt.blockNumber}: ${atBlock}; at head: ${atHead}`
+        )
+    }
     return receipt
 }
 
@@ -197,6 +269,17 @@ export async function call(ctx: Ctx, params: ContractCall & { label: string }) {
     } as SimulateParams)
     await send(ctx, request, label)
     return result
+}
+
+/** Same as {@link call}, but hands back the receipt so a step can look at `gasUsed`. */
+export async function callGas(ctx: Ctx, params: ContractCall & { label: string }) {
+    const { label, ...rest } = params
+    const { request } = await ctx.publicClient.simulateContract({
+        ...rest,
+        account: ctx.account,
+    } as SimulateParams)
+    const receipt = await send(ctx, request, label)
+    return receipt.gasUsed
 }
 
 export async function read<T>(ctx: Ctx, params: ContractCall): Promise<T> {
@@ -253,6 +336,16 @@ export const ERC20 = [
         stateMutability: 'nonpayable',
         inputs: [
             { name: 'spender', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+        ],
+        outputs: [{ type: 'bool' }],
+    },
+    {
+        type: 'function',
+        name: 'transfer',
+        stateMutability: 'nonpayable',
+        inputs: [
+            { name: 'to', type: 'address' },
             { name: 'amount', type: 'uint256' },
         ],
         outputs: [{ type: 'bool' }],

@@ -365,7 +365,11 @@ function ManagePoolDialog({
     const decimals = pool.stakingTokenInfo.decimals
     // Nothing staked means there is nothing to withdraw, so that side is not offered.
     const canWithdraw = pool.user.balance > 0n
-    const activeMode = canWithdraw ? mode : 'stake'
+    // `close()` is irreversible and blocks any further epoch, but the contract still accepts
+    // stakes into a closed pool — they simply can never earn. Only the UI stands between a user
+    // and that, so the stake side is not offered once a pool is retired.
+    const isRetired = getStakingStatus(pool.view, now) === 'closed'
+    const activeMode = isRetired ? 'withdraw' : canWithdraw ? mode : 'stake'
     // A capped pool refuses anything past its remaining power, so the cap bounds the input the
     // same way the wallet balance does — the amount can never be one the chain would reject.
     const capped = pool.view.maxStakingPower > 0n
@@ -402,7 +406,10 @@ function ManagePoolDialog({
                 <div className="space-y-4">
                     {canWithdraw && (
                         <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/30 p-1">
-                            {(['stake', 'withdraw'] as const).map((m) => (
+                            {(isRetired
+                                ? (['withdraw'] as const)
+                                : (['stake', 'withdraw'] as const)
+                            ).map((m) => (
                                 <button
                                     key={m}
                                     type="button"

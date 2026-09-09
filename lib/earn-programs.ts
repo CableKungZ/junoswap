@@ -33,6 +33,12 @@ const JUNO_STAKER: Record<number, { address: Address; deployBlock: bigint }> = {
     },
 }
 
+/** Charges the incentive creation fee in front of the (ownerless) juno-v3 staker. Creating through
+ * it is what registers a farm for the operator that finalises every stake when an incentive ends. */
+const JUNO_FEE_COLLECTOR: Record<number, Address> = {
+    25925: '0xB89b244da5737641ada141341048Fb1396F56281',
+}
+
 const STAKING_REWARDS_FACTORY: Record<number, { factory: Address; lens: Address }> = {
     25925: {
         factory: '0xaEfbD7E9a6984Eb061a2c952ED0EAa71CE65117c',
@@ -42,6 +48,10 @@ const STAKING_REWARDS_FACTORY: Record<number, { factory: Address; lens: Address 
 
 export function getJunoStaker(chainId: number) {
     return JUNO_STAKER[chainId]
+}
+
+export function getIncentiveFeeCollector(chainId: number) {
+    return JUNO_FEE_COLLECTOR[chainId]
 }
 
 export function getStakingRewards(chainId: number) {

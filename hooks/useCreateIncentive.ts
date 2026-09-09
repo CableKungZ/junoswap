@@ -1,10 +1,11 @@
 'use client'
 
-import { getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
+import { getIncentiveFeeCollector, getStakerAddress, type EarnProgram } from '@/lib/earn-programs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     useAccount,
     useChainId,
+    useReadContract,
     useSimulateContract,
     useWaitForTransactionReceipt,
     useWriteContract,
@@ -26,11 +27,21 @@ import type {
     StakerLimits,
 } from '@/types/earn'
 
+const FEE_COLLECTOR_ABI = [
+    {
+        type: 'function',
+        name: 'fee',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ type: 'uint256' }],
+    },
+] as const
+
 const CREATE_INCENTIVE_ABI = [
     {
         type: 'function',
         name: 'createIncentive',
-        stateMutability: 'nonpayable',
+        stateMutability: 'payable',
         inputs: [
             {
                 name: 'key',
@@ -56,6 +67,10 @@ interface UseCreateIncentiveResult {
     rewardAmount: bigint
     balance: bigint
     stakerAddress: Address | undefined
+    /** Where the create is actually sent: the fee collector when the chain has one. */
+    spender: Address | undefined
+    /** Creation fee in native currency, charged once per incentive. 0 when there is none. */
+    creationFee: bigint
     needsApproval: boolean
     approve: () => void
     create: () => void
@@ -86,6 +101,18 @@ export function useCreateIncentive(
     const chainId = useChainId()
     const now = useNowSeconds()
     const stakerAddress = getStakerAddress(chainId, program)
+    // The juno-v3 staker is ownerless and charges nothing, so the fee lives in a contract in front
+    // of it. Where one is deployed the whole create — approval included — goes through that.
+    const feeCollector = program === 'juno-v3' ? getIncentiveFeeCollector(chainId) : undefined
+    const target = feeCollector ?? stakerAddress
+
+    const { data: feeData } = useReadContract({
+        address: feeCollector,
+        abi: FEE_COLLECTOR_ABI,
+        functionName: 'fee',
+        query: { enabled: !!feeCollector, staleTime: 5 * 60_000 },
+    })
+    const creationFee = feeCollector ? ((feeData as bigint | undefined) ?? 0n) : 0n
 
     const { balance } = useTokenBalance({ token: form.rewardToken, address })
 
@@ -118,7 +145,7 @@ export function useCreateIncentive(
     } = useTokenApproval({
         token: form.rewardToken,
         owner: address,
-        spender: stakerAddress,
+        spender: target,
         amountToApprove: rewardAmount > 0n ? rewardAmount : undefined,
     })
 
@@ -136,17 +163,18 @@ export function useCreateIncentive(
         ] as const
     }, [incentiveKey, rewardAmount])
 
-    const canSimulate = !!stakerAddress && !!args && errors.length === 0 && !needsApproval
+    const canSimulate = !!target && !!args && errors.length === 0 && !needsApproval
 
     const {
         data: simulation,
         isLoading: isPreparing,
         error: simulationError,
     } = useSimulateContract({
-        address: stakerAddress,
+        address: target,
         abi: CREATE_INCENTIVE_ABI,
         functionName: 'createIncentive',
         args,
+        value: creationFee,
         query: { enabled: canSimulate },
     })
 
@@ -198,6 +226,8 @@ export function useCreateIncentive(
         rewardAmount,
         balance,
         stakerAddress,
+        spender: target,
+        creationFee,
         needsApproval,
         approve: approveReward,
         create,

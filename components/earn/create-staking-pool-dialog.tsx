@@ -14,6 +14,7 @@ import { TokenSelect } from '@/components/swap/token-select'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { useCreateStakingPool } from '@/hooks/useStakingActions'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
+import { useTokenMetadata } from '@/hooks/useTokenMetadata'
 import {
     DurationField,
     FIELD_CLASS,
@@ -49,6 +50,9 @@ export function CreateStakingPoolDialog({
     const { address: account, isConnected } = useAccount()
     const queryClient = useQueryClient()
     const create = useCreateStakingPool()
+    // The fee token is whatever the factory owner set, so its symbol and decimals are read rather
+    // than assumed — an 18-decimal formatting of a 6-decimal fee would be off by a million.
+    const { token: feeToken } = useTokenMetadata(create.fee?.token, chainId)
 
     const [stakingToken, setStakingToken] = useState<Token | null>(null)
     const [rewardsToken, setRewardsToken] = useState<Token | null>(null)
@@ -367,14 +371,14 @@ export function CreateStakingPoolDialog({
                                         : 'unlimited'}
                                 </span>
                             </div>
-                            {create.fee && (
-                                <div className="flex items-baseline justify-between gap-4">
-                                    <span className="text-muted-foreground">Creation fee</span>
-                                    <span className="font-medium tabular-nums">
-                                        {formatBalance(create.fee.amount, 18)}
-                                    </span>
-                                </div>
-                            )}
+                            <div className="flex items-baseline justify-between gap-4">
+                                <span className="text-muted-foreground">Protocol fee</span>
+                                <span className="font-medium tabular-nums">
+                                    {create.fee
+                                        ? `${formatBalance(create.fee.amount, feeToken?.decimals ?? 18)} ${feeToken?.symbol ?? ''}`
+                                        : 'None'}
+                                </span>
+                            </div>
                         </div>
 
                         <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">

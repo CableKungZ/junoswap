@@ -54,7 +54,9 @@ REWARD_AMOUNT=10
 JUNO_STAKER=0x9766424962CBB7482AA58f0c9842673515ABec9a
 REWARD_TOKEN=0x...                # ERC-20 used as the incentive reward
 POSITION_ID=123                   # optional, otherwise the first usable position is picked
-SECOND_ADDRESS=0x...              # optional, only to exercise transferDeposit
+PRIVATE_KEY_2=0x...               # optional, account 2 — deposit test + transferDeposit both ways
+POSITION_ID_2=124                 # optional, account 2's position; otherwise its first usable one
+SECOND_ADDRESS=0x...              # optional, address-only alternative to PRIVATE_KEY_2
 ```
 
 **Requirement: the account must own a Uniswap-v3 position NFT that has liquidity and is currently
@@ -71,8 +73,12 @@ INCENTIVE_SECONDS=180  # how long it runs
 REWARD_AMOUNT=10
 ```
 
-> `SECOND_ADDRESS` moves the deposit to that address permanently. Leave it unset unless you want
-> that — the script then skips both `transferDeposit` and the NFT withdrawal, and says so.
+> With `PRIVATE_KEY_2` the run is self-contained: account 2 receives the deposit via
+> `transferDeposit` and then withdraws the NFT straight back to account 1, so nothing is stranded.
+> It needs a little tKUB for that one transaction.
+>
+> `SECOND_ADDRESS` is the address-only fallback. It moves the deposit there **permanently** — the
+> script then skips the NFT withdrawal and says so. Leave both unset to skip `transferDeposit`.
 
 ## 2. Run
 
@@ -94,9 +100,9 @@ Exit code is 0 only when every step passed. The last block is a PASS/FAIL summar
 5. Stake → `balanceOf`
 6. A second stake becomes its own lot with its own unlock time
 7. Staking past `maxStakingPower` reverts, and `remainingStakingPower` hits 0
-8. `earned` grows while staked
+8. `earned` matches `rewardRate x elapsed x share` from the lens (within 1%)
 9. `withdraw` before the unlock reverts, `withdrawableOf` is 0
-10. `getReward` pays out even while the stake is locked
+10. `getReward` pays out even while locked, and pays what `earned` said (plus the accrual between the two blocks)
 11. The lock expires on schedule and the whole balance becomes withdrawable
 12. `withdrawFrom(index, amount)` withdraws one specific lot
 13. The factory's `claimAll([pool])` batch claim pays out
@@ -105,7 +111,7 @@ Exit code is 0 only when every step passed. The last block is a PASS/FAIL summar
 16. `startEpoch` after `periodFinish` opens epoch 2 with new parameters
 17. Staking works in epoch 2 and is unlocked immediately when the lock is 0
 18. `close()` retires the pool
-19. A closed pool refuses both new stakes and new epochs
+19. A closed pool refuses new epochs — but still accepts stakes, which the app has to prevent
 20. `recoverUnallocatedRewards()` returns the budget that ran with nothing staked
 
 Not covered: `stakeWithPermit` (needs an EIP-2612 token and an offline signature) and
@@ -119,6 +125,7 @@ Not covered: `stakeWithPermit` (needs an EIP-2612 token and an offline signature
 4. `createIncentive` pulls the reward and records `totalReward` / `totalRewardUnclaimed`
 5. Calling it again on the same key before the start tops the budget up
 6. Depositing the NFT records owner and tick range in `deposits`
+6b. Account 2 deposits its own NFT, only it can withdraw, and it gets the NFT back (`PRIVATE_KEY_2`)
 7. `stakeToken` before `startTime` reverts
 8. `stakeToken` after the start records liquidity and bumps `numberOfStakes`
 9. Staking the same token twice reverts
@@ -131,8 +138,8 @@ Not covered: `stakeWithPermit` (needs an EIP-2612 token and an offline signature
 16. `finalizeStake` twice reverts
 17. `stakeToken` into an ended incentive reverts
 18. `unstakeToken` and claim work after the end
-19. `transferDeposit` moves the deposit (only when `SECOND_ADDRESS` is set)
-20. `withdrawToken` returns the NFT to its owner
+19. `transferDeposit` moves the deposit (only when `PRIVATE_KEY_2` or `SECOND_ADDRESS` is set)
+20. `withdrawToken` returns the NFT to account 1 — signed by account 2 after a transfer
 21. `endIncentive` refunds whatever nobody earned
 
 Not covered: the third-party eviction path in `unstakeToken` (needs a second funded account and a
