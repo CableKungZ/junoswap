@@ -170,16 +170,28 @@ export function checkClose(actual: bigint, expected: bigint, tolerancePct: numbe
 }
 
 /** Asserts that a call reverts. Used for the guards the contracts are supposed to enforce. */
-export async function checkReverts(fn: () => Promise<unknown>, label: string) {
+export async function checkReverts(
+    fn: () => Promise<unknown>,
+    label: string,
+    /** Substring the revert must contain, so a guard cannot pass for the wrong reason. */
+    expectMessage?: string
+) {
     try {
         await fn()
     } catch (error) {
-        const detail = error instanceof Error ? error.message.split('\n')[0] : String(error)
+        const message = error instanceof Error ? error.message : String(error)
+        const detail = message.split('\n')[0]
+        if (expectMessage && !message.includes(expectMessage)) {
+            throw new Error(`${label} reverted for another reason: ${detail}`)
+        }
         console.log(`      ok — ${label} reverted (${detail})`)
         return
     }
     throw new Error(`${label} was expected to revert but succeeded`)
 }
+
+/** StakingRewards scales its reward accumulator by 1e36. */
+export const REWARD_PRECISION = 10n ** 36n
 
 /* ------------------------------------------------------------------ chain I/O */
 
@@ -215,9 +227,7 @@ export async function send(ctx: Ctx, request: unknown, label: string) {
         // a 3M-gas pool deployment reserves most of a wallet's balance for gas that is never used.
         const cushioned = estimate + 250_000n
         gas = cushioned > 200_000n ? cushioned : 200_000n
-    } catch {
-        gas = undefined
-    }
+    } catch {}
     const hash = await ctx.walletClient.writeContract({
         ...base,
         ...(gas ? { gas } : {}),

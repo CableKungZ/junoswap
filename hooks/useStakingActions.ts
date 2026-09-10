@@ -5,7 +5,6 @@ import {
     useAccount,
     useChainId,
     usePublicClient,
-    useReadContracts,
     useWaitForTransactionReceipt,
     useWriteContract,
 } from 'wagmi'
@@ -13,6 +12,7 @@ import { maxUint256, type Address } from 'viem'
 import { ERC20_ABI } from '@coshi190/juno-moneta-sdk'
 import { STAKING_REWARDS_ABI, STAKING_REWARDS_FACTORY_ABI } from '@/lib/abis/staking-rewards'
 import { getStakingRewards } from '@/lib/earn-programs'
+import { useStakingFactoryFee } from '@/hooks/useProgramFees'
 
 interface TxState {
     isPending: boolean
@@ -276,26 +276,7 @@ export function useCreateStakingPool() {
 
     // The factory may charge a fee to open a pool. It ships off (amount 0) but the owner can turn
     // it on, and `deploy` then pulls it too — so the form has to know before it submits.
-    const { data: feeData } = useReadContracts({
-        contracts: [
-            {
-                address: deployment?.factory,
-                abi: STAKING_REWARDS_FACTORY_ABI,
-                functionName: 'feeToken' as const,
-                chainId,
-            },
-            {
-                address: deployment?.factory,
-                abi: STAKING_REWARDS_FACTORY_ABI,
-                functionName: 'feeAmount' as const,
-                chainId,
-            },
-        ],
-        query: { enabled: !!deployment, staleTime: 5 * 60_000 },
-    })
-    const feeAmount = (feeData?.[1]?.result as bigint | undefined) ?? 0n
-    const feeToken = feeData?.[0]?.result as Address | undefined
-    const fee = feeAmount > 0n && feeToken ? { token: feeToken, amount: feeAmount } : null
+    const fee = useStakingFactoryFee()
 
     const approveReward = useCallback(
         (rewardsToken: Address) => {

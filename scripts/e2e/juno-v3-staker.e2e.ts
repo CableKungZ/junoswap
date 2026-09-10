@@ -213,37 +213,53 @@ function keyTuple(key: IncentiveKey) {
     }
 }
 
+const SCAN_LIMIT = 25n
+
+/** The account's position NFTs with their `positions()` details, read in two parallel waves. */
+async function ownedPositions(ctx: Ctx, nfpm: Address) {
+    const count = await read<bigint>(ctx, {
+        address: nfpm,
+        abi: NFPM_ABI,
+        functionName: 'balanceOf',
+        args: [ctx.account],
+    })
+    const indexes: bigint[] = []
+    for (let i = 0n; i < count && i < SCAN_LIMIT; i += 1n) indexes.push(i)
+    const ids = await Promise.all(
+        indexes.map((i) =>
+            read<bigint>(ctx, {
+                address: nfpm,
+                abi: NFPM_ABI,
+                functionName: 'tokenOfOwnerByIndex',
+                args: [ctx.account, i],
+            })
+        )
+    )
+    return positionsOf(ctx, nfpm, ids)
+}
+
+function positionsOf(ctx: Ctx, nfpm: Address, ids: readonly bigint[]) {
+    return Promise.all(
+        ids.map(async (tokenId) => ({
+            tokenId,
+            details: await read<readonly unknown[]>(ctx, {
+                address: nfpm,
+                abi: NFPM_ABI,
+                functionName: 'positions',
+                args: [tokenId],
+            }),
+        }))
+    )
+}
+
 /** Finds a position the staker will actually accept: real liquidity, and currently in range. */
 async function pickPosition(ctx: Ctx, nfpm: Address, v3Factory: Address, override?: bigint) {
-    const ids: bigint[] = []
-    if (override !== undefined) {
-        ids.push(override)
-    } else {
-        const count = await read<bigint>(ctx, {
-            address: nfpm,
-            abi: NFPM_ABI,
-            functionName: 'balanceOf',
-            args: [ctx.account],
-        })
-        for (let i = 0n; i < count && i < 25n; i += 1n) {
-            ids.push(
-                await read<bigint>(ctx, {
-                    address: nfpm,
-                    abi: NFPM_ABI,
-                    functionName: 'tokenOfOwnerByIndex',
-                    args: [ctx.account, i],
-                })
-            )
-        }
-    }
+    const owned =
+        override !== undefined
+            ? await positionsOf(ctx, nfpm, [override])
+            : await ownedPositions(ctx, nfpm)
 
-    for (const tokenId of ids) {
-        const position = await read<readonly unknown[]>(ctx, {
-            address: nfpm,
-            abi: NFPM_ABI,
-            functionName: 'positions',
-            args: [tokenId],
-        })
+    for (const { tokenId, details: position } of owned) {
         const token0 = position[2] as Address
         const token1 = position[3] as Address
         const fee = Number(position[4])
@@ -338,6 +354,32 @@ async function main() {
         return { v3Factory, nfpm, maxDuration, maxLead }
     })
     if (!config) return summary()
+
+    /** Pulls a deposited NFT back out of the staker and asserts it landed with `recipient`. */
+    const withdrawBack = async (
+        signer: Ctx,
+        tokenId: bigint,
+        recipient: Address,
+        label: string
+    ) => {
+        await call(signer, {
+            address: staker,
+            abi: JUNO_V3_STAKER_ABI,
+            functionName: 'withdrawToken',
+            args: [tokenId, recipient, '0x'],
+            label: `withdrawToken (${label})`,
+        })
+        checkEqual(
+            await read<Address>(ctx, {
+                address: config.nfpm,
+                abi: NFPM_ABI,
+                functionName: 'ownerOf',
+                args: [tokenId],
+            }),
+            recipient,
+            `NFT back with ${label}`
+        )
+    }
 
     const rewardToken = await step('Read the reward token', () =>
         tokenInfo(ctx, rewardTokenAddress)
@@ -515,26 +557,19 @@ async function main() {
             )
             const treasuryBefore = await ctx.publicClient.getBalance({ address: treasury })
 
-            await checkReverts(async () => {
-                try {
-                    await ctx.publicClient.simulateContract({
+            await checkReverts(
+                () =>
+                    ctx.publicClient.simulateContract({
                         address: collector,
                         abi: collectorAbi,
                         functionName: 'createIncentive',
                         args: [keyTuple(feeKey), smallReward],
                         account: ctx.account,
                         value: fee > 0n ? fee - 1n : 0n,
-                    })
-                } catch (error) {
-                    // Only the contract's own guard counts here: a wallet-side rejection, such
-                    // as too little native currency, would otherwise look like a pass.
-                    const message = error instanceof Error ? error.message : String(error)
-                    if (!message.includes('fee not paid')) {
-                        throw new Error(`reverted for another reason: ${message.split('\n')[0]}`)
-                    }
-                    throw error
-                }
-            }, 'creating without paying the fee')
+                    }),
+                'creating without paying the fee',
+                'fee not paid'
+            )
 
             const { request } = await ctx.publicClient.simulateContract({
                 address: collector,
@@ -662,20 +697,7 @@ async function main() {
                     }),
                 "account 1 withdrawing account 2's deposit"
             )
-            await call(secondCtx, {
-                address: staker,
-                abi: JUNO_V3_STAKER_ABI,
-                functionName: 'withdrawToken',
-                args: [second.tokenId, secondCtx.account, '0x'],
-                label: 'withdrawToken (account 2)',
-            })
-            const owner = await read<Address>(ctx, {
-                address: config.nfpm,
-                abi: NFPM_ABI,
-                functionName: 'ownerOf',
-                args: [second.tokenId],
-            })
-            checkEqual(owner, secondCtx.account, 'NFT back with account 2')
+            await withdrawBack(secondCtx, second.tokenId, secondCtx.account, 'account 2')
         },
         { fatal: false }
     )
@@ -740,31 +762,11 @@ async function main() {
 
             // Reuse one from an earlier run rather than minting every time: each mint locks tokens
             // in a position nothing ever collects, and they pile up one per run.
-            const held = await read<bigint>(ctx, {
-                address: config.nfpm,
-                abi: NFPM_ABI,
-                functionName: 'balanceOf',
-                args: [ctx.account],
-            })
-            let reused: bigint | undefined
-            for (let i = 0n; i < held && i < 25n && reused === undefined; i += 1n) {
-                const id = await read<bigint>(ctx, {
-                    address: config.nfpm,
-                    abi: NFPM_ABI,
-                    functionName: 'tokenOfOwnerByIndex',
-                    args: [ctx.account, i],
-                })
-                const p = await read<readonly unknown[]>(ctx, {
-                    address: config.nfpm,
-                    abi: NFPM_ABI,
-                    functionName: 'positions',
-                    args: [id],
-                })
-                const lower = Number(p[5])
-                const upper = Number(p[6])
-                const liquidity = p[7] as bigint
-                if (liquidity > 0n && (tick < lower || tick >= upper)) reused = id
-            }
+            const reused = (await ownedPositions(ctx, config.nfpm)).find(({ details }) => {
+                const lower = Number(details[5])
+                const upper = Number(details[6])
+                return (details[7] as bigint) > 0n && (tick < lower || tick >= upper)
+            })?.tokenId
 
             const details = await read<readonly unknown[]>(ctx, {
                 address: config.nfpm,
@@ -777,36 +779,37 @@ async function main() {
             const fee = Number(details[4])
             // A range entirely above the price is priced in token0 alone, so only token0 is pulled.
             const amount0 = parse(process.env.OUT_OF_RANGE_AMOUNT ?? '0.05', 18)
-            await ensureAllowance(ctx, token0, config.nfpm, amount0, 'token0 for the mint')
 
-            const minted = reused
-                ? ([reused, 1n, 0n, 0n] as const)
-                : ((await call(ctx, {
-                      address: config.nfpm,
-                      abi: NFPM_ABI,
-                      functionName: 'mint',
-                      args: [
-                          {
-                              token0,
-                              token1,
-                              fee,
-                              tickLower,
-                              tickUpper,
-                              amount0Desired: amount0,
-                              amount1Desired: 0n,
-                              amount0Min: 0n,
-                              amount1Min: 0n,
-                              recipient: ctx.account,
-                              deadline: BigInt((await now(ctx)) + 600),
-                          },
-                      ],
-                      label: 'mint an out-of-range position',
-                  })) as readonly [bigint, bigint, bigint, bigint])
-            const outOfRangeId = minted[0]
-            info(reused ? 'reusing out-of-range tokenId' : 'minted tokenId', outOfRangeId)
-            check(minted[1] > 0n, `position has liquidity = ${minted[1]}`)
-            if (!reused) {
+            let outOfRangeId = reused
+            if (outOfRangeId === undefined) {
+                await ensureAllowance(ctx, token0, config.nfpm, amount0, 'token0 for the mint')
+                const minted = (await call(ctx, {
+                    address: config.nfpm,
+                    abi: NFPM_ABI,
+                    functionName: 'mint',
+                    args: [
+                        {
+                            token0,
+                            token1,
+                            fee,
+                            tickLower,
+                            tickUpper,
+                            amount0Desired: amount0,
+                            amount1Desired: 0n,
+                            amount0Min: 0n,
+                            amount1Min: 0n,
+                            recipient: ctx.account,
+                            deadline: BigInt((await now(ctx)) + 600),
+                        },
+                    ],
+                    label: 'mint an out-of-range position',
+                })) as readonly [bigint, bigint, bigint, bigint]
+                outOfRangeId = minted[0]
+                info('minted tokenId', outOfRangeId)
+                check(minted[1] > 0n, `position has liquidity = ${minted[1]}`)
                 checkEqual(minted[3], 0n, 'no token1 was needed, the range sits above the price')
+            } else {
+                info('reusing out-of-range tokenId', outOfRangeId)
             }
 
             await call(ctx, {
@@ -829,23 +832,7 @@ async function main() {
                     }),
                 'staking a position that is out of range'
             )
-            await call(ctx, {
-                address: staker,
-                abi: JUNO_V3_STAKER_ABI,
-                functionName: 'withdrawToken',
-                args: [outOfRangeId, ctx.account, '0x'],
-                label: 'take the out-of-range position back',
-            })
-            checkEqual(
-                await read<Address>(ctx, {
-                    address: config.nfpm,
-                    abi: NFPM_ABI,
-                    functionName: 'ownerOf',
-                    args: [outOfRangeId],
-                }),
-                ctx.account,
-                'out-of-range NFT returned'
-            )
+            await withdrawBack(ctx, outOfRangeId, ctx.account, 'the out-of-range position')
             log(
                 '      NOTE: eviction (unstakeToken by a stranger) additionally needs a stake that ' +
                     'was in range at stake time and then spent an hour out of it, which takes a ' +
@@ -999,15 +986,16 @@ async function main() {
                     functionName: 'getRewardInfo',
                     args: [keyTuple(key), tokenId],
                 })
-            const [before1, before2] = [
-                await rewardOf(position.tokenId),
-                await rewardOf(second.tokenId),
-            ]
+            // Sampled together: a block of drift between the two reads would skew the ratio.
+            const [before1, before2] = await Promise.all([
+                rewardOf(position.tokenId),
+                rewardOf(second.tokenId),
+            ])
             await sleep(30, 'both positions accruing at once')
-            const [after1, after2] = [
-                await rewardOf(position.tokenId),
-                await rewardOf(second.tokenId),
-            ]
+            const [after1, after2] = await Promise.all([
+                rewardOf(position.tokenId),
+                rewardOf(second.tokenId),
+            ])
             const gained1 = after1[0] - before1[0]
             const gained2 = after2[0] - before2[0]
             info('account 1 liquidity', position.liquidity)
@@ -1040,20 +1028,7 @@ async function main() {
                 args: [rewardToken.address, secondCtx.account, 0n],
                 label: 'claimReward (account 2)',
             })
-            await call(secondCtx, {
-                address: staker,
-                abi: JUNO_V3_STAKER_ABI,
-                functionName: 'withdrawToken',
-                args: [second.tokenId, secondCtx.account, '0x'],
-                label: 'withdrawToken (account 2)',
-            })
-            const owner = await read<Address>(ctx, {
-                address: config.nfpm,
-                abi: NFPM_ABI,
-                functionName: 'ownerOf',
-                args: [second.tokenId],
-            })
-            checkEqual(owner, secondCtx.account, 'NFT back with account 2')
+            await withdrawBack(secondCtx, second.tokenId, secondCtx.account, 'account 2')
         },
         { fatal: false }
     )

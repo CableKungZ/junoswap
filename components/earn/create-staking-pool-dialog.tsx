@@ -52,7 +52,7 @@ export function CreateStakingPoolDialog({
     const create = useCreateStakingPool()
     // The fee token is whatever the factory owner set, so its symbol and decimals are read rather
     // than assumed — an 18-decimal formatting of a 6-decimal fee would be off by a million.
-    const { token: feeToken } = useTokenMetadata(create.fee?.token, chainId)
+    const { token: feeToken } = useTokenMetadata(open ? create.fee?.token : undefined, chainId)
 
     const [stakingToken, setStakingToken] = useState<Token | null>(null)
     const [rewardsToken, setRewardsToken] = useState<Token | null>(null)

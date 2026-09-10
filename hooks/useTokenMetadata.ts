@@ -24,7 +24,7 @@ export function useTokenMetadata(
             { address: tokenAddress, abi: ERC20_ABI, functionName: 'name', chainId },
             { address: tokenAddress, abi: ERC20_ABI, functionName: 'decimals', chainId },
         ],
-        query: { enabled },
+        query: { enabled, staleTime: Infinity, gcTime: Infinity },
     })
 
     if (!enabled || isLoading || isError || !data) {

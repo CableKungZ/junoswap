@@ -12,6 +12,7 @@ import {
     STAKING_REWARDS_FACTORY_ABI,
     STAKING_REWARDS_LENS_ABI,
 } from '../../lib/abis/staking-rewards'
+import type { StakingPoolView as PoolView, StakingUserView as UserView } from '../../types/staking'
 import {
     balanceOf,
     call,
@@ -32,6 +33,7 @@ import {
     optionalAddress,
     parse,
     read,
+    REWARD_PRECISION,
     requireAddress,
     sleep,
     step,
@@ -41,42 +43,9 @@ import {
     type Address,
 } from './shared'
 
-type PoolView = {
-    stakingToken: Address
-    rewardsToken: Address
-    creator: Address
-    totalSupply: bigint
-    maxStakingPower: bigint
-    remainingStakingPower: bigint
-    rewardRate: bigint
-    rewardPerTokenNow: bigint
-    rewardForDuration: bigint
-    unallocatedRewards: bigint
-    rewardsBalance: bigint
-    startTime: bigint
-    periodFinish: bigint
-    lastUpdateTime: bigint
-    rewardsDuration: bigint
-    lockDuration: bigint
-    blockTimestamp: bigint
-    closed: boolean
-}
-
-type UserView = {
-    balance: bigint
-    earned: bigint
-    withdrawable: bigint
-    nextUnlockAt: bigint
-    lotCount: bigint
-    liveLots: bigint
-    stakingBalance: bigint
-    stakingAllowance: bigint
-}
-
 type Lot = { amount: bigint; stakedAt: number; unlockAt: number }
 
 /** `rewardRate` and `rewardPerTokenStored` are scaled by 1e36 in StakingRewards. */
-const REWARD_PRECISION = 10n ** 36n
 
 interface Sample {
     earned: bigint
@@ -258,7 +227,7 @@ async function main() {
      * mid-run, so anything that depends on a live epoch starts a fresh one first — the pool is
      * re-armed with the same lock and cap unless the caller asks for different ones.
      */
-    const ensureLiveEpoch = async (seconds: number, lock = 0n, poolCap = 0n) => {
+    const ensureLiveEpoch = async (seconds: number, lock = 0n, poolCap = 0n): Promise<void> => {
         const view = await read<PoolView>(ctx, {
             address: lens,
             abi: STAKING_REWARDS_LENS_ABI,
@@ -266,7 +235,7 @@ async function main() {
             args: [pool],
         })
         const current = await now(ctx)
-        if (Number(view.periodFinish) > current + EPOCH_HEADROOM_SECONDS) return false
+        if (Number(view.periodFinish) > current + EPOCH_HEADROOM_SECONDS) return
         if (view.closed) throw new Error('pool is closed — cannot start another epoch')
         // An epoch can only be replaced once it has finished, so wait out whatever is left of it.
         if (Number(view.periodFinish) > current) {
@@ -280,7 +249,6 @@ async function main() {
             args: [pool, rewardAmount, 0n, BigInt(seconds), lock, poolCap],
             label: `startEpoch ${seconds}s (keeps rewards flowing)`,
         })
-        return true
     }
 
     await step('Stake the first lot', async () => {
@@ -657,11 +625,10 @@ async function main() {
                 label: 'stake account 2',
             })
 
-            const before1 = await sample()
-            const before2 = await sample(secondCtx.account)
+            // Both accounts are sampled in the same wave so no block of drift creeps between them.
+            const [before1, before2] = await Promise.all([sample(), sample(secondCtx.account)])
             await sleep(accrualWindow, 'both accounts accruing at once')
-            const after1 = await sample()
-            const after2 = await sample(secondCtx.account)
+            const [after1, after2] = await Promise.all([sample(), sample(secondCtx.account)])
 
             checkEqual(after1.totalSupply, needed, 'both stakes are in the pool')
             checkEqual(after1.balance, shareA, 'account 1 stake')

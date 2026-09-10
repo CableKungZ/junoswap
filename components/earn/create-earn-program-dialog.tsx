@@ -4,7 +4,11 @@ import { useChainId } from 'wagmi'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useIncentiveCreationFee, useStakingFactoryFee } from '@/hooks/useProgramFees'
+import { useTokenMetadata } from '@/hooks/useTokenMetadata'
 import { getStakerAddress, getStakingRewards, type EarnProgram } from '@/lib/earn-programs'
+import { formatBalance } from '@/lib/tokens'
+import { getChainMetadata } from '@/lib/wagmi'
 
 const PROGRAM_OPTIONS: {
     id: EarnProgram | 'v2'
@@ -47,6 +51,23 @@ export function CreateEarnProgramDialog({
         option.id === 'v2' ? !!getStakingRewards(chainId) : !!getStakerAddress(chainId, option.id)
     )
 
+    // Every fee is owner-settable on chain, so they are read rather than written into the copy.
+    const stakingFee = useStakingFactoryFee()
+    const junoV3Fee = useIncentiveCreationFee('juno-v3')
+    const v3Fee = useIncentiveCreationFee('v3')
+    const { token: feeToken } = useTokenMetadata(open ? stakingFee?.token : undefined, chainId)
+
+    const feeLabel = (id: EarnProgram | 'v2') => {
+        if (id === 'v2') {
+            if (!stakingFee) return 'No protocol fee'
+            const symbol = feeToken?.symbol ?? ''
+            return `Protocol fee ${formatBalance(stakingFee.amount, feeToken?.decimals ?? 18)} ${symbol}`.trim()
+        }
+        const fee = id === 'juno-v3' ? junoV3Fee : v3Fee
+        if (fee === 0n) return 'No protocol fee'
+        return `Protocol fee ${formatBalance(fee, 18)} ${getChainMetadata(chainId).symbol}`
+    }
+
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
             <DialogContent className="sm:max-w-lg bg-card/95 backdrop-blur-md border-border/50">
@@ -73,6 +94,9 @@ export function CreateEarnProgramDialog({
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
                                 {option.description}
+                            </p>
+                            <p className="mt-1 text-xs font-medium text-foreground/70">
+                                {feeLabel(option.id)}
                             </p>
                         </button>
                     ))}

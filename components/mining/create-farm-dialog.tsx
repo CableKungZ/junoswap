@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { useQueryClient } from '@tanstack/react-query'
-import { formatUnits, type Address } from 'viem'
+import type { Address } from 'viem'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -313,7 +313,7 @@ export function CreateFarmDialog({
                                 label="Protocol fee"
                                 value={
                                     creationFee > 0n
-                                        ? `${formatUnits(creationFee, 18)} ${getChainMetadata(chainId).symbol}`
+                                        ? `${formatBalance(creationFee, 18)} ${getChainMetadata(chainId).symbol}`
                                         : 'None'
                                 }
                             />

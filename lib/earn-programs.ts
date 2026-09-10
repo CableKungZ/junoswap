@@ -33,10 +33,15 @@ const JUNO_STAKER: Record<number, { address: Address; deployBlock: bigint }> = {
     },
 }
 
-/** Charges the incentive creation fee in front of the (ownerless) juno-v3 staker. Creating through
- * it is what registers a farm for the operator that finalises every stake when an incentive ends. */
-const JUNO_FEE_COLLECTOR: Record<number, Address> = {
-    25925: '0xB89b244da5737641ada141341048Fb1396F56281',
+/** Charges the incentive creation fee in front of a staker. Both stakers are ownerless and have no
+ * fee switch of their own, so each one gets its own collector — `staker` is immutable on the
+ * collector, so one instance cannot serve both. Creating through it also registers the farm for the
+ * operator that finalises every stake when an incentive ends. A program with no entry is free. */
+const INCENTIVE_FEE_COLLECTOR: Record<number, Partial<Record<EarnProgram, Address>>> = {
+    25925: {
+        'juno-v3': '0xB89b244da5737641ada141341048Fb1396F56281',
+        v3: '0x6cAe4F62dB8a7eaD0C8fb6bc30E3341c64E417CB',
+    },
 }
 
 const STAKING_REWARDS_FACTORY: Record<number, { factory: Address; lens: Address }> = {
@@ -50,8 +55,8 @@ export function getJunoStaker(chainId: number) {
     return JUNO_STAKER[chainId]
 }
 
-export function getIncentiveFeeCollector(chainId: number) {
-    return JUNO_FEE_COLLECTOR[chainId]
+export function getIncentiveFeeCollector(chainId: number, program: EarnProgram) {
+    return INCENTIVE_FEE_COLLECTOR[chainId]?.[program]
 }
 
 export function getStakingRewards(chainId: number) {
