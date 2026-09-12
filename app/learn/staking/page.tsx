@@ -33,7 +33,11 @@ const ROWS: { label: string; note?: string; values: [string, string, string] }[]
     {
         label: 'Lockable Liquidity',
         note: 'Can the program hold your stake for a fixed term?',
-        values: ['False', 'False', 'True — optional lock per deposit'],
+        values: [
+            'False — though the NFT cannot leave the staker until you unstake it',
+            'False — though the NFT cannot leave the staker until you unstake it',
+            'True — optional lock per deposit',
+        ],
     },
     {
         label: 'What you stake',
@@ -48,23 +52,33 @@ const ROWS: { label: string; note?: string; values: [string, string, string] }[]
         note: 'The single biggest difference between the two LP stakers.',
         values: [
             'The whole pool — unstaked liquidity dilutes your share',
-            'Staked positions only — the budget always reaches participants',
+            'Staked positions only — nothing is lost to liquidity that never staked',
             'Everyone staked in that pool',
         ],
     },
     {
         label: 'Price range matters',
         values: [
-            'Yes — you earn only while in range',
-            'Yes — must be in range to stake, and the payout is scaled by in-range uptime',
+            'Yes — you earn only for the time the price spends inside your range',
+            'Yes — you earn only for the time the price spends inside your range',
             'No — there is no price range',
         ],
     },
     {
-        label: 'Undistributed budget',
+        label: 'What is turned away',
+        note: 'Positions the contract refuses to take at all.',
         values: [
-            'Stays undistributed, refunded when the farm ends',
-            'Refunded to the creator when the farm ends',
+            'Only a position with no liquidity',
+            'A position with no liquidity, one that is out of range, or one carrying more liquidity than the pool has active — a guard against dust minted at an extreme tick, which an in-range position is never caught by',
+            'Nothing, beyond the pool cap and the 256 live-lot limit per account',
+        ],
+    },
+    {
+        label: 'Undistributed budget',
+        note: 'How much is normally left over is the row above — this is only where it goes.',
+        values: [
+            'Refunded to the refundee when the farm ends',
+            'Refunded to the refundee when the farm ends',
             'Recoverable by the creator once the pool is closed',
         ],
     },
@@ -78,11 +92,8 @@ const ROWS: { label: string; note?: string; values: [string, string, string] }[]
     },
     {
         label: 'Cap on total stake',
-        values: [
-            'None',
-            'A position may not exceed the pool’s active liquidity',
-            'Optional cap per epoch',
-        ],
+        note: 'A ceiling on how much can be staked — not the same as what is eligible to stake.',
+        values: ['None', 'None', 'Optional cap per epoch'],
     },
     {
         label: 'Reward tokens',
@@ -90,7 +101,12 @@ const ROWS: { label: string; note?: string; values: [string, string, string] }[]
     },
     {
         label: 'Who can create one',
-        values: ['Anyone, self-funded', 'Anyone, self-funded', 'Anyone, self-funded'],
+        note: 'Nobody approves your program — but opening one is not always free.',
+        values: [
+            'Anyone, self-funded. The staker charges nothing; creating through this app pays a protocol fee in the chain’s native currency',
+            'Anyone, self-funded. The staker charges nothing; creating through this app pays a protocol fee in the chain’s native currency',
+            'Anyone, self-funded. The factory itself may charge a protocol fee, set by its owner and pulled as an ERC-20 alongside the reward',
+        ],
     },
     {
         label: 'Claiming',
@@ -253,9 +269,33 @@ export default function LearnStakingPage() {
 
                 <p className="text-xs leading-relaxed text-muted-foreground">
                     All three are permissionless and self-funded: nobody approves your program, and
-                    the reward you put in is the reward that goes out. None of them can be paused,
-                    upgraded or swept by an admin.
+                    the reward you put in is the reward that goes out — a creation fee, where one is
+                    charged, is taken separately and never out of the reward. None of the staking
+                    contracts can be paused, upgraded or swept by an admin.
                 </p>
+
+                <Card className="border-border/50 bg-muted/20">
+                    <CardContent className="space-y-2 p-5">
+                        <h2 className="text-sm font-semibold">Disclaimer</h2>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                            Junoswap is a frontend interface only. The contracts described on this
+                            page are permissionless and run on chain — they are not operated,
+                            custodied or controlled by Junoswap, and no admin key of ours can move,
+                            freeze or recover the assets you put into them. Anyone can create a farm
+                            or a staking pool, and we neither vet nor endorse the ones you see
+                            listed.
+                        </p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                            Using these contracts is entirely at your own risk. Junoswap accepts no
+                            liability for any loss of funds or damage to property arising from their
+                            use, including losses caused by smart-contract bugs or exploits, by
+                            farms, pools or tokens created by third parties, by impermanent loss or
+                            price movement, or by mistakes made when signing a transaction. Verify
+                            every contract address and reward token yourself before you stake.
+                            Nothing here is financial advice.
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     )
