@@ -1,17 +1,16 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import {
-    ProtocolType,
-    getDexConfig,
-    computeDependentAmount,
-    computeInitialSqrtPriceX96,
-    getFullRange,
-    getTickForPrice,
-    getTickSpacing,
-} from '@coshi190/juno-moneta-sdk'
+import { getDexes } from '@coshi190/juno-moneta-sdk'
+import { getTickSpacing } from '@/lib/liquidity-helpers'
+import { computeInitialSqrtPriceX96, getFullRange, getTickForPrice } from '@/lib/tick-math'
 import { getPresetTickRange } from '@/lib/range-presets'
-import { defaultFeeTier, formatFeeTier, v3FeeTiers } from '@/lib/liquidity-helpers'
+import {
+    computeDependentAmount,
+    defaultFeeTier,
+    formatFeeTier,
+    v3FeeTiers,
+} from '@/lib/liquidity-helpers'
 import type { Token } from '@/types/token'
 import { useAccount, useChainId } from 'wagmi'
 import { useRouter } from 'next/navigation'
@@ -58,7 +57,7 @@ export function AddLiquidityDialog({
     const { address } = useAccount()
     const chainId = useChainId()
     const router = useRouter()
-    const dexConfig = getDexConfig(chainId, undefined, ProtocolType.V3)
+    const dexConfig = getDexes(chainId, 'v3')[0]
     const { tokens: allTokens } = useChainTokens(chainId)
 
     const [token0, setToken0] = useState<Token | null>(null)

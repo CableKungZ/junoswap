@@ -4,25 +4,23 @@ import { useState, useCallback, useRef } from 'react'
 import { useWriteContract, usePublicClient, useAccount } from 'wagmi'
 import type { Address } from 'viem'
 import { maxUint256, maxUint128, parseEther } from 'viem'
-import {
-    ProtocolType,
-    getDexConfig,
-    NONFUNGIBLE_POSITION_MANAGER_ABI,
-    V3_FACTORY_ABI,
-    V3_POOL_ABI,
-    V3_SWAP_ROUTER_ABI,
-    WETH9_ABI,
-    ERC20_ABI,
-    getCurveState,
-    planCurveCall,
-    isReadyToGraduate,
-    isSqrtPriceWithinTolerance,
-    PRICE_TOLERANCE_BPS,
-    calculateGraduationSqrtPriceX96,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, planCurveCall, computeCurve, getDexes } from '@coshi190/juno-moneta-sdk'
+import { getCurveState } from '@/lib/curve-state'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
 import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { findEventArgs } from '@/services/launchpad/receipt'
+
+function isSqrtPriceWithinTolerance(
+    current: bigint,
+    target: bigint,
+    toleranceBps: bigint
+): boolean {
+    if (target <= 0n) return false
+    const diff = current > target ? current - target : target - current
+    return diff <= (target * toleranceBps) / 10000n
+}
+
+const PRICE_TOLERANCE_BPS = 400n
 
 type PoolStatus = 'no_pool' | 'not_initialized' | 'correct' | 'wrong'
 
@@ -83,7 +81,7 @@ export function useGraduate({
     const { chainId, address: bondingCurveAddress } = useLaunchpadContract()
     const publicClient = usePublicClient({ chainId })
     const { address } = useAccount()
-    const v3Config = getDexConfig(chainId, undefined, ProtocolType.V3)
+    const v3Config = getDexes(chainId, 'v3')[0]
     const wrappedNative = INTERMEDIARY_TOKENS[chainId]?.wrappedNative as Address | undefined
 
     const { writeContractAsync } = useWriteContract()
@@ -149,16 +147,23 @@ export function useGraduate({
             if (!curve) throw new Error('Bonding curve state unavailable')
             const { nativeReserve, tokenReserve } = curve
 
-            if (!isReadyToGraduate(nativeReserve, tokenReserve, curve.graduationAmount, false)) {
+            const { graduation } = computeCurve({
+                nativeReserve,
+                tokenReserve,
+                virtualAmount: curve.virtualAmount,
+                graduationAmount: curve.graduationAmount,
+                token: tokenAddr,
+                wrappedNative,
+            })
+
+            if (!graduation.isReady) {
                 throw new Error('Not ready to graduate — bonding curve has not reached the cap')
             }
 
-            const correctSqrtPrice = calculateGraduationSqrtPriceX96(
-                tokenAddr,
-                wrappedNative,
-                nativeReserve,
-                tokenReserve
-            )
+            const correctSqrtPrice = graduation.sqrtPriceX96
+            if (correctSqrtPrice <= 0n) {
+                throw new Error('Invalid reserves for sqrtPriceX96 calculation')
+            }
 
             const tokenIsToken0 = tokenAddr.toLowerCase() < wrappedNative.toLowerCase()
             const token0: Address = tokenIsToken0 ? tokenAddr : wrappedNative
@@ -166,7 +171,7 @@ export function useGraduate({
 
             const poolAddress = (await publicClient.readContract({
                 address: factory,
-                abi: V3_FACTORY_ABI,
+                abi: getAbi('v3Factory'),
                 functionName: 'getPool',
                 args: [token0, token1, 10000],
             })) as Address
@@ -178,7 +183,7 @@ export function useGraduate({
             if (poolAddress && poolAddress !== ZERO_ADDR) {
                 const slot0 = (await publicClient.readContract({
                     address: poolAddress,
-                    abi: V3_POOL_ABI,
+                    abi: getAbi('v3Pool'),
                     functionName: 'slot0',
                 })) as [bigint, number, number, number, number, number, boolean]
 
@@ -204,7 +209,7 @@ export function useGraduate({
                 setStep('initializing-pool')
                 await sendTx({
                     address: positionManager,
-                    abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                    abi: getAbi('positionManager'),
                     functionName: 'createAndInitializePoolIfNecessary',
                     args: [token0, token1, 10000, correctSqrtPrice],
                 })
@@ -215,7 +220,7 @@ export function useGraduate({
 
                 const tokenBalBefore = (await publicClient.readContract({
                     address: tokenAddr,
-                    abi: ERC20_ABI,
+                    abi: getAbi('erc20'),
                     functionName: 'balanceOf',
                     args: [address],
                 })) as bigint
@@ -235,7 +240,7 @@ export function useGraduate({
                 const kubToWrap = (nativeReserve * 85n) / 1000n
                 const wkubBalBefore = (await publicClient.readContract({
                     address: wrappedNative,
-                    abi: ERC20_ABI,
+                    abi: getAbi('erc20'),
                     functionName: 'balanceOf',
                     args: [address],
                 })) as bigint
@@ -244,7 +249,7 @@ export function useGraduate({
                     setStep('wrapping-kub')
                     await sendTx({
                         address: wrappedNative,
-                        abi: WETH9_ABI,
+                        abi: getAbi('weth9'),
                         functionName: 'deposit',
                         value: kubToWrap - wkubBalBefore,
                     })
@@ -253,20 +258,20 @@ export function useGraduate({
                 const readAllowance = async (token: Address, spender: Address) =>
                     (await publicClient.readContract({
                         address: token,
-                        abi: ERC20_ABI,
+                        abi: getAbi('erc20'),
                         functionName: 'allowance',
                         args: [address, spender],
                     })) as bigint
 
                 const tokenBal = (await publicClient.readContract({
                     address: tokenAddr,
-                    abi: ERC20_ABI,
+                    abi: getAbi('erc20'),
                     functionName: 'balanceOf',
                     args: [address],
                 })) as bigint
                 const wkubBal = (await publicClient.readContract({
                     address: wrappedNative,
-                    abi: ERC20_ABI,
+                    abi: getAbi('erc20'),
                     functionName: 'balanceOf',
                     args: [address],
                 })) as bigint
@@ -294,7 +299,7 @@ export function useGraduate({
                     if (await needsApprove(tokenAddr, positionManager, tokenForLiq)) {
                         await sendTx({
                             address: tokenAddr,
-                            abi: ERC20_ABI,
+                            abi: getAbi('erc20'),
                             functionName: 'approve',
                             args: [positionManager, maxUint256],
                         })
@@ -302,7 +307,7 @@ export function useGraduate({
                     if (await needsApprove(wrappedNative, positionManager, wkubForLiq)) {
                         await sendTx({
                             address: wrappedNative,
-                            abi: ERC20_ABI,
+                            abi: getAbi('erc20'),
                             functionName: 'approve',
                             args: [positionManager, maxUint256],
                         })
@@ -311,7 +316,7 @@ export function useGraduate({
                         if (await needsApprove(tokenAddr, swapRouter, tokenBal)) {
                             await sendTx({
                                 address: tokenAddr,
-                                abi: ERC20_ABI,
+                                abi: getAbi('erc20'),
                                 functionName: 'approve',
                                 args: [swapRouter, maxUint256],
                             })
@@ -320,7 +325,7 @@ export function useGraduate({
                         if (await needsApprove(wrappedNative, swapRouter, wkubBal)) {
                             await sendTx({
                                 address: wrappedNative,
-                                abi: ERC20_ABI,
+                                abi: getAbi('erc20'),
                                 functionName: 'approve',
                                 args: [swapRouter, maxUint256],
                             })
@@ -331,20 +336,20 @@ export function useGraduate({
                 const findRescuePosition = async (): Promise<bigint | null> => {
                     const count = (await publicClient.readContract({
                         address: positionManager,
-                        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                        abi: getAbi('positionManager'),
                         functionName: 'balanceOf',
                         args: [address],
                     })) as bigint
                     for (let i = 0n; i < count; i++) {
                         const tid = (await publicClient.readContract({
                             address: positionManager,
-                            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                            abi: getAbi('positionManager'),
                             functionName: 'tokenOfOwnerByIndex',
                             args: [address, i],
                         })) as bigint
                         const pos = (await publicClient.readContract({
                             address: positionManager,
-                            abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                            abi: getAbi('positionManager'),
                             functionName: 'positions',
                             args: [tid],
                         })) as unknown as [
@@ -379,7 +384,7 @@ export function useGraduate({
                     setStep('adding-liquidity')
                     const mintHash = await sendTx({
                         address: positionManager,
-                        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                        abi: getAbi('positionManager'),
                         functionName: 'mint',
                         args: [
                             {
@@ -402,7 +407,7 @@ export function useGraduate({
                         hash: mintHash,
                     })
                     const mintArgs = findEventArgs<{ tokenId: bigint }>(mintReceipt.logs, {
-                        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                        abi: getAbi('positionManager'),
                         eventName: 'IncreaseLiquidity',
                         address: positionManager,
                     })
@@ -412,7 +417,7 @@ export function useGraduate({
 
                 const latestSlot0 = (await publicClient.readContract({
                     address: poolAddress,
-                    abi: V3_POOL_ABI,
+                    abi: getAbi('v3Pool'),
                     functionName: 'slot0',
                 })) as [bigint, number, number, number, number, number, boolean]
                 const latestSqrtPrice = latestSlot0[0]
@@ -428,14 +433,14 @@ export function useGraduate({
                     if (priceTooHigh) {
                         const swapAmount = (await publicClient.readContract({
                             address: tokenAddr,
-                            abi: ERC20_ABI,
+                            abi: getAbi('erc20'),
                             functionName: 'balanceOf',
                             args: [address],
                         })) as bigint
                         if (swapAmount > 0n) {
                             await sendTx({
                                 address: swapRouter,
-                                abi: V3_SWAP_ROUTER_ABI,
+                                abi: getAbi('v3SwapRouter'),
                                 functionName: 'exactInputSingle',
                                 args: [
                                     {
@@ -453,14 +458,14 @@ export function useGraduate({
                     } else {
                         const swapAmount = (await publicClient.readContract({
                             address: wrappedNative,
-                            abi: ERC20_ABI,
+                            abi: getAbi('erc20'),
                             functionName: 'balanceOf',
                             args: [address],
                         })) as bigint
                         if (swapAmount > 0n) {
                             await sendTx({
                                 address: swapRouter,
-                                abi: V3_SWAP_ROUTER_ABI,
+                                abi: getAbi('v3SwapRouter'),
                                 functionName: 'exactInputSingle',
                                 args: [
                                     {
@@ -480,7 +485,7 @@ export function useGraduate({
 
                 const position = (await publicClient.readContract({
                     address: positionManager,
-                    abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                    abi: getAbi('positionManager'),
                     functionName: 'positions',
                     args: [tokenId],
                 })) as unknown as [
@@ -503,7 +508,7 @@ export function useGraduate({
                     setStep('removing-liquidity')
                     await sendTx({
                         address: positionManager,
-                        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                        abi: getAbi('positionManager'),
                         functionName: 'decreaseLiquidity',
                         args: [
                             {
@@ -519,7 +524,7 @@ export function useGraduate({
 
                 await sendTx({
                     address: positionManager,
-                    abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+                    abi: getAbi('positionManager'),
                     functionName: 'collect',
                     args: [
                         {
@@ -539,7 +544,7 @@ export function useGraduate({
                 setStep('unwrapping')
                 const remainingWkub = (await publicClient.readContract({
                     address: wrappedNative,
-                    abi: ERC20_ABI,
+                    abi: getAbi('erc20'),
                     functionName: 'balanceOf',
                     args: [address],
                 })) as bigint
@@ -547,7 +552,7 @@ export function useGraduate({
                 if (remainingWkub > 0n) {
                     await sendTx({
                         address: wrappedNative,
-                        abi: WETH9_ABI,
+                        abi: getAbi('weth9'),
                         functionName: 'withdraw',
                         args: [remainingWkub],
                     })

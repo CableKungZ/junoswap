@@ -15,21 +15,16 @@ import { useSwapExecution } from '@/hooks/useSwapExecution'
 import { useUniV3Quote } from '@/hooks/useUniV3Quote'
 import { useGraduate } from '@/hooks/useGraduate'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
-import {
-    getDexConfig,
-    ERC20_ABI,
-    NATIVE_TOKEN_ADDRESS,
-    ProtocolType,
-    getBondingCurveDeployment,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
+import { getBondingCurveDeployment } from '@/lib/deployments'
 import type { Token } from '@/types/token'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { isValidNumberInput } from '@/lib/utils'
 import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
-import { isReadyToGraduate, calculateGraduationTarget } from '@coshi190/juno-moneta-sdk'
+import { computeCurve } from '@coshi190/juno-moneta-sdk'
 import { calculateMinOutput } from '@/services/dex/slippage'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { getChainMetadata } from '@/lib/wagmi'
+import { getChainMetadata, NATIVE_TOKEN_ADDRESS } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { SettingsMenu } from '@/components/swap/settings-menu'
 import { useSwapStore } from '@/store/swap-store'
@@ -116,12 +111,14 @@ export function TokenTradeCard({
         refetch: refetchReserves,
     } = useTokenReserves({ tokenAddr, isGraduated: _initialIsGraduated, chainId })
 
-    const readyToGraduate = isReadyToGraduate(
+    const { graduation } = computeCurve({
         nativeReserve,
         tokenReserve,
+        virtualAmount,
         graduationAmount,
-        isGraduated
-    )
+        isGraduated,
+    })
+    const readyToGraduate = graduation.isReady
 
     const {
         graduate,
@@ -146,7 +143,7 @@ export function TokenTradeCard({
 
     const { data: tokenBalance, refetch: refetchTokens } = useReadContract({
         address: tokenAddr,
-        abi: ERC20_ABI,
+        abi: getAbi('erc20'),
         functionName: 'balanceOf',
         args: [address ?? zeroAddress],
         chainId,
@@ -243,7 +240,7 @@ export function TokenTradeCard({
         error: buyErrorV3,
         hash: buyHashV3,
     } = useSwapExecution({
-        protocol: ProtocolType.V3,
+        protocol: 'v3',
         tokenIn: nativeToken,
         tokenOut: launchpadToken,
         amountIn: buyAmountWei,
@@ -290,7 +287,7 @@ export function TokenTradeCard({
         [v3SellExpectedOut, slippageBps]
     )
 
-    const v3Config = getDexConfig(chainId, undefined, ProtocolType.V3)
+    const v3Config = getDexes(chainId, 'v3')[0]
     const sellSpender = isGraduated
         ? (v3Config?.swapRouter ?? bondingCurveAddress)
         : bondingCurveAddress
@@ -324,7 +321,7 @@ export function TokenTradeCard({
         error: sellErrorV3,
         hash: sellHashV3,
     } = useSwapExecution({
-        protocol: ProtocolType.V3,
+        protocol: 'v3',
         tokenIn: launchpadToken,
         tokenOut: nativeToken,
         amountIn: sellAmountWei,
@@ -480,7 +477,7 @@ export function TokenTradeCard({
         !isGraduated &&
         !readyToGraduate &&
         graduationAmount > 0n &&
-        nativeReserve >= (calculateGraduationTarget(tokenReserve, graduationAmount) * 90n) / 100n
+        nativeReserve >= (graduation.target * 90n) / 100n
 
     if (readyToGraduate) {
         return (

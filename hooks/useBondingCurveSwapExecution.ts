@@ -11,12 +11,7 @@ import {
 } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import { zeroAddress, type Address } from 'viem'
-import {
-    KAP20_ABI,
-    calculateBuyOutput,
-    calculateSellOutput,
-    planCurveCall,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, computeCurve, planCurveCall } from '@coshi190/juno-moneta-sdk'
 import { getAllowanceFunctionName } from '@/lib/tokens'
 import { useLaunchpadContract } from '@/hooks/useLaunchpadChainId'
 import { calculateMinOutput } from '@/services/dex/slippage'
@@ -64,20 +59,23 @@ export function useBondingCurveSwapExecution({
 
     const { data: allowance = 0n } = useReadContract({
         address: tokenAddr ?? undefined,
-        abi: KAP20_ABI,
+        abi: getAbi('kap20'),
         functionName: tokenAddr ? getAllowanceFunctionName(tokenAddr) : 'allowance',
         args: [address ?? zeroAddress, bondingCurveAddress ?? zeroAddress],
         chainId,
         query: { enabled: !isBuy && !!tokenAddr && !!address && !!bondingCurveAddress },
     })
 
-    const expectedOut = useMemo(
-        () =>
-            isBuy
-                ? calculateBuyOutput(amount, nativeReserve, tokenReserve, virtualAmount)
-                : calculateSellOutput(amount, nativeReserve, tokenReserve, virtualAmount),
-        [isBuy, amount, nativeReserve, tokenReserve, virtualAmount]
-    )
+    const expectedOut = useMemo(() => {
+        const { buyOutput, sellOutput } = computeCurve({
+            nativeReserve,
+            tokenReserve,
+            virtualAmount,
+            buyAmountIn: isBuy ? amount : 0n,
+            sellAmountIn: isBuy ? 0n : amount,
+        })
+        return isBuy ? buyOutput : sellOutput
+    }, [isBuy, amount, nativeReserve, tokenReserve, virtualAmount])
 
     const minOut = useMemo(
         () => calculateMinOutput(expectedOut, slippageBps),

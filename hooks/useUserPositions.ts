@@ -5,14 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useReadContract, useChainId, usePublicClient } from 'wagmi'
 import type { Address } from 'viem'
 import type { V3Position, PositionWithTokens, PositionDetails } from '@/types/earn'
-import {
-    ProtocolType,
-    getDexConfig,
-    fetchPositions,
-    type DescribedPosition,
-    type PositionInput,
-    NONFUNGIBLE_POSITION_MANAGER_ABI,
-} from '@coshi190/juno-moneta-sdk'
+import { getAbi, fetchPositions, getDexes } from '@coshi190/juno-moneta-sdk'
 import type { Token } from '@/types/token'
 import { TOKEN_LISTS } from '@/lib/tokens'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
@@ -20,6 +13,36 @@ import { useGraduatedTokens } from '@/hooks/useGraduatedTokens'
 import { formatPoolPrice } from '@/lib/liquidity-helpers'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address
+
+/** What fetchPositions is handed for a position the indexer hasn't caught up to yet. */
+interface PositionInput {
+    tokenId: bigint
+    owner: string
+    token0: string
+    token1: string
+    fee: number
+    tickLower: number
+    tickUpper: number
+    liquidity: bigint
+    tokensOwed0: bigint
+    tokensOwed1: bigint
+}
+
+/** The slice of what fetchPositions returns that the position UIs actually read. */
+interface DescribedPosition extends PositionInput {
+    poolAddress: Address
+    amount0: bigint
+    amount1: bigint
+    uncollectedFees0: bigint
+    uncollectedFees1: bigint
+    currentTick: number
+    sqrtPriceX96: bigint
+    poolLiquidity: bigint
+    inRange: boolean
+    priceLower: number
+    priceUpper: number
+    currentPrice: number
+}
 
 function buildTokenMap(chainId: number, graduatedTokens: Token[]): Map<string, Token> {
     const map = new Map<string, Token>()
@@ -237,7 +260,7 @@ export function usePositionDetails(
 } {
     const currentChainId = useChainId()
     const effectiveChainId = chainId ?? currentChainId
-    const dexConfig = getDexConfig(effectiveChainId, undefined, ProtocolType.V3)
+    const dexConfig = getDexes(effectiveChainId, 'v3')[0]
     const positionManager = dexConfig?.positionManager
     const tokenMap = useTokenMap(effectiveChainId)
 
@@ -263,7 +286,7 @@ export function usePositionDetails(
         refetch: refetchFallback,
     } = useReadContract({
         address: positionManager,
-        abi: NONFUNGIBLE_POSITION_MANAGER_ABI,
+        abi: getAbi('positionManager'),
         functionName: 'positions',
         args: needsFallback ? [tokenId!] : undefined,
         chainId: effectiveChainId,

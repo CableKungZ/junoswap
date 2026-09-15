@@ -1,5 +1,4 @@
 import type { Address } from 'viem'
-import { ProtocolType } from '@coshi190/juno-moneta-sdk'
 import type { Token } from '@/types/token'
 import type { DEXType } from '@/lib/dex-meta'
 import type { SwapRoute } from './routing'
@@ -15,9 +14,12 @@ export interface SwapParams {
     fees?: number[] // Fee tiers for V3 multi-hop (length = path.length - 1)
 }
 
-import type { QuoteResult } from '@coshi190/juno-moneta-sdk'
-
-export type { QuoteResult }
+export interface QuoteResult {
+    amountOut: bigint
+    sqrtPriceX96After: bigint
+    initializedTicksCrossed: number
+    gasEstimate: bigint
+}
 
 export interface DexQuote {
     dexId: DEXType
@@ -25,7 +27,7 @@ export interface DexQuote {
     isLoading: boolean
     isError: boolean
     error: Error | null
-    protocolType: ProtocolType.V2 | ProtocolType.V3
+    protocolType: 'v2' | 'v3'
     fee?: number // For V3 protocols
     priceImpact?: number
     route?: SwapRoute // Route information for multi-hop swaps

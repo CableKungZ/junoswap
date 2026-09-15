@@ -2,13 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
-import {
-    getBondingCurveDeployment,
-    fetchLaunchTokens,
-    LAUNCH_TOKEN_META_FIELDS,
-} from '@coshi190/juno-moneta-sdk'
+import { fetchLaunchTokens } from '@coshi190/juno-moneta-sdk'
+import { getBondingCurveDeployment } from '@/lib/deployments'
 import type { Token } from '@/types/token'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
+import { LAUNCH_TOKEN_META_FIELDS } from '@/lib/ponder-fields'
 import { resolveLaunchpadLogo } from '@/lib/logo'
 import { applyLaunchpadTokenOverride } from '@/lib/launchpad-token-config'
 import { hasSettled } from '@/lib/query-status'
