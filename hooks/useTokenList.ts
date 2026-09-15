@@ -6,7 +6,13 @@ import { getBondingCurveDeployment } from '@/lib/deployments'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { ponderClient } from '@/lib/ponder-client'
 import { LAUNCH_TOKEN_DETAIL_FIELDS } from '@/lib/ponder-fields'
+import { bitkub } from '@/lib/wagmi'
 import { mapLaunchTokenItem } from '@/services/launchpad/launchpad'
+import {
+    fetchDurianfunTokens,
+    fetchDurianfunGraduationStatus,
+    toLaunchpadEntry,
+} from '@/services/launchpad/durianfun'
 import type { LaunchToken } from '@/types/launchpad'
 
 const SNAPSHOT_LIST_FIELDS = [
@@ -39,6 +45,7 @@ interface UseTokenListResult {
 export function useTokenList(): UseTokenListResult {
     const chainId = useLaunchpadChainId()
     const supported = getBondingCurveDeployment(chainId) !== undefined
+    const durianfunEnabled = chainId === bitkub.id
 
     const {
         data: result,
@@ -77,6 +84,19 @@ export function useTokenList(): UseTokenListResult {
         enabled: supported,
     })
 
+    // Durianfun isn't indexed yet (coshi's ponder work is still pending) — read it straight
+    // from chain instead. Full log rescan is expensive, so cache it longer than the indexer query.
+    const { data: durianfunEntries, isLoading: durianfunLoading } = useQuery({
+        queryKey: ['durianfun-token-list', chainId],
+        queryFn: async () => {
+            const tokens = await fetchDurianfunTokens(chainId)
+            const statuses = await fetchDurianfunGraduationStatus(tokens)
+            return tokens.map((t, i) => toLaunchpadEntry(t, statuses[i]))
+        },
+        staleTime: 5 * 60_000,
+        enabled: durianfunEnabled,
+    })
+
     if (!supported) {
         return {
             tokens: [],
@@ -86,10 +106,21 @@ export function useTokenList(): UseTokenListResult {
         }
     }
 
+    const snapshotMap = new Map(result?.snapshotMap ?? [])
+    for (const entry of durianfunEntries ?? []) {
+        snapshotMap.set(entry.token.address.toLowerCase(), {
+            lastSwapAt: entry.token.createdTime,
+            marketCapNative: entry.marketCapNative,
+            athMarketCapNative: '0',
+            lastPrice: '0',
+            priceChange1dPct: null,
+        })
+    }
+
     return {
-        tokens: result?.tokens ?? [],
-        snapshotMap: result?.snapshotMap ?? new Map<string, SnapshotData>(),
-        isLoading,
+        tokens: [...(result?.tokens ?? []), ...(durianfunEntries ?? []).map((e) => e.token)],
+        snapshotMap,
+        isLoading: isLoading || (durianfunEnabled && durianfunLoading),
         refetch,
     }
 }

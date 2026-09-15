@@ -5,9 +5,10 @@ import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedMarketCaps } from '@/hooks/useGraduatedMarketCaps'
 import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
-import type { LaunchpadSortKey } from '@/types/launchpad'
+import type { LaunchpadPlatformFilter, LaunchpadSortKey } from '@/types/launchpad'
 import { TokenCard } from './token-card'
 import { SortTabs } from './sort-tabs'
+import { PlatformFilter } from './platform-filter'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -18,6 +19,7 @@ interface TokenListProps {
 export function TokenList({ searchQuery = '' }: TokenListProps) {
     const { tokens, snapshotMap, isLoading } = useTokenList()
     const [sortKey, setSortKey] = useState<LaunchpadSortKey>('last-trade')
+    const [platformFilter, setPlatformFilter] = useState<LaunchpadPlatformFilter>('all')
     const chainId = useLaunchpadChainId()
 
     const graduatedTokens = useMemo(
@@ -58,16 +60,21 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
     }, [tokens, snapshotMap, liveMarketCaps, liveActivity])
 
     const filtered = useMemo(() => {
-        if (!searchQuery.trim()) return enrichedTokens
+        const byPlatform = enrichedTokens.filter(({ token }) => {
+            if (platformFilter === 'all') return true
+            const isJunoswap = !token.platform || token.platform === 'junoswap'
+            return platformFilter === 'junoswap' ? isJunoswap : !isJunoswap
+        })
+        if (!searchQuery.trim()) return byPlatform
         const q = searchQuery.toLowerCase().trim()
-        return enrichedTokens.filter(({ token, tokenName, tokenSymbol }) => {
+        return byPlatform.filter(({ token, tokenName, tokenSymbol }) => {
             const symbol = (tokenSymbol || token.symbol || '').toLowerCase()
             const name = (tokenName || token.name || '').toLowerCase()
             const addr = token.address.toLowerCase()
             const creator = token.creator.toLowerCase()
             return symbol.includes(q) || name.includes(q) || addr.includes(q) || creator.includes(q)
         })
-    }, [enrichedTokens, searchQuery])
+    }, [enrichedTokens, searchQuery, platformFilter])
 
     const sorted = useMemo(() => {
         return [...filtered].sort((a, b) => {
@@ -121,8 +128,9 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
 
     return (
         <div>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
                 <SortTabs value={sortKey} onChange={setSortKey} />
+                <PlatformFilter value={platformFilter} onChange={setPlatformFilter} />
             </div>
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 {sorted.map(

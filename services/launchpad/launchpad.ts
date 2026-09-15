@@ -28,6 +28,7 @@ export function mapLaunchTokenItem(raw: RawLaunchTokenItem, chainId: number): La
         chainId,
         graduatedAt: item.graduatedAt ?? null,
         isGraduated: item.isGraduated === 1,
+        platform: 'junoswap',
     }
 }
 

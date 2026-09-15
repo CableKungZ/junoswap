@@ -84,11 +84,18 @@ export function TokenCard({
                                     {formatTimeAgo(token.createdTime).replace(' ago', '')}
                                 </span>
                             </p>
-                            {isGraduated && (
-                                <span className="shrink-0 rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
-                                    Graduated
-                                </span>
-                            )}
+                            <div className="flex shrink-0 items-center gap-1">
+                                {token.platform === 'durianfun' && (
+                                    <span className="rounded-full border border-[#FF914D]/25 bg-[#FF914D]/10 px-2 py-0.5 text-[10px] font-medium text-[#FF914D]">
+                                        DurianFun
+                                    </span>
+                                )}
+                                {isGraduated && (
+                                    <span className="rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
+                                        Graduated
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         <div className="mt-auto pt-3">
