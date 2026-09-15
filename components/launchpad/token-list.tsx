@@ -118,12 +118,14 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
     }
 
     if (filtered.length === 0) {
-        return (
-            <EmptyState
-                title="No results"
-                description={`No tokens matching "${searchQuery.trim()}"`}
-            />
-        )
+        const description = searchQuery.trim()
+            ? `No tokens matching "${searchQuery.trim()}"`
+            : platformFilter === 'third-party'
+              ? 'No third-party tokens found for this chain yet.'
+              : platformFilter === 'junoswap'
+                ? 'No Junoswap tokens match this filter.'
+                : 'No tokens match this filter.'
+        return <EmptyState title="No results" description={description} />
     }
 
     return (

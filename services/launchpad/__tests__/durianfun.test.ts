@@ -41,4 +41,10 @@ describe('parseTokenCreatedLog', () => {
     it('returns null when a required arg is missing', () => {
         expect(parseTokenCreatedLog(makeLog({ token: TOKEN, market: MARKET }))).toBeNull()
     })
+
+    it('returns null instead of throwing when args itself is undefined', () => {
+        // Regression: a wrong indexed/non-indexed event signature makes viem's getLogs
+        // decode fail entirely, leaving log.args undefined rather than partially populated.
+        expect(parseTokenCreatedLog({ address: FACTORY, args: undefined } as never)).toBeNull()
+    })
 })

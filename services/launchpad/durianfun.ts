@@ -28,8 +28,14 @@ export const DURIANFUN_FACTORIES: Address[] = [
  */
 const DURIANFUN_LOGS_START_BLOCK = 28_000_000n
 
+// token/market/creator are indexed (confirmed against a real TokenCreated tx receipt:
+// 0x9fdec110cf4558e08b672d81f164665a4c1d86a39c11911f8aaee53929f8a15f has 4 topics,
+// with topic0 the signature hash and topics[1..3] these three addresses). Declaring them
+// non-indexed still matches on topic0 (indexed-ness isn't part of the signature hash used
+// there) but makes viem's arg decode fail — every log silently threw, which was the real
+// cause of "no third-party tokens" in the UI.
 const tokenCreatedEvent = parseAbiItem(
-    'event TokenCreated(address token, address market, address creator, string name, string symbol, uint256 totalSupply, uint256 timestamp, uint8 graduationTarget)'
+    'event TokenCreated(address indexed token, address indexed market, address indexed creator, string name, string symbol, uint256 totalSupply, uint256 timestamp, uint8 graduationTarget)'
 )
 
 /**
@@ -150,6 +156,7 @@ type TokenCreatedLog = Log<bigint, number, false, typeof tokenCreatedEvent>
 
 /** Pure: raw TokenCreated log -> DurianfunToken, or null if the log is missing an arg. Exported for testing. */
 export function parseTokenCreatedLog(log: TokenCreatedLog): DurianfunToken | null {
+    if (!log.args) return null
     const { token, market, creator, name, symbol, totalSupply, timestamp, graduationTarget } =
         log.args
     if (!token || !market || !creator || name === undefined || symbol === undefined) return null
