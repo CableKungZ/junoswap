@@ -266,6 +266,83 @@ export async function fetchDurianfunGraduationStatus(
     return statuses
 }
 
+// Kublerx V3 — where graduated Durianfun tokens land (same addresses the Junoswap
+// aggregator's own dex-registry already uses; see launchpad-aggregator/reference/RECON.md).
+const KUBLERX_QUOTER: Address = '0x63661462C66f13eD121f394Dc57726c1c33672de'
+const KKUB: Address = '0x67eBD850304c70d983B2d1b93ea79c7CD6c3F6b5'
+const KUBLERX_POOL_FEE = 3000
+
+const quoterV2Abi = [
+    {
+        type: 'function',
+        name: 'quoteExactInputSingle',
+        stateMutability: 'view',
+        inputs: [
+            {
+                type: 'tuple',
+                name: 'params',
+                components: [
+                    { name: 'tokenIn', type: 'address' },
+                    { name: 'tokenOut', type: 'address' },
+                    { name: 'amountIn', type: 'uint256' },
+                    { name: 'fee', type: 'uint24' },
+                    { name: 'sqrtPriceLimitX96', type: 'uint160' },
+                ],
+            },
+        ],
+        outputs: [
+            { name: 'amountOut', type: 'uint256' },
+            { name: 'sqrtPriceX96After', type: 'uint160' },
+            { name: 'initializedTicksCrossed', type: 'uint32' },
+            { name: 'gasEstimate', type: 'uint256' },
+        ],
+    },
+] as const
+
+/**
+ * Live spot price (KUB-wei per whole token) for graduated tokens, read from the Kublerx V3
+ * pool via its quoter — `currentPricePerToken()` on the bonding curve market freezes at the
+ * moment of graduation and drifts from the real price as the AMM trades (confirmed against
+ * GeckoTerminal: the frozen-price market cap was ~4.3x the real one for a graduated token).
+ * Best-effort per token; a token whose quote reverts (e.g. no liquidity) just keeps whatever
+ * price fetchDurianfunGraduationStatus already had.
+ */
+export async function fetchGraduatedTokenPrices(
+    tokens: Pick<DurianfunToken, 'address'>[]
+): Promise<Map<string, bigint>> {
+    const prices = new Map<string, bigint>()
+    if (tokens.length === 0) return prices
+
+    const results = await getClient().multicall({
+        multicallAddress: MULTICALL3_ADDRESS,
+        contracts: tokens.map(
+            (t) =>
+                ({
+                    address: KUBLERX_QUOTER,
+                    abi: quoterV2Abi,
+                    functionName: 'quoteExactInputSingle',
+                    args: [
+                        {
+                            tokenIn: t.address,
+                            tokenOut: KKUB,
+                            amountIn: 10n ** 18n,
+                            fee: KUBLERX_POOL_FEE,
+                            sqrtPriceLimitX96: 0n,
+                        },
+                    ],
+                }) as const
+        ),
+    })
+
+    for (let i = 0; i < tokens.length; i++) {
+        const result = results[i]
+        if (result?.status === 'success') {
+            prices.set(tokens[i]!.address.toLowerCase(), result.result[0])
+        }
+    }
+    return prices
+}
+
 // Factory createToken() calldata carries imageUrl — TokenCreated itself doesn't emit it
 // (confirmed against a real tx: 0x9fdec110...f8a15f decodes to
 // ["Sawadikub", "LSK", "https://pub-...r2.dev/....webp", 0x0, 1]).
@@ -308,13 +385,15 @@ export async function fetchDurianfunLogos(
     return logos
 }
 
-/** Pure: DurianfunToken (+ optional on-chain status/logo) -> LaunchToken + native-KUB market cap. Exported for testing. */
+/** Pure: DurianfunToken (+ optional on-chain status/logo/live price) -> LaunchToken + native-KUB market cap. Exported for testing. */
 export function toLaunchpadEntry(
     token: DurianfunToken,
     status?: DurianfunGraduationStatus,
-    logo?: string
+    logo?: string,
+    livePrice?: bigint
 ): { token: LaunchToken; marketCapNative: string } {
-    const priceNative = status ? Number(formatEther(status.currentPricePerToken)) : 0
+    const price = livePrice ?? status?.currentPricePerToken
+    const priceNative = price ? Number(formatEther(price)) : 0
     const supplyNative = Number(formatEther(token.totalSupply))
     const marketCap = priceNative > 0 ? priceNative * supplyNative : 0
 

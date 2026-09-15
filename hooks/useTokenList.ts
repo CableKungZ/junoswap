@@ -12,7 +12,9 @@ import {
     fetchDurianfunTokens,
     fetchDurianfunGraduationStatus,
     fetchDurianfunLogos,
+    fetchGraduatedTokenPrices,
     toLaunchpadEntry,
+    type DurianfunToken,
 } from '@/services/launchpad/durianfun'
 import type { LaunchToken } from '@/types/launchpad'
 
@@ -87,7 +89,7 @@ export function useTokenList(): UseTokenListResult {
 
     // Durianfun isn't indexed yet (coshi's ponder work is still pending) — read it straight
     // from chain instead. Full log rescan is expensive, so cache it longer than the indexer query.
-    const { data: durianfunEntries, isLoading: durianfunLoading } = useQuery({
+    const { data: durianfunBase, isLoading: durianfunLoading } = useQuery({
         queryKey: ['durianfun-token-list', chainId],
         queryFn: async () => {
             const tokens = await fetchDurianfunTokens(chainId)
@@ -97,13 +99,34 @@ export function useTokenList(): UseTokenListResult {
                 fetchDurianfunGraduationStatus(tokens).catch(() => undefined),
                 fetchDurianfunLogos(tokens).catch(() => undefined),
             ])
-            return tokens.map((t, i) =>
-                toLaunchpadEntry(t, statuses?.[i], logos?.get(t.address.toLowerCase()))
-            )
+            return { tokens, statuses, logos }
         },
         staleTime: 5 * 60_000,
         enabled: durianfunEnabled,
     })
+
+    const graduatedTokens: Pick<DurianfunToken, 'address'>[] = (durianfunBase?.tokens ?? []).filter(
+        (t, i) => durianfunBase?.statuses?.[i]?.graduated
+    )
+
+    // A graduated token's bonding-curve currentPricePerToken() freezes at graduation and
+    // drifts from the real Kublerx V3 price as it trades — refetched on the indexer's own
+    // 30s cadence (matches useGraduatedMarketCaps) instead of the 5min discovery cache above.
+    const { data: graduatedPrices } = useQuery({
+        queryKey: ['durianfun-graduated-prices', chainId, graduatedTokens.map((t) => t.address)],
+        queryFn: () => fetchGraduatedTokenPrices(graduatedTokens),
+        staleTime: 30_000,
+        enabled: durianfunEnabled && graduatedTokens.length > 0,
+    })
+
+    const durianfunEntries = durianfunBase?.tokens.map((t, i) =>
+        toLaunchpadEntry(
+            t,
+            durianfunBase.statuses?.[i],
+            durianfunBase.logos?.get(t.address.toLowerCase()),
+            graduatedPrices?.get(t.address.toLowerCase())
+        )
+    )
 
     if (!supported) {
         return {
