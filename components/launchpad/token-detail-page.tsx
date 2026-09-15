@@ -74,6 +74,11 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
             if (liveGraduatedMarketCap !== null) return String(liveGraduatedMarketCap)
             return snapshotMap.get(tokenAddr.toLowerCase())?.marketCapNative ?? '0'
         }
+        // Third-party (Durianfun) non-graduated tokens don't use Junoswap's reserve reads —
+        // useTokenList already computed marketCapNative for them from the on-chain fetch.
+        if (isThirdPartyCurve) {
+            return snapshotMap.get(tokenAddr.toLowerCase())?.marketCapNative ?? '0'
+        }
         if (virtualAmount > 0n && nativeReserve > 0n && tokenReserve > 0n) {
             return String(
                 (parseFloat(formatEther(virtualAmount + nativeReserve)) /
@@ -84,6 +89,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
         return '0'
     }, [
         isGraduated,
+        isThirdPartyCurve,
         tokenAddr,
         virtualAmount,
         nativeReserve,
