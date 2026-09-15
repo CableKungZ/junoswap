@@ -19,6 +19,15 @@ export const DURIANFUN_FACTORIES: Address[] = [
     '0xE3861e300043d8c20A927340cbA6379D0BECb793', // DuriandotfunFactoryV5
 ]
 
+/**
+ * Earliest block worth scanning for TokenCreated, with margin. `fromBlock: 'earliest'`
+ * times out on rpc.bitkubchain.io (504 after ~7s scanning from genesis) — found by
+ * bisecting eth_getLogs fromBlock on 2026-09-16; the earliest real log sits at block
+ * 32,309,877, and 28,000,000 still returns the identical full set in well under 1s.
+ * ponytail: re-bisect (or drop this margin) if Durianfun's earliest factory ever changes.
+ */
+const DURIANFUN_LOGS_START_BLOCK = 28_000_000n
+
 const tokenCreatedEvent = parseAbiItem(
     'event TokenCreated(address token, address market, address creator, string name, string symbol, uint256 totalSupply, uint256 timestamp, uint8 graduationTarget)'
 )
@@ -167,8 +176,6 @@ function getClient() {
 /**
  * Reads every Durianfun token straight from chain (TokenCreated logs across all known
  * factories) — no dependency on feed.durianfun.xyz. Only KUB Chain mainnet has Durianfun.
- * ponytail: single getLogs call over the full block range; some RPCs cap the range —
- * chunk by block window if rpc.bitkubchain.io starts rejecting this.
  */
 export async function fetchDurianfunTokens(chainId: number): Promise<DurianfunToken[]> {
     if (chainId !== bitkub.id) return []
@@ -176,7 +183,7 @@ export async function fetchDurianfunTokens(chainId: number): Promise<DurianfunTo
     const logs = await getClient().getLogs({
         address: DURIANFUN_FACTORIES,
         event: tokenCreatedEvent,
-        fromBlock: 'earliest',
+        fromBlock: DURIANFUN_LOGS_START_BLOCK,
         toBlock: 'latest',
     })
 
