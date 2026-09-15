@@ -59,6 +59,10 @@ export function DurianfunTradeCard({
         query: { enabled: !!address },
     })
 
+    // Assumes 18 decimals — matches TokenDetailPage's `const decimals = 18` for every
+    // launchpad token (there's no per-token decimals field anywhere in this feature yet).
+    // Verified on-chain for RDA/NOM/HEE/QQK (all 18); re-check if a non-18-decimal
+    // Durianfun token ever surfaces.
     const buyAmountWei = useMemo(() => {
         if (!buyAmount || !isValidNumberInput(buyAmount)) return 0n
         try {

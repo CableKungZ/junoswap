@@ -48,7 +48,11 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
         virtualAmount,
         graduationAmount,
         isLoading: isLoadingReserves,
-    } = useTokenReserves({ tokenAddr, isGraduated, chainId })
+    } = useTokenReserves({
+        tokenAddr: isThirdPartyCurve ? null : tokenAddr,
+        isGraduated,
+        chainId,
+    })
 
     const wrappedNative = INTERMEDIARY_TOKENS[chainId]?.wrappedNative
     const { poolAddress, isLoading: isPoolLoading } = useGraduatedPoolAddress(

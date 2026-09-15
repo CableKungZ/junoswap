@@ -45,8 +45,6 @@ interface UseDurianfunSwapExecutionResult {
     isApproveConfirming: boolean
 }
 
-const DEADLINE_SECONDS = 600n
-
 export function useDurianfunSwapExecution({
     side,
     tokenAddr,
@@ -128,7 +126,9 @@ export function useDurianfunSwapExecution({
         [expectedOut, slippageBps]
     )
 
-    const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000)) + DEADLINE_SECONDS, [])
+    // Not memoized: a frozen deadline would revert the tx once real time passes it. Recomputed
+    // on every render, which is cheap and happens on every amount/quote/allowance update anyway.
+    const deadline = BigInt(Math.floor(Date.now() / 1000)) + BigInt(settings.deadlineMinutes) * 60n
 
     const needsApproval = !isBuy && !!tokenAddr && amount > 0n && allowance < amount
 
