@@ -5,9 +5,10 @@ const FACTORY = '0xdf4f3dB298A9aDe853191F58b4b2a322D47EC005' as const
 const TOKEN = '0x1111111111111111111111111111111111111111' as const
 const MARKET = '0x2222222222222222222222222222222222222222' as const
 const CREATOR = '0x3333333333333333333333333333333333333333' as const
+const TX_HASH = '0x4444444444444444444444444444444444444444444444444444444444444444' as const
 
 function makeLog(args: Partial<Record<string, unknown>>) {
-    return { address: FACTORY, args } as never
+    return { address: FACTORY, args, transactionHash: TX_HASH } as never
 }
 
 describe('parseTokenCreatedLog', () => {
@@ -35,6 +36,7 @@ describe('parseTokenCreatedLog', () => {
             createdTime: 1_700_000_000,
             graduationTarget: 1,
             platform: 'durianfun',
+            txHash: TX_HASH,
         })
     })
 

@@ -11,6 +11,7 @@ import { mapLaunchTokenItem } from '@/services/launchpad/launchpad'
 import {
     fetchDurianfunTokens,
     fetchDurianfunGraduationStatus,
+    fetchDurianfunLogos,
     toLaunchpadEntry,
 } from '@/services/launchpad/durianfun'
 import type { LaunchToken } from '@/types/launchpad'
@@ -90,10 +91,15 @@ export function useTokenList(): UseTokenListResult {
         queryKey: ['durianfun-token-list', chainId],
         queryFn: async () => {
             const tokens = await fetchDurianfunTokens(chainId)
-            // Graduation/price reads are a nice-to-have on top of discovery — if that RPC call
-            // fails, still show the tokens rather than losing the whole list to one bad read.
-            const statuses = await fetchDurianfunGraduationStatus(tokens).catch(() => undefined)
-            return tokens.map((t, i) => toLaunchpadEntry(t, statuses?.[i]))
+            // Graduation/price/logo reads are a nice-to-have on top of discovery — if one of
+            // those RPC calls fails, still show the tokens rather than losing the whole list.
+            const [statuses, logos] = await Promise.all([
+                fetchDurianfunGraduationStatus(tokens).catch(() => undefined),
+                fetchDurianfunLogos(tokens).catch(() => undefined),
+            ])
+            return tokens.map((t, i) =>
+                toLaunchpadEntry(t, statuses?.[i], logos?.get(t.address.toLowerCase()))
+            )
         },
         staleTime: 5 * 60_000,
         enabled: durianfunEnabled,

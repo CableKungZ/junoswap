@@ -1,5 +1,15 @@
-import { createPublicClient, formatEther, http, parseAbiItem, type Address, type Log } from 'viem'
+import {
+    createPublicClient,
+    decodeFunctionData,
+    formatEther,
+    http,
+    parseAbiItem,
+    type Address,
+    type Hash,
+    type Log,
+} from 'viem'
 import { bitkub } from '@/lib/wagmi'
+import { resolveLaunchpadLogo } from '@/lib/logo'
 import type { LaunchToken } from '@/types/launchpad'
 
 /**
@@ -150,6 +160,8 @@ export interface DurianfunToken {
     createdTime: number
     graduationTarget: number
     platform: 'durianfun'
+    /** The creation tx — TokenCreated doesn't emit imageUrl, only the createToken() calldata has it. */
+    txHash: Hash
 }
 
 type TokenCreatedLog = Log<bigint, number, false, typeof tokenCreatedEvent>
@@ -171,13 +183,19 @@ export function parseTokenCreatedLog(log: TokenCreatedLog): DurianfunToken | nul
         createdTime: Number(timestamp ?? 0n),
         graduationTarget: graduationTarget ?? 0,
         platform: 'durianfun',
+        txHash: log.transactionHash,
     }
 }
 
 let client: ReturnType<typeof createPublicClient> | undefined
 
 function getClient() {
-    return (client ??= createPublicClient({ chain: bitkub, transport: http() }))
+    // batch: true coalesces the per-token getTransaction calls in fetchDurianfunLogos into a
+    // single JSON-RPC batch request instead of one HTTP round trip per token.
+    return (client ??= createPublicClient({
+        chain: bitkub,
+        transport: http(undefined, { batch: true }),
+    }))
 }
 
 /**
@@ -248,10 +266,53 @@ export async function fetchDurianfunGraduationStatus(
     return statuses
 }
 
-/** Pure: DurianfunToken (+ optional on-chain status) -> LaunchToken + native-KUB market cap. Exported for testing. */
+// Factory createToken() calldata carries imageUrl — TokenCreated itself doesn't emit it
+// (confirmed against a real tx: 0x9fdec110...f8a15f decodes to
+// ["Sawadikub", "LSK", "https://pub-...r2.dev/....webp", 0x0, 1]).
+const createTokenAbi = [
+    parseAbiItem(
+        'function createToken(string tokenName, string tokenSymbol, string imageUrl, address referrer, uint8 graduationTarget) payable returns (address, address)'
+    ),
+]
+
+/**
+ * Decodes imageUrl out of each token's createToken() creation tx. Best-effort per token —
+ * a factory version with a different createToken shape just yields no logo for that token
+ * rather than failing the whole batch.
+ * ponytail: rpc.bitkubchain.io can serve a log at an old block but fail
+ * eth_getTransactionByHash for that same block's tx ("could not be found") — verified this
+ * against real tx hashes the node's own getLogs just returned. Recently-created tokens
+ * resolve fine; older ones silently get no logo. No workaround without a different RPC/an
+ * archive endpoint.
+ */
+export async function fetchDurianfunLogos(
+    tokens: Pick<DurianfunToken, 'address' | 'txHash'>[]
+): Promise<Map<string, string>> {
+    const logos = new Map<string, string>()
+    if (tokens.length === 0) return logos
+
+    const results = await Promise.all(
+        tokens.map(async (t) => {
+            try {
+                const tx = await getClient().getTransaction({ hash: t.txHash })
+                const { args } = decodeFunctionData({ abi: createTokenAbi, data: tx.input })
+                return [t.address, args[2]] as const
+            } catch {
+                return null
+            }
+        })
+    )
+    for (const result of results) {
+        if (result) logos.set(result[0].toLowerCase(), resolveLaunchpadLogo(result[1]))
+    }
+    return logos
+}
+
+/** Pure: DurianfunToken (+ optional on-chain status/logo) -> LaunchToken + native-KUB market cap. Exported for testing. */
 export function toLaunchpadEntry(
     token: DurianfunToken,
-    status?: DurianfunGraduationStatus
+    status?: DurianfunGraduationStatus,
+    logo?: string
 ): { token: LaunchToken; marketCapNative: string } {
     const priceNative = status ? Number(formatEther(status.currentPricePerToken)) : 0
     const supplyNative = Number(formatEther(token.totalSupply))
@@ -262,7 +323,7 @@ export function toLaunchpadEntry(
             address: token.address,
             name: token.name,
             symbol: token.symbol,
-            logo: '',
+            logo: logo ?? '',
             description: '',
             link1: '',
             link2: '',
