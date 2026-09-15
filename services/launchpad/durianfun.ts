@@ -205,6 +205,11 @@ export interface DurianfunGraduationStatus {
 
 const READS_PER_TOKEN = 3
 
+// viem's bundled `bitkub` chain definition omits `contracts.multicall3`, so
+// publicClient.multicall() throws immediately — even though Multicall3 is deployed on KUB
+// chain mainnet at the standard deterministic address. Pass it explicitly.
+const MULTICALL3_ADDRESS: Address = '0xcA11bde05977b3631167028862bE2a173976CA11'
+
 /** Batches `graduated()` + `ammPool()` + `currentPricePerToken()` reads via multicall. */
 export async function fetchDurianfunGraduationStatus(
     tokens: Pick<DurianfunToken, 'market'>[]
@@ -212,6 +217,7 @@ export async function fetchDurianfunGraduationStatus(
     if (tokens.length === 0) return []
 
     const results = await getClient().multicall({
+        multicallAddress: MULTICALL3_ADDRESS,
         contracts: tokens.flatMap((t) => [
             { address: t.market, abi: marketAbi, functionName: 'graduated' } as const,
             { address: t.market, abi: marketAbi, functionName: 'ammPool' } as const,

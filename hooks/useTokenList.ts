@@ -90,8 +90,10 @@ export function useTokenList(): UseTokenListResult {
         queryKey: ['durianfun-token-list', chainId],
         queryFn: async () => {
             const tokens = await fetchDurianfunTokens(chainId)
-            const statuses = await fetchDurianfunGraduationStatus(tokens)
-            return tokens.map((t, i) => toLaunchpadEntry(t, statuses[i]))
+            // Graduation/price reads are a nice-to-have on top of discovery — if that RPC call
+            // fails, still show the tokens rather than losing the whole list to one bad read.
+            const statuses = await fetchDurianfunGraduationStatus(tokens).catch(() => undefined)
+            return tokens.map((t, i) => toLaunchpadEntry(t, statuses?.[i]))
         },
         staleTime: 5 * 60_000,
         enabled: durianfunEnabled,
