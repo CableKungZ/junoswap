@@ -68,6 +68,7 @@ interface RecentTradesProps {
     isGraduated?: boolean
     creatorAddress?: Address
     className?: string
+    durianfunMarket?: Address
 }
 
 function TradeRow({
@@ -182,6 +183,7 @@ export function RecentTrades({
     isGraduated,
     creatorAddress,
     className,
+    durianfunMarket,
 }: RecentTradesProps) {
     const [page, setPage] = useState(1)
     const [typeFilter, setTypeFilter] = useState('all')
@@ -221,7 +223,8 @@ export function RecentTrades({
         {
             isBuy: hookIsBuyFilter,
             sender: hookSenderFilter,
-        }
+        },
+        durianfunMarket
     )
 
     const filteredTrades = useMemo(() => {

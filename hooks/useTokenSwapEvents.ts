@@ -5,6 +5,7 @@ import type { Address } from 'viem'
 import { fetchTokenBondingCurveSwaps, fetchTokenV3Swaps } from '@coshi190/juno-moneta-sdk'
 import { ponderClient } from '@/lib/ponder-client'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
+import { fetchDurianfunMarketSwaps } from '@/services/launchpad/durianfun'
 import type { SwapEventData } from '@/types/launchpad'
 
 export type { SwapEventData }
@@ -28,7 +29,10 @@ export function useTokenSwapEvents(
     pageSize: number = 10,
     poolAddress?: Address,
     isGraduated?: boolean,
-    filters?: SwapEventFilters
+    filters?: SwapEventFilters,
+    // Non-graduated Durianfun tokens trade on their own market contract, which isn't indexed
+    // by ponder anywhere -- read its Bought/Sold history straight from chain instead.
+    durianfunMarket?: Address
 ) {
     const chainId = useLaunchpadChainId()
     return useQuery({
@@ -42,11 +46,37 @@ export function useTokenSwapEvents(
             isGraduated,
             filters?.isBuy,
             filters?.sender?.toLowerCase(),
+            durianfunMarket?.toLowerCase(),
         ],
         queryFn: async (): Promise<{ data: SwapEventData[]; totalCount: number }> => {
             if (!tokenAddr) return { data: [], totalCount: 0 }
 
             const offset = (page - 1) * pageSize
+
+            if (durianfunMarket) {
+                const swaps = await fetchDurianfunMarketSwaps(durianfunMarket)
+                const filtered = swaps.filter((s) => {
+                    if (filters?.isBuy !== undefined && s.isBuy !== filters.isBuy) return false
+                    if (filters?.sender && s.sender.toLowerCase() !== filters.sender.toLowerCase())
+                        return false
+                    return true
+                })
+                const data: SwapEventData[] = filtered
+                    .slice(offset, offset + pageSize)
+                    .map((s) => ({
+                        blockNumber: s.blockNumber,
+                        timestamp: s.timestamp,
+                        sender: s.sender,
+                        isBuy: s.isBuy,
+                        tokenAddr,
+                        amountIn: s.amountIn,
+                        amountOut: s.amountOut,
+                        reserveIn: 0n,
+                        reserveOut: 0n,
+                        transactionHash: s.transactionHash,
+                    }))
+                return { data, totalCount: filtered.length }
+            }
 
             if (isGraduated) {
                 const [bcResult, v3Result] = await Promise.all([

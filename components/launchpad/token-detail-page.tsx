@@ -155,6 +155,20 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                             <div className="min-w-0">
                                 <h1 className="truncate text-lg font-bold md:text-xl">{name}</h1>
                                 <span className="text-sm text-muted-foreground">{symbol}</span>
+                                {isDurianfun && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="ml-1.5 inline-flex shrink-0 cursor-default items-center rounded-full border border-[rgb(204,255,0)]/25 bg-[rgb(204,255,0)]/10 px-2 py-0.5 align-middle text-[10px] font-medium text-[rgb(204,255,0)]">
+                                                Third-party
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            This token was created on DurianFun, not Junoswap —
+                                            trading, contracts, and token safety are not managed or
+                                            audited by Junoswap.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                                 {tokenInfo?.creator && (
                                     <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                                         <Link
@@ -348,6 +362,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         poolAddress={poolAddress}
                         isGraduated={isGraduated}
                         creatorAddress={tokenInfo?.creator}
+                        durianfunMarket={isThirdPartyCurve ? tokenInfo?.market : undefined}
                     />
                 </div>
 

@@ -1,9 +1,13 @@
 import {
     createPublicClient,
+    decodeAbiParameters,
     decodeFunctionData,
     formatEther,
+    getAddress,
     http,
+    numberToHex,
     parseAbiItem,
+    parseAbiParameters,
     type Address,
     type Hash,
     type Log,
@@ -386,6 +390,165 @@ export async function fetchDurianfunLogos(
         if (result) logos.set(result[0].toLowerCase(), resolveLaunchpadLogo(result[1]))
     }
     return logos
+}
+
+export interface DurianfunSwapEvent {
+    blockNumber: bigint
+    timestamp: number
+    sender: Address
+    isBuy: boolean
+    amountIn: bigint // KUB (buy) or token (sell), matches tx.value / the Transfer amount
+    amountOut: bigint // token (buy) or KUB (sell)
+    transactionHash: Hash
+}
+
+// The market's Buy/Sell events aren't named/typed anywhere public, so the topic0 hashes below
+// were recovered directly from real tx receipts rather than derived from a guessed event
+// signature (a guessed name -> wrong keccak256 topic0 -> getLogs silently matches nothing).
+// Buy:  0xf9ca77bc...ac6a7b (5 uint256 words: kubIn, tokensOut, fee, arg3, arg4) --
+//       field[0] verified == tx.value (1e16), field[1] verified == the paired Transfer amount.
+// Sell: 0x95f7a1fa...27c5ec1 (5 uint256 words: tokenIn, kubOut, fee, arg3, arg4) --
+//       field[0] verified == the paired Transfer amount.
+const BOUGHT_TOPIC0 = '0x6a7381bdc8f4e7ed3c0f0c299382777bde88a65f0c27f670235401d154454630' as const
+const SOLD_TOPIC0 = '0x0db49c84bba47806cd98c426100d458b5859594553fc51f0ce13852e9e1ca1c9' as const
+const swapDataAbi = parseAbiParameters('uint256, uint256, uint256, uint256, uint256')
+
+interface RawSwapLog {
+    args: { sender?: Address; amountIn?: bigint; amountOut?: bigint }
+    blockNumber: bigint | null
+    transactionHash: Hash | null
+}
+
+// eth_getLogs JSON-RPC response shape (all hex strings) -- viem's typed getLogs action doesn't
+// expose a raw-topics filter, so these are fetched via a direct client.request call instead.
+interface RpcLogEntry {
+    blockNumber: Hash | null
+    transactionHash: Hash | null
+    topics: Hash[]
+    data: Hash
+}
+
+function decodeSwapLog(log: RpcLogEntry): RawSwapLog {
+    const blockNumber = log.blockNumber ? BigInt(log.blockNumber) : null
+    if (blockNumber === null || log.transactionHash === null || !log.topics[1]) {
+        return { args: {}, blockNumber, transactionHash: log.transactionHash }
+    }
+    try {
+        const [amountIn, amountOut] = decodeAbiParameters(swapDataAbi, log.data)
+        return {
+            args: {
+                sender: getAddress(`0x${log.topics[1].slice(-40)}`),
+                amountIn,
+                amountOut,
+            },
+            blockNumber,
+            transactionHash: log.transactionHash,
+        }
+    } catch {
+        return { args: {}, blockNumber, transactionHash: log.transactionHash }
+    }
+}
+
+/**
+ * Pure: decoded Bought/Sold logs + a resolved block->timestamp map -> DurianfunSwapEvent,
+ * newest first. A block missing from `timestamps` yields timestamp 0 rather than dropping the
+ * trade. Exported for testing.
+ */
+export function mapDurianfunSwapLogs(
+    boughtLogs: readonly RawSwapLog[],
+    soldLogs: readonly RawSwapLog[],
+    timestamps: ReadonlyMap<bigint, number>
+): DurianfunSwapEvent[] {
+    const events: DurianfunSwapEvent[] = []
+    for (const [logs, isBuy] of [
+        [boughtLogs, true],
+        [soldLogs, false],
+    ] as const) {
+        for (const log of logs) {
+            if (
+                !log.args.sender ||
+                log.args.amountIn === undefined ||
+                log.args.amountOut === undefined
+            )
+                continue
+            if (log.blockNumber === null || log.transactionHash === null) continue
+            events.push({
+                blockNumber: log.blockNumber,
+                timestamp: timestamps.get(log.blockNumber) ?? 0,
+                sender: log.args.sender,
+                isBuy,
+                amountIn: log.args.amountIn,
+                amountOut: log.args.amountOut,
+                transactionHash: log.transactionHash,
+            })
+        }
+    }
+    events.sort((a, b) =>
+        a.blockNumber > b.blockNumber ? -1 : a.blockNumber < b.blockNumber ? 1 : 0
+    )
+    return events
+}
+
+/**
+ * Reads a single Durianfun market's Bought/Sold history straight from chain -- these tokens
+ * (pre-graduation) aren't indexed anywhere else. `sender` is the event's own indexed address,
+ * which is the router/aggregator contract for a routed trade rather than the end wallet (same
+ * caveat useTokenSwapEvents documents for v3 swaps) -- good enough for a trade feed, not a
+ * per-wallet portfolio view.
+ */
+export async function fetchDurianfunMarketSwaps(market: Address): Promise<DurianfunSwapEvent[]> {
+    const client = getClient()
+    const fromBlockHex = numberToHex(DURIANFUN_LOGS_START_BLOCK)
+    // eth_getLogs with a raw topics filter isn't exposed by viem's typed getLogs action --
+    // call the transport directly instead.
+    const request = client.request.bind(client) as (args: {
+        method: 'eth_getLogs'
+        params: [{ address: Address; topics: Hash[]; fromBlock: Hash; toBlock: 'latest' }]
+    }) => Promise<RpcLogEntry[]>
+    const [boughtLogsRaw, soldLogsRaw] = await Promise.all([
+        request({
+            method: 'eth_getLogs',
+            params: [
+                {
+                    address: market,
+                    topics: [BOUGHT_TOPIC0],
+                    fromBlock: fromBlockHex,
+                    toBlock: 'latest',
+                },
+            ],
+        }),
+        request({
+            method: 'eth_getLogs',
+            params: [
+                {
+                    address: market,
+                    topics: [SOLD_TOPIC0],
+                    fromBlock: fromBlockHex,
+                    toBlock: 'latest',
+                },
+            ],
+        }),
+    ])
+    const boughtLogs = boughtLogsRaw.map(decodeSwapLog)
+    const soldLogs = soldLogsRaw.map(decodeSwapLog)
+
+    const blockNumbers = new Set<bigint>()
+    for (const log of [...boughtLogs, ...soldLogs]) {
+        if (log.blockNumber !== null) blockNumbers.add(log.blockNumber)
+    }
+    const timestamps = new Map<bigint, number>()
+    await Promise.all(
+        Array.from(blockNumbers).map(async (blockNumber) => {
+            try {
+                const block = await client.getBlock({ blockNumber })
+                timestamps.set(blockNumber, Number(block.timestamp))
+            } catch {
+                // ponytail: leave unresolved blocks at timestamp 0 rather than dropping the trade
+            }
+        })
+    )
+
+    return mapDurianfunSwapLogs(boughtLogs, soldLogs, timestamps)
 }
 
 /** Pure: DurianfunToken (+ optional on-chain status/logo/live price) -> LaunchToken + native-KUB market cap. Exported for testing. */
