@@ -39,7 +39,7 @@ interface TokenTradeCardProps {
     isPoolLoading?: boolean
 }
 
-function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
+export function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
     const presets = [
         { label: '25%', value: 25 },
         { label: '50%', value: 50 },
@@ -61,7 +61,7 @@ function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
     )
 }
 
-function AmountButtons({ onSelect }: { onSelect: (amount: string) => void }) {
+export function AmountButtons({ onSelect }: { onSelect: (amount: string) => void }) {
     const presets = ['5', '20', '50']
     return (
         <div className="flex gap-1.5">
