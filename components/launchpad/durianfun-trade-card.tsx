@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ERC20_ABI } from '@coshi190/juno-moneta-sdk'
+import { getAbi } from '@coshi190/juno-moneta-sdk'
 import { useDurianfunSwapExecution } from '@/hooks/useDurianfunSwapExecution'
 import { isValidNumberInput } from '@/lib/utils'
 import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
@@ -52,7 +52,7 @@ export function DurianfunTradeCard({
     const { data: nativeBalance, refetch: refetchNative } = useBalance({ address, chainId })
     const { data: tokenBalance, refetch: refetchTokens } = useReadContract({
         address: tokenAddr,
-        abi: ERC20_ABI,
+        abi: getAbi('erc20'),
         functionName: 'balanceOf',
         args: [address ?? zeroAddress],
         chainId,
