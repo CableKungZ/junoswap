@@ -58,8 +58,24 @@ export function TokenCard({
 
                     <div className="flex min-w-0 flex-1 flex-col self-stretch py-1">
                         <div className="flex items-baseline justify-between gap-2">
-                            <span className="truncate text-base font-semibold tracking-tight">
-                                {symbol}
+                            <span className="flex min-w-0 items-center gap-1">
+                                <span className="truncate text-base font-semibold tracking-tight">
+                                    {symbol}
+                                </span>
+                                {token.platform === 'durianfun' ? (
+                                    <span className="shrink-0 rounded-full border border-[#FF914D]/25 bg-[#FF914D]/10 px-2 py-0.5 text-[10px] font-medium text-[#FF914D]">
+                                        DurianFun
+                                    </span>
+                                ) : (
+                                    <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                        Junoswap
+                                    </span>
+                                )}
+                                {isGraduated && (
+                                    <span className="shrink-0 rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
+                                        Graduated
+                                    </span>
+                                )}
                             </span>
                             {priceChange1dPct != null && (
                                 <span
@@ -76,26 +92,12 @@ export function TokenCard({
                         {name && name !== symbol && (
                             <p className="truncate text-xs text-muted-foreground">{name}</p>
                         )}
-                        <div className="mt-0.5 flex items-center justify-between gap-2">
-                            <p className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-                                <span className="truncate">{formatAddress(token.creator)}</span>
-                                <Sprout className="h-3 w-3 shrink-0" />
-                                <span className="shrink-0">
-                                    {formatTimeAgo(token.createdTime).replace(' ago', '')}
-                                </span>
-                            </p>
-                            <div className="flex shrink-0 items-center gap-1">
-                                {token.platform === 'durianfun' && (
-                                    <span className="rounded-full border border-[#FF914D]/25 bg-[#FF914D]/10 px-2 py-0.5 text-[10px] font-medium text-[#FF914D]">
-                                        DurianFun
-                                    </span>
-                                )}
-                                {isGraduated && (
-                                    <span className="rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
-                                        Graduated
-                                    </span>
-                                )}
-                            </div>
+                        <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                            <span className="truncate">{formatAddress(token.creator)}</span>
+                            <Sprout className="h-3 w-3 shrink-0" />
+                            <span className="shrink-0">
+                                {formatTimeAgo(token.createdTime).replace(' ago', '')}
+                            </span>
                         </div>
 
                         <div className="mt-auto pt-3">
