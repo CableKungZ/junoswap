@@ -57,3 +57,6 @@ contracts/broadcast
 # playwright
 playwright-report
 test-results
+
+# scratch research, not part of the app
+/launchpad-aggregator
