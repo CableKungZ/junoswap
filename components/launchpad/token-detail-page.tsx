@@ -16,6 +16,7 @@ import { TokenIcon } from '@/components/ui/token-icon'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { TokenTradeCard } from './token-trade-card'
+import { DurianfunTradeCard } from './durianfun-trade-card'
 import { TokenChartWrapper } from './token-chart-wrapper'
 import { TokenStats } from './token-stats'
 import { RecentTrades } from './recent-trades'
@@ -37,6 +38,9 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const snapshotAthMarketCap = snapshotMap.get(tokenAddr.toLowerCase())?.athMarketCapNative
 
     const isGraduated = !!tokenInfo?.isGraduated
+    // Not-yet-graduated Durianfun tokens trade on their own per-token market contract, not
+    // Junoswap's shared bonding curve — Junoswap's reserve/graduation reads don't apply to them.
+    const isThirdPartyCurve = tokenInfo?.platform === 'durianfun' && !isGraduated
 
     const {
         nativeReserve,
@@ -335,29 +339,42 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
 
                 <div className="order-1 min-w-0 lg:order-2 lg:col-span-4">
                     <div className="space-y-3 md:space-y-4 lg:sticky lg:top-20">
-                        <TokenTradeCard
-                            tokenAddr={tokenAddr}
-                            tokenSymbol={symbol}
-                            tokenDecimals={decimals}
-                            isGraduated={isGraduated}
-                            poolAddress={poolAddress}
-                            poolFee={isGraduated ? GRADUATED_POOL_FEE : undefined}
-                            isPoolLoading={isPoolLoading}
-                        />
-                        {nativeReserve !== undefined && graduationAmount !== undefined && (
-                            <Card>
-                                <CardContent className="p-4">
-                                    <h4 className="mb-2 text-sm font-semibold">Bonding Curve</h4>
-                                    <GraduationProgress
-                                        nativeReserve={nativeReserve}
-                                        tokenReserve={tokenReserve}
-                                        graduationAmount={graduationAmount}
-                                        virtualAmount={virtualAmount}
-                                        isGraduated={!!isGraduated}
-                                    />
-                                </CardContent>
-                            </Card>
+                        {isThirdPartyCurve && tokenInfo?.market ? (
+                            <DurianfunTradeCard
+                                tokenAddr={tokenAddr}
+                                tokenSymbol={symbol}
+                                marketAddr={tokenInfo.market}
+                                chainId={chainId}
+                            />
+                        ) : (
+                            <TokenTradeCard
+                                tokenAddr={tokenAddr}
+                                tokenSymbol={symbol}
+                                tokenDecimals={decimals}
+                                isGraduated={isGraduated}
+                                poolAddress={poolAddress}
+                                poolFee={isGraduated ? GRADUATED_POOL_FEE : undefined}
+                                isPoolLoading={isPoolLoading}
+                            />
                         )}
+                        {!isThirdPartyCurve &&
+                            nativeReserve !== undefined &&
+                            graduationAmount !== undefined && (
+                                <Card>
+                                    <CardContent className="p-4">
+                                        <h4 className="mb-2 text-sm font-semibold">
+                                            Bonding Curve
+                                        </h4>
+                                        <GraduationProgress
+                                            nativeReserve={nativeReserve}
+                                            tokenReserve={tokenReserve}
+                                            graduationAmount={graduationAmount}
+                                            virtualAmount={virtualAmount}
+                                            isGraduated={!!isGraduated}
+                                        />
+                                    </CardContent>
+                                </Card>
+                            )}
                         <div className="hidden lg:block">
                             <TokenHolders
                                 tokenAddr={tokenAddr}
