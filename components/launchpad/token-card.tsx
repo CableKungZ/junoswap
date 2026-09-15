@@ -63,7 +63,7 @@ export function TokenCard({
                                     {symbol}
                                 </span>
                                 {token.platform === 'durianfun' ? (
-                                    <span className="shrink-0 rounded-full border border-[#FF914D]/25 bg-[#FF914D]/10 px-2 py-0.5 text-[10px] font-medium text-[#FF914D]">
+                                    <span className="shrink-0 rounded-full border border-[rgb(204,255,0)]/25 bg-[rgb(204,255,0)]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(204,255,0)]">
                                         DurianFun
                                     </span>
                                 ) : (

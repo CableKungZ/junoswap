@@ -270,7 +270,10 @@ export async function fetchDurianfunGraduationStatus(
 // aggregator's own dex-registry already uses; see launchpad-aggregator/reference/RECON.md).
 const KUBLERX_QUOTER: Address = '0x63661462C66f13eD121f394Dc57726c1c33672de'
 const KKUB: Address = '0x67eBD850304c70d983B2d1b93ea79c7CD6c3F6b5'
-const KUBLERX_POOL_FEE = 3000
+// Verified against real graduated Durianfun pools (matched GeckoTerminal mcap) -- the SDK's
+// dex-registry "defaultFeeTier" for kublerx (500) is a generic UI default, not what Durianfun's
+// bonding-curve auto-graduation actually locks into.
+export const KUBLERX_POOL_FEE = 3000
 
 const quoterV2Abi = [
     {

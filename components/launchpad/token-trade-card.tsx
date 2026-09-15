@@ -37,6 +37,7 @@ interface TokenTradeCardProps {
     poolAddress?: Address
     poolFee?: number
     isPoolLoading?: boolean
+    dexId?: string
 }
 
 export function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
@@ -86,6 +87,7 @@ export function TokenTradeCard({
     poolAddress,
     poolFee,
     isPoolLoading = false,
+    dexId,
 }: TokenTradeCardProps) {
     const { address, isConnected } = useAccount()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
@@ -191,7 +193,9 @@ export function TokenTradeCard({
     })
 
     const slippageBps = Math.round(settings.slippage * 100)
-    const launchpadDex = 'junoswap'
+    // Third-party (Durianfun) graduated tokens land on Kublerx pools, which aren't in Junoswap's
+    // own indexed pool list -- route those through the 'kublerx' dex instead of the default.
+    const launchpadDex = dexId ?? 'junoswap'
     const nativeToken = useMemo<Token>(() => {
         const native = getDefaultPairTokens(chainId).nativeTokens[0]
         if (native) return native
@@ -215,7 +219,10 @@ export function TokenTradeCard({
         [tokenAddr, tokenSymbol, tokenDecimals, chainId]
     )
 
-    const v3BuyEnabled = isGraduated && !!poolAddress
+    // poolAddress is only resolvable for Junoswap's own indexed pools -- non-Junoswap dexes
+    // (e.g. Kublerx, where Durianfun tokens graduate to) quote/swap via the SDK's
+    // quoter/swapRouter directly and don't need it.
+    const v3BuyEnabled = isGraduated && (launchpadDex === 'junoswap' ? !!poolAddress : true)
     const { quote: v3BuyQuote } = useUniV3Quote({
         tokenIn: nativeToken,
         tokenOut: launchpadToken,
@@ -287,7 +294,9 @@ export function TokenTradeCard({
         [v3SellExpectedOut, slippageBps]
     )
 
-    const v3Config = getDexes(chainId, 'v3')[0]
+    const v3Config =
+        getDexes(chainId, 'v3').find((dex) => dex.dexId === launchpadDex) ??
+        getDexes(chainId, 'v3')[0]
     const sellSpender = isGraduated
         ? (v3Config?.swapRouter ?? bondingCurveAddress)
         : bondingCurveAddress
@@ -537,7 +546,7 @@ export function TokenTradeCard({
         )
     }
 
-    if (isGraduated && !poolAddress && !isPoolLoading) {
+    if (isGraduated && launchpadDex === 'junoswap' && !poolAddress && !isPoolLoading) {
         return (
             <Card>
                 <CardContent className="p-4 sm:p-6">
