@@ -362,7 +362,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         poolAddress={poolAddress}
                         isGraduated={isGraduated}
                         creatorAddress={tokenInfo?.creator}
-                        durianfunMarket={isThirdPartyCurve ? tokenInfo?.market : undefined}
+                        market={tokenInfo?.market}
+                        platform={tokenInfo?.platform}
                     />
                 </div>
 
@@ -421,6 +422,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                                 creator={tokenInfo?.creator}
                                 poolAddress={poolAddress}
                                 isGraduated={isGraduated}
+                                market={tokenInfo?.market}
+                                platform={tokenInfo?.platform}
                             />
                         </div>
                     </div>
@@ -433,6 +436,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                     creator={tokenInfo?.creator}
                     poolAddress={poolAddress}
                     isGraduated={isGraduated}
+                    market={tokenInfo?.market}
+                    platform={tokenInfo?.platform}
                 />
             </div>
         </div>

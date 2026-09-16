@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatUnits, type Address } from 'viem'
 import { useTokenHolders } from '@/hooks/useTokenHolders'
 import type { HolderData } from '@/hooks/useTokenHolders'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { PortfolioLink } from '@/components/ui/portfolio-link'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +36,8 @@ interface TokenHoldersProps {
     poolAddress?: Address
     isGraduated?: boolean
     className?: string
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 function HolderRow({
@@ -94,6 +97,8 @@ export function TokenHolders({
     poolAddress,
     isGraduated,
     className,
+    market,
+    platform,
 }: TokenHoldersProps) {
     const [requestedPage, setPage] = useState(1)
     const [showAmount, setShowAmount] = useState(false)
@@ -101,7 +106,7 @@ export function TokenHolders({
         holders: rawHolders,
         holderCount: rawHolderCount,
         isLoading,
-    } = useTokenHolders(tokenAddr, poolAddress, isGraduated)
+    } = useTokenHolders(tokenAddr, poolAddress, isGraduated, market, platform)
     const filteredPool = isGraduated && poolAddress
     const holders = filteredPool
         ? rawHolders.filter((h) => h.address.toLowerCase() !== poolAddress!.toLowerCase())

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parseTokenCreatedLog, mapDurianfunSwapLogs } from '@/services/launchpad/durianfun'
+import { getAddress } from 'viem'
+import {
+    parseTokenCreatedLog,
+    mapDurianfunSwapLogs,
+    mapDurianfunTransfersToHolders,
+} from '@/services/launchpad/durianfun'
 
 const FACTORY = '0xdf4f3dB298A9aDe853191F58b4b2a322D47EC005' as const
 const TOKEN = '0x1111111111111111111111111111111111111111' as const
@@ -123,5 +128,39 @@ describe('mapDurianfunSwapLogs', () => {
             new Map()
         )
         expect(events[0]?.timestamp).toBe(0)
+    })
+})
+
+describe('mapDurianfunTransfersToHolders', () => {
+    const MINT = '0x0000000000000000000000000000000000000000' as const
+    const HOLDER_A = getAddress('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    const HOLDER_B = getAddress('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+
+    it('nets balances from Transfer deltas, excluding the market and zero address', () => {
+        const holders = mapDurianfunTransfersToHolders(
+            [
+                { args: { from: MINT, to: MARKET, value: 1000n } }, // initial mint to market
+                { args: { from: MARKET, to: HOLDER_A, value: 400n } }, // buy
+                { args: { from: MARKET, to: HOLDER_B, value: 350n } }, // buy
+                { args: { from: HOLDER_A, to: MARKET, value: 100n } }, // partial sell
+            ],
+            new Set([MARKET.toLowerCase(), MINT.toLowerCase()])
+        )
+
+        expect(holders).toEqual([
+            { address: HOLDER_B, balance: 350n },
+            { address: HOLDER_A, balance: 300n },
+        ])
+    })
+
+    it('drops an address that nets to zero or negative', () => {
+        const holders = mapDurianfunTransfersToHolders(
+            [
+                { args: { from: MINT, to: HOLDER_A, value: 500n } },
+                { args: { from: HOLDER_A, to: HOLDER_B, value: 500n } },
+            ],
+            new Set([MINT.toLowerCase()])
+        )
+        expect(holders).toEqual([{ address: HOLDER_B, balance: 500n }])
     })
 })

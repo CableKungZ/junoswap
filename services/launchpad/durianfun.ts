@@ -8,6 +8,7 @@ import {
     numberToHex,
     parseAbiItem,
     parseAbiParameters,
+    zeroAddress,
     type Address,
     type Hash,
     type Log,
@@ -549,6 +550,64 @@ export async function fetchDurianfunMarketSwaps(market: Address): Promise<Durian
     )
 
     return mapDurianfunSwapLogs(boughtLogs, soldLogs, timestamps)
+}
+
+export interface DurianfunHolder {
+    address: Address
+    balance: bigint
+}
+
+const transferEvent = parseAbiItem(
+    'event Transfer(address indexed from, address indexed to, uint256 value)'
+)
+
+/**
+ * Pure: net ERC20 Transfer deltas -> non-zero balances, sorted descending, excluding any
+ * address in `exclude` (the market itself holds the unsold bonding-curve supply -- it isn't a
+ * "holder" in the trading sense). Exported for testing.
+ */
+export function mapDurianfunTransfersToHolders(
+    transfers: readonly { args: { from?: Address; to?: Address; value?: bigint } }[],
+    exclude: ReadonlySet<string>
+): DurianfunHolder[] {
+    const balances = new Map<string, bigint>()
+    for (const log of transfers) {
+        const { from, to, value } = log.args
+        if (value === undefined) continue
+        if (from) balances.set(from.toLowerCase(), (balances.get(from.toLowerCase()) ?? 0n) - value)
+        if (to) balances.set(to.toLowerCase(), (balances.get(to.toLowerCase()) ?? 0n) + value)
+    }
+
+    const holders: DurianfunHolder[] = []
+    for (const [address, balance] of balances) {
+        if (balance <= 0n) continue
+        if (exclude.has(address)) continue
+        holders.push({ address: getAddress(address), balance })
+    }
+    holders.sort((a, b) => (b.balance > a.balance ? 1 : b.balance < a.balance ? -1 : 0))
+    return holders
+}
+
+/**
+ * Reads a Durianfun token's full holder list straight from its ERC20 Transfer history --
+ * pre-graduation tokens aren't indexed anywhere else. The zero address (mint/burn) and the
+ * market contract itself are excluded from the result.
+ */
+export async function fetchDurianfunHolders(
+    tokenAddr: Address,
+    market: Address
+): Promise<DurianfunHolder[]> {
+    const client = getClient()
+    const logs = await client.getLogs({
+        address: tokenAddr,
+        event: transferEvent,
+        fromBlock: DURIANFUN_LOGS_START_BLOCK,
+        toBlock: 'latest',
+    })
+    return mapDurianfunTransfersToHolders(
+        logs,
+        new Set([market.toLowerCase(), zeroAddress.toLowerCase()])
+    )
 }
 
 /** Pure: DurianfunToken (+ optional on-chain status/logo/live price) -> LaunchToken + native-KUB market cap. Exported for testing. */

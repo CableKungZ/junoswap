@@ -7,6 +7,7 @@ import { useAccount } from 'wagmi'
 
 import { useTokenSwapEvents } from '@/hooks/useTokenSwapEvents'
 import { useDebounce } from '@/hooks/useDebounce'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { formatKub, formatTokenAmount, formatCompact } from '@/services/launchpad/launchpad'
 import { cn, formatTimeAgo, formatFullDate } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -68,7 +69,8 @@ interface RecentTradesProps {
     isGraduated?: boolean
     creatorAddress?: Address
     className?: string
-    durianfunMarket?: Address
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 function TradeRow({
@@ -183,7 +185,8 @@ export function RecentTrades({
     isGraduated,
     creatorAddress,
     className,
-    durianfunMarket,
+    market,
+    platform,
 }: RecentTradesProps) {
     const [page, setPage] = useState(1)
     const [typeFilter, setTypeFilter] = useState('all')
@@ -224,7 +227,8 @@ export function RecentTrades({
             isBuy: hookIsBuyFilter,
             sender: hookSenderFilter,
         },
-        durianfunMarket
+        market,
+        platform
     )
 
     const filteredTrades = useMemo(() => {
