@@ -12,6 +12,7 @@ import { splitSparklineByDirection } from '@/services/launchpad/chart'
 import type { LaunchToken } from '@/types/launchpad'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 import { AthProgressBar } from './ath-progress-bar'
+import { PlatformLogo } from './platform-logo'
 
 // Meme-style "stonks" line in the corner of the token icon, traced from real recent price
 // samples (sparklinePath, from useGraduatedTokenActivity / useCurveTokenSparklines). A fixed jagged
@@ -172,11 +173,13 @@ export function TokenCard({
 
                         <div className="mt-1.5 flex flex-wrap items-center gap-1">
                             {token.platform === 'durianfun' ? (
-                                <span className="shrink-0 rounded-full border border-[rgb(204,255,0)]/25 bg-[rgb(204,255,0)]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(204,255,0)]">
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                    <PlatformLogo platform="durianfun" />
                                     DurianFun
                                 </span>
                             ) : (
-                                <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                    <PlatformLogo platform="junoswap" />
                                     Junoswap
                                 </span>
                             )}
