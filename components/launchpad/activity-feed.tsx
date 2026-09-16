@@ -95,6 +95,14 @@ export function ActivityTicker() {
     const [index, setIndex] = useState(0)
     const hoverRef = useRef(false)
 
+    // A new trade at the head of the list restarts the rotation from it.
+    const newestHash = events[0]?.transactionHash
+    const [seenNewestHash, setSeenNewestHash] = useState(newestHash)
+    if (newestHash !== seenNewestHash) {
+        setSeenNewestHash(newestHash)
+        setIndex(0)
+    }
+
     useEffect(() => {
         if (events.length < 2) return
         const id = setInterval(() => {

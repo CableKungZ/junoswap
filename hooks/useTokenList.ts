@@ -47,6 +47,9 @@ export function useTokenList(): UseTokenListResult {
     } = useQuery({
         queryKey: ['launchpad-token-list', chainId],
         queryFn: async () => {
+            // fetchLaunchTokens/fetchTokenSnapshots without a launchpadId filter already return
+            // every platform's tokens (junoswap, durianfun, ...) from the same indexed tables --
+            // no per-launchpad discovery/fetching needed.
             const [rows, snapshots] = await Promise.all([
                 fetchLaunchTokens(ponderClient, { chainId }, LAUNCH_TOKEN_DETAIL_FIELDS, {
                     orderBy: 'createdTime',
@@ -73,7 +76,8 @@ export function useTokenList(): UseTokenListResult {
             }
             return { tokens, snapshotMap }
         },
-        staleTime: 30_000,
+        staleTime: 15_000,
+        refetchInterval: 15_000,
         enabled: supported,
     })
 

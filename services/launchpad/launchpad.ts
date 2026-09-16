@@ -28,6 +28,10 @@ export function mapLaunchTokenItem(raw: RawLaunchTokenItem, chainId: number): La
         chainId,
         graduatedAt: item.graduatedAt ?? null,
         isGraduated: item.isGraduated === 1,
+        platform: item.launchpadId === 'durianfun' ? 'durianfun' : 'junoswap',
+        market: item.market ? (item.market as Address) : undefined,
+        ammPool: item.ammPool ? (item.ammPool as Address) : undefined,
+        graduationTarget: item.graduationTarget ?? null,
     }
 }
 

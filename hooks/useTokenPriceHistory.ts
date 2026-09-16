@@ -10,6 +10,7 @@ import { ponderClient } from '@/lib/ponder-client'
 import {
     aggregateCandlesticks,
     aggregateV3Candlesticks,
+    computeAthMarketCap,
     computeFeeBreakdown,
     extractCreatorTrades,
     stitchCandlesticks,
@@ -19,6 +20,9 @@ import type { Timeframe, ChartMode } from '@/types/chart'
 
 export const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d']
 
+// Bonding-curve/V3 swap history is keyed purely by tokenAddr in the indexer (SDK 0.50.0+),
+// covering every platform's pre- and post-graduation trades through the same swapEvents/
+// v3SwapEvents tables -- no per-platform branch needed here.
 export function useTokenPriceHistory(
     tokenAddr: Address | undefined,
     isGraduated?: boolean,
@@ -109,6 +113,16 @@ export function useTokenPriceHistory(
 
     const feeBreakdown = useMemo(() => computeFeeBreakdown(rawEvents ?? []), [rawEvents])
 
+    const athMarketCap = useMemo(
+        () =>
+            computeAthMarketCap(
+                rawEvents ?? [],
+                (rawV3Events ?? []) as V3SwapEvent[],
+                tokenIsToken0
+            ),
+        [rawEvents, rawV3Events, tokenIsToken0]
+    )
+
     const creatorTrades = useMemo(
         () =>
             creatorAddress
@@ -125,6 +139,7 @@ export function useTokenPriceHistory(
     return {
         data,
         feeBreakdown,
+        athMarketCap,
         creatorTrades,
         isLoading: isLoadingBc || (isGraduated && isLoadingV3),
         timeframe,

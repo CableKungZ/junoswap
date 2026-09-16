@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { formatUnits, type Address } from 'viem'
 import { useTokenHolders } from '@/hooks/useTokenHolders'
 import type { HolderData } from '@/hooks/useTokenHolders'
+import { isThirdPartyDataUnavailable } from '@/services/launchpad/platform-adapter'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { PortfolioLink } from '@/components/ui/portfolio-link'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +37,8 @@ interface TokenHoldersProps {
     poolAddress?: Address
     isGraduated?: boolean
     className?: string
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 function HolderRow({
@@ -94,6 +98,8 @@ export function TokenHolders({
     poolAddress,
     isGraduated,
     className,
+    market,
+    platform,
 }: TokenHoldersProps) {
     const [requestedPage, setPage] = useState(1)
     const [showAmount, setShowAmount] = useState(false)
@@ -101,12 +107,14 @@ export function TokenHolders({
         holders: rawHolders,
         holderCount: rawHolderCount,
         isLoading,
-    } = useTokenHolders(tokenAddr, poolAddress, isGraduated)
+    } = useTokenHolders(tokenAddr, poolAddress, isGraduated, market, platform)
     const filteredPool = isGraduated && poolAddress
     const holders = filteredPool
         ? rawHolders.filter((h) => h.address.toLowerCase() !== poolAddress!.toLowerCase())
         : rawHolders
     const holderCount = filteredPool ? Math.max(0, rawHolderCount - 1) : rawHolderCount
+
+    const serviceUnavailable = isThirdPartyDataUnavailable(platform, isGraduated, market)
 
     const totalPages = Math.max(1, Math.ceil(holders.length / PAGE_SIZE))
     const page = Math.min(requestedPage, totalPages)
@@ -155,6 +163,11 @@ export function TokenHolders({
                             <LoadingState />
                         </Table>
                     </div>
+                ) : holders.length === 0 && serviceUnavailable ? (
+                    <EmptyState
+                        title="No service available"
+                        description="Holder data isn't supported for this platform yet"
+                    />
                 ) : holders.length === 0 ? (
                     <EmptyState
                         title="No holders yet"

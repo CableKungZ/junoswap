@@ -144,7 +144,7 @@ export function useCreateToken({ form }: UseCreateTokenParams): UseCreateTokenRe
         try {
             const receipt = await publicClient.getTransactionReceipt({ hash })
             const args = findEventArgs<{ tokenAddr: Address }>(receipt.logs, {
-                abi: getAbi('bondingCurve'),
+                abi: getAbi('bondingCurveV1'),
                 eventName: 'Creation',
                 address: bondingCurveAddress,
             })

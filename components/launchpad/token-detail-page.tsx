@@ -10,18 +10,21 @@ import type { DailyMetrics } from '@/services/launchpad/chart'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedPoolAddress } from '@/hooks/useGraduatedPoolAddress'
 import { GRADUATED_POOL_FEE } from '@/services/launchpad/launchpad'
+import { KUBLERX_POOL_FEE } from '@/services/launchpad/durianfun'
 import { formatAddress, formatTimeAgo, formatFullDate } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { TokenIcon } from '@/components/ui/token-icon'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { TokenTradeCard } from './token-trade-card'
+import { DurianfunTradeCard } from './durianfun-trade-card'
 import { TokenChartWrapper } from './token-chart-wrapper'
 import { TokenStats } from './token-stats'
 import { RecentTrades } from './recent-trades'
 import { TokenHolders } from './token-holders'
 import { GraduationProgress } from './graduation-progress'
 import { ShareTokenDialog } from './share-token-dialog'
+import { PlatformLogo } from './platform-logo'
 import { Globe, ArrowLeft, Copy, Check, Share2, Sprout, Facebook } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -37,6 +40,10 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const snapshotAthMarketCap = snapshotMap.get(tokenAddr.toLowerCase())?.athMarketCapNative
 
     const isGraduated = !!tokenInfo?.isGraduated
+    const isDurianfun = tokenInfo?.platform === 'durianfun'
+    // Not-yet-graduated Durianfun tokens trade on their own per-token market contract, not
+    // Junoswap's shared bonding curve — Junoswap's reserve/graduation reads don't apply to them.
+    const isThirdPartyCurve = isDurianfun && !isGraduated
 
     const {
         nativeReserve,
@@ -44,13 +51,20 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
         virtualAmount,
         graduationAmount,
         isLoading: isLoadingReserves,
-    } = useTokenReserves({ tokenAddr, isGraduated, chainId })
+    } = useTokenReserves({
+        // Durianfun tokens (graduated or not) never lived on Junoswap's own bonding curve
+        // contract, so its reserve reads don't apply to them at any point.
+        tokenAddr: isDurianfun ? null : tokenAddr,
+        isGraduated,
+        chainId,
+    })
 
     const wrappedNative = INTERMEDIARY_TOKENS[chainId]?.wrappedNative
     const { poolAddress, isLoading: isPoolLoading } = useGraduatedPoolAddress(
         isGraduated ? tokenAddr : undefined,
         wrappedNative as Address | undefined,
-        chainId
+        chainId,
+        isGraduated ? tokenInfo?.ammPool : undefined
     )
 
     const { marketCap: liveGraduatedMarketCap } = useGraduatedPoolPrice({
@@ -66,6 +80,11 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
             if (liveGraduatedMarketCap !== null) return String(liveGraduatedMarketCap)
             return snapshotMap.get(tokenAddr.toLowerCase())?.marketCapNative ?? '0'
         }
+        // Third-party (Durianfun) non-graduated tokens don't use Junoswap's reserve reads —
+        // useTokenList already computed marketCapNative for them from the on-chain fetch.
+        if (isThirdPartyCurve) {
+            return snapshotMap.get(tokenAddr.toLowerCase())?.marketCapNative ?? '0'
+        }
         if (virtualAmount > 0n && nativeReserve > 0n && tokenReserve > 0n) {
             return String(
                 (parseFloat(formatEther(virtualAmount + nativeReserve)) /
@@ -76,6 +95,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
         return '0'
     }, [
         isGraduated,
+        isThirdPartyCurve,
         tokenAddr,
         virtualAmount,
         nativeReserve,
@@ -91,13 +111,22 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const [shareOpen, setShareOpen] = useState(false)
     const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null)
 
-    // The indexer's TokenSnapshot aggregate can stall after graduation on some chains, so it only
-    // sets a floor here — live reserves/swaps (dailyMetrics, liveGraduatedMarketCap) win when present.
+    // The indexer's TokenSnapshot aggregate freezes at graduation (stops syncing after the token
+    // moves to a pool), so it can't be trusted for the true peak. The chart already replays every
+    // swap the token ever had, so its own max is the real ATH -- fall back to the frozen snapshot
+    // only while that history is still loading.
     const athMarketCap = useMemo(() => {
+        if (dailyMetrics?.athMarketCap) return String(dailyMetrics.athMarketCap)
         const snapshotAth = snapshotAthMarketCap ? parseFloat(snapshotAthMarketCap) : 0
         const liveMcap = isGraduated ? (liveGraduatedMarketCap ?? parseFloat(marketCap)) : 0
         return String(Math.max(snapshotAth, liveMcap))
-    }, [snapshotAthMarketCap, isGraduated, liveGraduatedMarketCap, marketCap])
+    }, [
+        dailyMetrics?.athMarketCap,
+        snapshotAthMarketCap,
+        isGraduated,
+        liveGraduatedMarketCap,
+        marketCap,
+    ])
 
     const priceChange1dPct =
         dailyMetrics?.priceChange1dPct ??
@@ -215,7 +244,11 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         isGraduated={isGraduated}
                         athMarketCap={athMarketCap}
                         priceChange1dPct={priceChange1dPct}
-                        feeBreakdown={dailyMetrics?.feeBreakdown ?? null}
+                        feeBreakdown={
+                            tokenInfo?.platform === 'junoswap'
+                                ? (dailyMetrics?.feeBreakdown ?? null)
+                                : null
+                        }
                     />
 
                     <TokenChartWrapper
@@ -228,15 +261,33 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         graduatedAt={tokenInfo?.graduatedAt ?? null}
                         creatorAddress={tokenInfo?.creator}
                         onDailyMetricsChange={setDailyMetrics}
+                        market={tokenInfo?.market}
+                        platform={tokenInfo?.platform}
                     />
 
-                    {(tokenInfo?.description ||
+                    {(isDurianfun ||
+                        tokenInfo?.description ||
                         tokenInfo?.link1 ||
                         tokenInfo?.link2 ||
                         tokenInfo?.link3 ||
                         tokenInfo?.link4) && (
                         <div className="rounded-xl border bg-card p-4">
-                            <h3 className="mb-2 text-sm font-semibold">About {symbol}</h3>
+                            <div className="mb-2 flex items-center gap-2">
+                                <h3 className="text-sm font-semibold">About {symbol}</h3>
+                                {isDurianfun && (
+                                    <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                        <PlatformLogo platform="durianfun" />
+                                        DurianFun
+                                    </span>
+                                )}
+                            </div>
+                            {isDurianfun && (
+                                <p className="mb-2 text-xs text-muted-foreground">
+                                    This token was created on DurianFun, not Junoswap — trading,
+                                    contracts, and token safety are not managed or audited by
+                                    Junoswap.
+                                </p>
+                            )}
                             {tokenInfo?.description && (
                                 <p className="text-sm text-muted-foreground break-words min-w-0">
                                     {tokenInfo.description}
@@ -330,40 +381,68 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         poolAddress={poolAddress}
                         isGraduated={isGraduated}
                         creatorAddress={tokenInfo?.creator}
+                        market={tokenInfo?.market}
+                        platform={tokenInfo?.platform}
                     />
                 </div>
 
                 <div className="order-1 min-w-0 lg:order-2 lg:col-span-4">
                     <div className="space-y-3 md:space-y-4 lg:sticky lg:top-20">
-                        <TokenTradeCard
-                            tokenAddr={tokenAddr}
-                            tokenSymbol={symbol}
-                            tokenDecimals={decimals}
-                            isGraduated={isGraduated}
-                            poolAddress={poolAddress}
-                            poolFee={isGraduated ? GRADUATED_POOL_FEE : undefined}
-                            isPoolLoading={isPoolLoading}
-                        />
-                        {nativeReserve !== undefined && graduationAmount !== undefined && (
-                            <Card>
-                                <CardContent className="p-4">
-                                    <h4 className="mb-2 text-sm font-semibold">Bonding Curve</h4>
-                                    <GraduationProgress
-                                        nativeReserve={nativeReserve}
-                                        tokenReserve={tokenReserve}
-                                        graduationAmount={graduationAmount}
-                                        virtualAmount={virtualAmount}
-                                        isGraduated={!!isGraduated}
-                                    />
-                                </CardContent>
-                            </Card>
+                        {isThirdPartyCurve && tokenInfo?.market ? (
+                            <DurianfunTradeCard
+                                tokenAddr={tokenAddr}
+                                tokenSymbol={symbol}
+                                marketAddr={tokenInfo.market}
+                                chainId={chainId}
+                            />
+                        ) : (
+                            <TokenTradeCard
+                                tokenAddr={tokenAddr}
+                                tokenSymbol={symbol}
+                                tokenDecimals={decimals}
+                                isGraduated={isGraduated}
+                                poolAddress={poolAddress}
+                                poolFee={
+                                    isGraduated
+                                        ? tokenInfo?.platform === 'durianfun'
+                                            ? KUBLERX_POOL_FEE
+                                            : GRADUATED_POOL_FEE
+                                        : undefined
+                                }
+                                isPoolLoading={isPoolLoading}
+                                dexId={
+                                    isGraduated && tokenInfo?.platform === 'durianfun'
+                                        ? 'kublerx'
+                                        : undefined
+                                }
+                            />
                         )}
+                        {!isDurianfun &&
+                            nativeReserve !== undefined &&
+                            graduationAmount !== undefined && (
+                                <Card>
+                                    <CardContent className="p-4">
+                                        <h4 className="mb-2 text-sm font-semibold">
+                                            Bonding Curve
+                                        </h4>
+                                        <GraduationProgress
+                                            nativeReserve={nativeReserve}
+                                            tokenReserve={tokenReserve}
+                                            graduationAmount={graduationAmount}
+                                            virtualAmount={virtualAmount}
+                                            isGraduated={!!isGraduated}
+                                        />
+                                    </CardContent>
+                                </Card>
+                            )}
                         <div className="hidden lg:block">
                             <TokenHolders
                                 tokenAddr={tokenAddr}
                                 creator={tokenInfo?.creator}
                                 poolAddress={poolAddress}
                                 isGraduated={isGraduated}
+                                market={tokenInfo?.market}
+                                platform={tokenInfo?.platform}
                             />
                         </div>
                     </div>
@@ -376,6 +455,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                     creator={tokenInfo?.creator}
                     poolAddress={poolAddress}
                     isGraduated={isGraduated}
+                    market={tokenInfo?.market}
+                    platform={tokenInfo?.platform}
                 />
             </div>
         </div>

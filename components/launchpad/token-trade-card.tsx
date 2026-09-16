@@ -37,9 +37,10 @@ interface TokenTradeCardProps {
     poolAddress?: Address
     poolFee?: number
     isPoolLoading?: boolean
+    dexId?: string
 }
 
-function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
+export function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
     const presets = [
         { label: '25%', value: 25 },
         { label: '50%', value: 50 },
@@ -61,7 +62,7 @@ function PercentButtons({ onSelect }: { onSelect: (pct: number) => void }) {
     )
 }
 
-function AmountButtons({ onSelect }: { onSelect: (amount: string) => void }) {
+export function AmountButtons({ onSelect }: { onSelect: (amount: string) => void }) {
     const presets = ['5', '20', '50']
     return (
         <div className="flex gap-1.5">
@@ -86,6 +87,7 @@ export function TokenTradeCard({
     poolAddress,
     poolFee,
     isPoolLoading = false,
+    dexId,
 }: TokenTradeCardProps) {
     const { address, isConnected } = useAccount()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
@@ -191,7 +193,9 @@ export function TokenTradeCard({
     })
 
     const slippageBps = Math.round(settings.slippage * 100)
-    const launchpadDex = 'junoswap'
+    // Third-party (Durianfun) graduated tokens land on Kublerx pools, which aren't in Junoswap's
+    // own indexed pool list -- route those through the 'kublerx' dex instead of the default.
+    const launchpadDex = dexId ?? 'junoswap'
     const nativeToken = useMemo<Token>(() => {
         const native = getDefaultPairTokens(chainId).nativeTokens[0]
         if (native) return native
@@ -215,7 +219,10 @@ export function TokenTradeCard({
         [tokenAddr, tokenSymbol, tokenDecimals, chainId]
     )
 
-    const v3BuyEnabled = isGraduated && !!poolAddress
+    // poolAddress is only resolvable for Junoswap's own indexed pools -- non-Junoswap dexes
+    // (e.g. Kublerx, where Durianfun tokens graduate to) quote/swap via the SDK's
+    // quoter/swapRouter directly and don't need it.
+    const v3BuyEnabled = isGraduated && (launchpadDex === 'junoswap' ? !!poolAddress : true)
     const { quote: v3BuyQuote } = useUniV3Quote({
         tokenIn: nativeToken,
         tokenOut: launchpadToken,
@@ -287,7 +294,9 @@ export function TokenTradeCard({
         [v3SellExpectedOut, slippageBps]
     )
 
-    const v3Config = getDexes(chainId, 'v3')[0]
+    const v3Config =
+        getDexes(chainId, 'v3').find((dex) => dex.dexId === launchpadDex) ??
+        getDexes(chainId, 'v3')[0]
     const sellSpender = isGraduated
         ? (v3Config?.swapRouter ?? bondingCurveAddress)
         : bondingCurveAddress
@@ -330,9 +339,21 @@ export function TokenTradeCard({
         deadlineMinutes: settings.deadlineMinutes,
         fee: poolFee ?? 10000,
         dexId: launchpadDex,
-        forceUnwrapNative: true,
+        // Junoswap's own V3 router needs an explicit unwrap step on this chain (the SDK
+        // defaults to skipping it). Third-party routers (e.g. Kublerx) must NOT be forced
+        // through this: Kublerx's unwrapWETH9 reverts for any wallet without exchange KYC
+        // ("only kyc address registered with phone number can withdraw"), which made every
+        // sell of a graduated Kublerx token fail. Those sells fall back to the SDK's default
+        // (skip unwrap) and the user receives wrapped native instead of a native KUB payout.
+        forceUnwrapNative: launchpadDex === 'junoswap',
         skipSimulation: !v3BuyEnabled || needsSellApproval,
     })
+
+    // Mirrors forceUnwrapNative above: a third-party dex sell settles in the wrapped native
+    // token (e.g. KKUB), not native KUB, so the UI must say so rather than implying a KUB payout.
+    const sellReceivesWrappedNative = isGraduated && launchpadDex !== 'junoswap'
+    const wrappedNativeSymbol = nativeToken.symbol === 'KUB' ? 'KKUB' : `W${nativeToken.symbol}`
+    const sellOutputSymbol = sellReceivesWrappedNative ? wrappedNativeSymbol : nativeToken.symbol
 
     const canBuy = isGraduated ? canBuyV3 : canBuyBC
     const canSell = isGraduated ? canSellV3 : canSellBC
@@ -537,7 +558,7 @@ export function TokenTradeCard({
         )
     }
 
-    if (isGraduated && !poolAddress && !isPoolLoading) {
+    if (isGraduated && launchpadDex === 'junoswap' && !poolAddress && !isPoolLoading) {
         return (
             <Card>
                 <CardContent className="p-4 sm:p-6">
@@ -716,7 +737,7 @@ export function TokenTradeCard({
                                                 You receive (est.)
                                             </span>
                                             <span className="font-medium text-right min-w-0">
-                                                {formatKub(sellExpectedOut)} KUB
+                                                {formatKub(sellExpectedOut)} {sellOutputSymbol}
                                             </span>
                                         </div>
                                         <div className="flex justify-between gap-2">
@@ -724,7 +745,7 @@ export function TokenTradeCard({
                                                 Min received
                                             </span>
                                             <span className="font-medium text-right min-w-0">
-                                                {formatKub(minNativeOut)} KUB
+                                                {formatKub(minNativeOut)} {sellOutputSymbol}
                                             </span>
                                         </div>
                                         <div className="flex justify-between gap-2">
@@ -737,6 +758,14 @@ export function TokenTradeCard({
                                                     : '2%'}
                                             </span>
                                         </div>
+                                        {sellReceivesWrappedNative && (
+                                            <div className="pt-1 text-[11px] leading-snug text-muted-foreground">
+                                                This pool settles in wrapped {wrappedNativeSymbol},
+                                                not native {nativeToken.symbol} — the third-party
+                                                router doesn&apos;t support direct{' '}
+                                                {nativeToken.symbol} withdrawal.
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             )}
