@@ -24,7 +24,7 @@ import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
 import { computeCurve } from '@coshi190/juno-moneta-sdk'
 import { calculateMinOutput } from '@/services/dex/slippage'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { getChainMetadata, NATIVE_TOKEN_ADDRESS } from '@/lib/wagmi'
+import { getChainMetadata, NATIVE_TOKEN_ADDRESS, shouldSkipUnwrap } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { SettingsMenu } from '@/components/swap/settings-menu'
 import { useSwapStore } from '@/store/swap-store'
@@ -319,6 +319,8 @@ export function TokenTradeCard({
         amountToApprove: sellAmountWei,
     })
 
+    const sellUnwrapsNative = launchpadDex === 'junoswap' && !shouldSkipUnwrap(chainId)
+
     const {
         swap: v3Sell,
         canSwap: canSellV3,
@@ -339,19 +341,18 @@ export function TokenTradeCard({
         deadlineMinutes: settings.deadlineMinutes,
         fee: poolFee ?? 10000,
         dexId: launchpadDex,
-        // Junoswap's own V3 router needs an explicit unwrap step on this chain (the SDK
-        // defaults to skipping it). Third-party routers (e.g. Kublerx) must NOT be forced
-        // through this: Kublerx's unwrapWETH9 reverts for any wallet without exchange KYC
-        // ("only kyc address registered with phone number can withdraw"), which made every
-        // sell of a graduated Kublerx token fail. Those sells fall back to the SDK's default
-        // (skip unwrap) and the user receives wrapped native instead of a native KUB payout.
-        forceUnwrapNative: launchpadDex === 'junoswap',
+        // Only Junoswap's router on a chain whose wrapped native unwraps freely. On KUB mainnet
+        // KKUB.withdraw requires exchange KYC ("only kyc address registered with phone number
+        // can withdraw") for every router, Junoswap's included, so forcing the unwrap there
+        // reverted every graduated sell for a non-KYC wallet. Those sells, like any third-party
+        // router's, skip the unwrap and pay out wrapped native.
+        forceUnwrapNative: sellUnwrapsNative,
         skipSimulation: !v3BuyEnabled || needsSellApproval,
     })
 
-    // Mirrors forceUnwrapNative above: a third-party dex sell settles in the wrapped native
-    // token (e.g. KKUB), not native KUB, so the UI must say so rather than implying a KUB payout.
-    const sellReceivesWrappedNative = isGraduated && launchpadDex !== 'junoswap'
+    // A sell that skips the unwrap settles in wrapped native (e.g. KKUB), so the UI must say so
+    // rather than implying a native payout.
+    const sellReceivesWrappedNative = isGraduated && !sellUnwrapsNative
     const wrappedNativeSymbol = nativeToken.symbol === 'KUB' ? 'KKUB' : `W${nativeToken.symbol}`
     const sellOutputSymbol = sellReceivesWrappedNative ? wrappedNativeSymbol : nativeToken.symbol
 
