@@ -28,7 +28,6 @@ export interface LaunchToken {
 }
 
 export type LaunchpadSortKey = 'last-trade' | 'market-cap' | 'new' | 'oldest'
-export type LaunchpadPlatformFilter = 'all' | 'junoswap' | 'third-party'
 
 export interface CreateTokenForm {
     name: string

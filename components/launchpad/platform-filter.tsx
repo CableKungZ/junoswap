@@ -1,42 +1,96 @@
 'use client'
 
+import { Check, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { LaunchpadPlatform, LaunchpadPlatformFilter } from '@/types/launchpad'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { PlatformLogo } from './platform-logo'
 
-interface PlatformFilterProps {
-    value: LaunchpadPlatformFilter
-    onChange: (value: LaunchpadPlatformFilter) => void
+export const ALL_PLATFORMS: LaunchpadPlatform[] = ['junoswap', 'durianfun']
+
+const PLATFORM_LABEL: Record<LaunchpadPlatform, string> = {
+    junoswap: 'Junoswap',
+    durianfun: 'DurianFun',
 }
 
-const PLATFORM_OPTIONS: {
-    key: LaunchpadPlatformFilter
-    label: string
-    logo?: LaunchpadPlatform
-}[] = [
-    { key: 'all', label: 'All' },
-    { key: 'junoswap', label: 'Junoswap', logo: 'junoswap' },
-    { key: 'third-party', label: 'Third-party', logo: 'durianfun' },
-]
+interface PlatformFilterProps {
+    value: LaunchpadPlatform[]
+    onChange: (value: LaunchpadPlatform[]) => void
+}
+
+function Row({
+    checked,
+    onClick,
+    children,
+}: {
+    checked: boolean
+    onClick: () => void
+    children: React.ReactNode
+}) {
+    return (
+        <button
+            type="button"
+            role="checkbox"
+            aria-checked={checked}
+            onClick={onClick}
+            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+        >
+            <span
+                aria-hidden
+                className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+                    checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
+                )}
+            >
+                {checked && <Check className="h-3 w-3" />}
+            </span>
+            {children}
+        </button>
+    )
+}
 
 export function PlatformFilter({ value, onChange }: PlatformFilterProps) {
+    const allChecked = ALL_PLATFORMS.every((p) => value.includes(p))
+    // Unticking the last platform would empty the list, so it falls back to everything.
+    const toggle = (platform: LaunchpadPlatform) => {
+        const next = value.includes(platform)
+            ? value.filter((p) => p !== platform)
+            : [...value, platform]
+        onChange(next.length === 0 ? ALL_PLATFORMS : next)
+    }
+
     return (
-        <div className="inline-flex items-center gap-1 rounded-xl bg-muted/50 p-1">
-            {PLATFORM_OPTIONS.map(({ key, label, logo }) => (
+        <Popover>
+            <PopoverTrigger asChild>
                 <button
-                    key={key}
-                    onClick={() => onChange(key)}
+                    type="button"
+                    aria-label="Filter by platform"
                     className={cn(
-                        'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all',
-                        value === key
-                            ? 'bg-background text-foreground shadow-sm'
-                            : 'text-muted-foreground hover:text-foreground'
+                        'relative inline-flex h-[38px] w-[38px] items-center justify-center rounded-xl bg-muted/50 transition-colors hover:text-foreground',
+                        allChecked ? 'text-muted-foreground' : 'text-foreground'
                     )}
                 >
-                    {logo && <PlatformLogo platform={logo} className="h-4 w-4" />}
-                    {label}
+                    <SlidersHorizontal className="h-4 w-4" />
+                    {!allChecked && (
+                        <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
                 </button>
-            ))}
-        </div>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-48 p-1.5">
+                <Row checked={allChecked} onClick={() => onChange(ALL_PLATFORMS)}>
+                    All
+                </Row>
+                {ALL_PLATFORMS.map((platform) => (
+                    <Row
+                        key={platform}
+                        checked={value.includes(platform)}
+                        onClick={() => toggle(platform)}
+                    >
+                        <PlatformLogo platform={platform} className="h-4 w-4" />
+                        {PLATFORM_LABEL[platform]}
+                    </Row>
+                ))}
+            </PopoverContent>
+        </Popover>
     )
 }

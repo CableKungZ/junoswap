@@ -15,6 +15,8 @@ import { useSwapExecution } from '@/hooks/useSwapExecution'
 import { useUniV3Quote } from '@/hooks/useUniV3Quote'
 import { useGraduate } from '@/hooks/useGraduate'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
+import { useKkubUnwrap } from '@/hooks/useKkubUnwrap'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
 import { getBondingCurveDeployment } from '@/lib/deployments'
 import type { Token } from '@/types/token'
@@ -24,7 +26,7 @@ import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
 import { computeCurve } from '@coshi190/juno-moneta-sdk'
 import { calculateMinOutput } from '@/services/dex/slippage'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { getChainMetadata, NATIVE_TOKEN_ADDRESS } from '@/lib/wagmi'
+import { getChainMetadata, NATIVE_TOKEN_ADDRESS, shouldSkipUnwrap } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { SettingsMenu } from '@/components/swap/settings-menu'
 import { useSwapStore } from '@/store/swap-store'
@@ -319,6 +321,8 @@ export function TokenTradeCard({
         amountToApprove: sellAmountWei,
     })
 
+    const sellUnwrapsNative = launchpadDex === 'junoswap' && !shouldSkipUnwrap(chainId)
+
     const {
         swap: v3Sell,
         canSwap: canSellV3,
@@ -339,21 +343,32 @@ export function TokenTradeCard({
         deadlineMinutes: settings.deadlineMinutes,
         fee: poolFee ?? 10000,
         dexId: launchpadDex,
-        // Junoswap's own V3 router needs an explicit unwrap step on this chain (the SDK
-        // defaults to skipping it). Third-party routers (e.g. Kublerx) must NOT be forced
-        // through this: Kublerx's unwrapWETH9 reverts for any wallet without exchange KYC
-        // ("only kyc address registered with phone number can withdraw"), which made every
-        // sell of a graduated Kublerx token fail. Those sells fall back to the SDK's default
-        // (skip unwrap) and the user receives wrapped native instead of a native KUB payout.
-        forceUnwrapNative: launchpadDex === 'junoswap',
+        // Only Junoswap's router on a chain whose wrapped native unwraps freely. On KUB mainnet
+        // KKUB.withdraw requires exchange KYC ("only kyc address registered with phone number
+        // can withdraw") for every router, Junoswap's included, so forcing the unwrap there
+        // reverted every graduated sell for a non-KYC wallet. Those sells, like any third-party
+        // router's, skip the unwrap and pay out wrapped native.
+        forceUnwrapNative: sellUnwrapsNative,
         skipSimulation: !v3BuyEnabled || needsSellApproval,
     })
 
-    // Mirrors forceUnwrapNative above: a third-party dex sell settles in the wrapped native
-    // token (e.g. KKUB), not native KUB, so the UI must say so rather than implying a KUB payout.
-    const sellReceivesWrappedNative = isGraduated && launchpadDex !== 'junoswap'
+    // A sell that skips the unwrap settles in wrapped native (e.g. KKUB), so the UI must say so
+    // rather than implying a native payout.
+    const sellReceivesWrappedNative = isGraduated && !sellUnwrapsNative
     const wrappedNativeSymbol = nativeToken.symbol === 'KUB' ? 'KKUB' : `W${nativeToken.symbol}`
-    const sellOutputSymbol = sellReceivesWrappedNative ? wrappedNativeSymbol : nativeToken.symbol
+
+    // A wrapped payout can still end as native: KUB's unwrapper contract withdraws KKUB without
+    // the exchange KYC the routers hit, as a transaction after the sell. Opt-out, on by default.
+    const canUnwrapSell = sellReceivesWrappedNative && shouldSkipUnwrap(chainId)
+    const [outputNative, setOutputNative] = useState(true)
+    // Fixed at click: the quote moves once the sell lands, and useKkubUnwrap resets on any
+    // amount change. Unwrapping the minimum received leaves slippage dust as KKUB, never more.
+    const [unwrapAmount, setUnwrapAmount] = useState(0n)
+    const kkubUnwrap = useKkubUnwrap({ chainId, amount: unwrapAmount, owner: address })
+    const sellOutputSymbol =
+        sellReceivesWrappedNative && !(canUnwrapSell && outputNative)
+            ? wrappedNativeSymbol
+            : nativeToken.symbol
 
     const canBuy = isGraduated ? canBuyV3 : canBuyBC
     const canSell = isGraduated ? canSellV3 : canSellBC
@@ -476,11 +491,29 @@ export function TokenTradeCard({
             return
         }
         if (isGraduated) {
+            // A repeat sell of the same amount wouldn't retrigger the hook's amount reset.
+            kkubUnwrap.reset()
+            setUnwrapAmount(canUnwrapSell && outputNative ? v3MinNativeOut : 0n)
             v3Sell()
         } else {
             bcSell()
         }
     }
+
+    useOnTxSuccess(true, isSellSuccessV3, sellHashV3, () => {
+        if (unwrapAmount > 0n) kkubUnwrap.startUnwrap()
+    })
+    useEffect(() => {
+        if (kkubUnwrap.isSuccess) {
+            toastSuccess(`Unwrapped to ${nativeToken.symbol}`)
+            refetchNative()
+        }
+    }, [kkubUnwrap.isSuccess, nativeToken.symbol, refetchNative])
+    useEffect(() => {
+        if (kkubUnwrap.isError) {
+            toastError(`Unwrap failed. You received ${wrappedNativeSymbol} instead.`)
+        }
+    }, [kkubUnwrap.isError, wrappedNativeSymbol])
 
     const handleGraduate = () => {
         if (!isConnected) {
@@ -758,13 +791,27 @@ export function TokenTradeCard({
                                                     : '2%'}
                                             </span>
                                         </div>
-                                        {sellReceivesWrappedNative && (
-                                            <div className="pt-1 text-[11px] leading-snug text-muted-foreground">
-                                                This pool settles in wrapped {wrappedNativeSymbol},
-                                                not native {nativeToken.symbol} — the third-party
-                                                router doesn&apos;t support direct{' '}
-                                                {nativeToken.symbol} withdrawal.
-                                            </div>
+                                        {canUnwrapSell ? (
+                                            <label className="flex cursor-pointer items-center gap-2 pt-1.5 text-[11px] leading-snug text-muted-foreground">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={outputNative}
+                                                    onChange={(e) =>
+                                                        setOutputNative(e.target.checked)
+                                                    }
+                                                    className="h-3.5 w-3.5 accent-primary"
+                                                />
+                                                Output {nativeToken.symbol} — unwraps{' '}
+                                                {wrappedNativeSymbol} in one more transaction
+                                            </label>
+                                        ) : (
+                                            sellReceivesWrappedNative && (
+                                                <div className="pt-1 text-[11px] leading-snug text-muted-foreground">
+                                                    This pool settles in wrapped{' '}
+                                                    {wrappedNativeSymbol}, not native{' '}
+                                                    {nativeToken.symbol}.
+                                                </div>
+                                            )
                                         )}
                                     </CardContent>
                                 </Card>
@@ -785,6 +832,7 @@ export function TokenTradeCard({
                                     wrongChain
                                         ? isSwitchingChain
                                         : isSellPreparing ||
+                                          kkubUnwrap.isUnwrapping ||
                                           isSellExecuting ||
                                           isSellConfirming ||
                                           isApprovingSell ||
@@ -800,17 +848,19 @@ export function TokenTradeCard({
                                     ? isSwitchingChain
                                         ? 'Switching...'
                                         : `Switch to ${activeChainName}`
-                                    : isApprovingSell || isConfirmingApproval
-                                      ? 'Approving...'
-                                      : needsSellApproval
-                                        ? `Approve ${tokenSymbol}`
-                                        : isSellExecuting
-                                          ? 'Selling...'
-                                          : isSellConfirming
-                                            ? 'Confirming...'
-                                            : isSellPreparing
-                                              ? 'Preparing...'
-                                              : 'Sell'}
+                                    : kkubUnwrap.isUnwrapping
+                                      ? `Unwrapping to ${nativeToken.symbol}...`
+                                      : isApprovingSell || isConfirmingApproval
+                                        ? 'Approving...'
+                                        : needsSellApproval
+                                          ? `Approve ${tokenSymbol}`
+                                          : isSellExecuting
+                                            ? 'Selling...'
+                                            : isSellConfirming
+                                              ? 'Confirming...'
+                                              : isSellPreparing
+                                                ? 'Preparing...'
+                                                : 'Sell'}
                             </Button>
                         </TabsContent>
                     </Tabs>

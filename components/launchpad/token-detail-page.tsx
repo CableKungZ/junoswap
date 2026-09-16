@@ -244,11 +244,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         isGraduated={isGraduated}
                         athMarketCap={athMarketCap}
                         priceChange1dPct={priceChange1dPct}
-                        feeBreakdown={
-                            tokenInfo?.platform === 'junoswap'
-                                ? (dailyMetrics?.feeBreakdown ?? null)
-                                : null
-                        }
+                        feeBreakdown={dailyMetrics?.feeBreakdown ?? null}
                     />
 
                     <TokenChartWrapper

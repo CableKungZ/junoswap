@@ -5,10 +5,10 @@ import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
 import { useCurveTokenSparklines } from '@/hooks/useCurveTokenSparklines'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
-import type { LaunchpadPlatformFilter, LaunchpadSortKey } from '@/types/launchpad'
+import type { LaunchpadPlatform, LaunchpadSortKey } from '@/types/launchpad'
 import { TokenCard } from './token-card'
 import { SortTabs } from './sort-tabs'
-import { PlatformFilter } from './platform-filter'
+import { ALL_PLATFORMS, PlatformFilter } from './platform-filter'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -19,7 +19,7 @@ interface TokenListProps {
 export function TokenList({ searchQuery = '' }: TokenListProps) {
     const { tokens, snapshotMap, isLoading } = useTokenList()
     const [sortKey, setSortKey] = useState<LaunchpadSortKey>('last-trade')
-    const [platformFilter, setPlatformFilter] = useState<LaunchpadPlatformFilter>('all')
+    const [platforms, setPlatforms] = useState<LaunchpadPlatform[]>(ALL_PLATFORMS)
     const chainId = useLaunchpadChainId()
 
     const graduatedTokens = useMemo(
@@ -67,9 +67,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
 
     const filtered = useMemo(() => {
         const byPlatform = enrichedTokens.filter(({ token }) => {
-            if (platformFilter === 'all') return true
-            const isJunoswap = !token.platform || token.platform === 'junoswap'
-            return platformFilter === 'junoswap' ? isJunoswap : !isJunoswap
+            return platforms.includes(token.platform ?? 'junoswap')
         })
         if (!searchQuery.trim()) return byPlatform
         const q = searchQuery.toLowerCase().trim()
@@ -80,7 +78,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
             const creator = token.creator.toLowerCase()
             return symbol.includes(q) || name.includes(q) || addr.includes(q) || creator.includes(q)
         })
-    }, [enrichedTokens, searchQuery, platformFilter])
+    }, [enrichedTokens, searchQuery, platforms])
 
     const sorted = useMemo(() => {
         return [...filtered].sort((a, b) => {
@@ -114,23 +112,29 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
         )
     }
 
+    const toolbar = (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+            <PlatformFilter value={platforms} onChange={setPlatforms} />
+            <SortTabs value={sortKey} onChange={setSortKey} />
+        </div>
+    )
+
     if (filtered.length === 0) {
         const description = searchQuery.trim()
             ? `No tokens matching "${searchQuery.trim()}"`
-            : platformFilter === 'third-party'
-              ? 'No third-party tokens found for this chain yet.'
-              : platformFilter === 'junoswap'
-                ? 'No Junoswap tokens match this filter.'
-                : 'No tokens match this filter.'
-        return <EmptyState title="No results" description={description} />
+            : 'No tokens match this filter.'
+        // The toolbar stays, or a platform filter that empties the list could not be undone.
+        return (
+            <div>
+                {toolbar}
+                <EmptyState title="No results" description={description} />
+            </div>
+        )
     }
 
     return (
         <div>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-                <SortTabs value={sortKey} onChange={setSortKey} />
-                <PlatformFilter value={platformFilter} onChange={setPlatformFilter} />
-            </div>
+            {toolbar}
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {sorted.map(
                     ({
