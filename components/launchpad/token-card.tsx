@@ -152,11 +152,9 @@ export function TokenCard({
                                 </span>
                             )}
                         </div>
-                        {/* Both lines always render (nbsp when empty) so the creator row, tags and
+                        {/* Name and description always render (nbsp when empty) so the creator row, tags and
                             mcap stay aligned across cards in the same grid row. */}
-                        <p className="truncate text-xs text-muted-foreground">
-                            {name && name !== symbol ? name : ' '}
-                        </p>
+                        <p className="truncate text-xs text-muted-foreground">{name || ' '}</p>
                         <p
                             className="truncate text-xs text-muted-foreground/80"
                             title={token.description || undefined}
