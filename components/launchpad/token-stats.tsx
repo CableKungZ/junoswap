@@ -64,7 +64,9 @@ export function TokenStats({
                                 </span>
                             </TooltipTrigger>
                             <TooltipContent className="normal-case">
-                                <div className="font-medium">Lifetime trading fee revenue (1%)</div>
+                                <div className="font-medium">
+                                    Lifetime trading fee revenue ({feeBreakdown.feeBps / 100}%)
+                                </div>
                                 <div className="mt-1 space-y-0.5 text-muted-foreground tabular-nums">
                                     {feeBreakdown.nativeFees > 0 && (
                                         <div>
