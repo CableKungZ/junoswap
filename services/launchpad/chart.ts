@@ -331,8 +331,13 @@ export function stitchCandlesticks(
     v3Candles: CandlestickData[],
     graduatedAtTimestamp: number | null
 ): CandlestickData[] {
-    if (!graduatedAtTimestamp) return bondingCurveCandles
     if (v3Candles.length === 0) return bondingCurveCandles
+    // A token that graduated on a third-party market (e.g. Durianfun) never touched Junoswap's
+    // own bonding-curve contract, so there's no pre-graduation history and the indexer's
+    // graduatedAt (tied to Junoswap's own graduation event) is never set for it either -- show
+    // the real V3 trades instead of going blank.
+    if (bondingCurveCandles.length === 0) return v3Candles
+    if (!graduatedAtTimestamp) return bondingCurveCandles
 
     const preGrad = bondingCurveCandles.filter((c) => c.time < graduatedAtTimestamp)
     const postGrad = v3Candles.filter((c) => c.time >= graduatedAtTimestamp)

@@ -9,6 +9,7 @@ import {
     computeFeeBreakdown,
     extractCreatorTrades,
     sanitizeCandles,
+    stitchCandlesticks,
     tokenNativeCandles,
     ratioCandles,
     SAFE_CANDLE_VALUE_MAX,
@@ -586,5 +587,34 @@ describe('buildCreatorMarkers', () => {
             { time: 0, isBuy: true },
             { time: 2 * HOUR, isBuy: false },
         ])
+    })
+})
+
+describe('stitchCandlesticks', () => {
+    const candle = (time: number, close: number): CandlestickData => ({
+        time,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1,
+    })
+
+    it('returns v3 candles alone when a third-party graduation never set graduatedAt', () => {
+        const v3Candles = [candle(100, 5), candle(200, 6)]
+        expect(stitchCandlesticks([], v3Candles, null)).toEqual(v3Candles)
+    })
+
+    it('stitches bonding-curve and v3 candles around a known graduation time', () => {
+        const bc = [candle(50, 1), candle(90, 2)]
+        const v3 = [candle(100, 3), candle(200, 4)]
+        const result = stitchCandlesticks(bc, v3, 100)
+        expect(result.map((c) => c.time)).toEqual([50, 90, 100, 200])
+        expect(result[2]!.open).toBe(2)
+    })
+
+    it('returns bonding-curve candles when there are no v3 candles yet', () => {
+        const bc = [candle(50, 1)]
+        expect(stitchCandlesticks(bc, [], 100)).toBe(bc)
     })
 })
