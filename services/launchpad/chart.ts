@@ -81,6 +81,7 @@ export function aggregateCandlesticks(
 export interface PricePoint {
     timestamp: number
     price: number
+    volume?: number
 }
 
 export function aggregatePricePoints(
@@ -103,12 +104,13 @@ export function aggregatePricePoints(
                 high: point.price,
                 low: point.price,
                 close: point.price,
-                volume: 0,
+                volume: point.volume ?? 0,
             })
         } else {
             existing.high = Math.max(existing.high, point.price)
             existing.low = Math.min(existing.low, point.price)
             existing.close = point.price
+            existing.volume += point.volume ?? 0
         }
     }
 

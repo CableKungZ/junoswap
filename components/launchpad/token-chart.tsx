@@ -50,6 +50,7 @@ interface TokenChartProps {
     creatorAddress?: Address
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
+    durianfunMarket?: Address
 }
 
 function formatMcap(value: number): string {
@@ -82,6 +83,7 @@ export function TokenChart({
     creatorAddress,
     onDailyMetricsChange,
     className,
+    durianfunMarket,
 }: TokenChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<IChartApi | null>(null)
@@ -104,7 +106,7 @@ export function TokenChart({
         setTimeframe,
         chartMode,
         setChartMode,
-    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress)
+    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress, durianfunMarket)
 
     const { price: livePoolPrice } = useGraduatedPoolPrice({
         poolAddress,

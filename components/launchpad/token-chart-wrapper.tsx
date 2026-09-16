@@ -29,6 +29,7 @@ interface TokenChartWrapperProps {
     creatorAddress?: Address
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
+    durianfunMarket?: Address
 }
 
 export function TokenChartWrapper(props: TokenChartWrapperProps) {

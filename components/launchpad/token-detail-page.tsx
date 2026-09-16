@@ -260,6 +260,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         graduatedAt={tokenInfo?.graduatedAt ?? null}
                         creatorAddress={tokenInfo?.creator}
                         onDailyMetricsChange={setDailyMetrics}
+                        durianfunMarket={isThirdPartyCurve ? tokenInfo?.market : undefined}
                     />
 
                     {(tokenInfo?.description ||
