@@ -68,6 +68,9 @@ export function StakingCreatorPanel({
     const [epochDone, setEpochDone] = useState(false)
     const [poolActionOpen, setPoolActionOpen] = useState(false)
     const [poolActionLabel, setPoolActionLabel] = useState('Pool update')
+    // close() and recoverUnallocatedRewards() share one hook, so the dialog has to
+    // remember which one was pressed or its Try again button has nothing to call.
+    const poolActionRun = useRef<() => void>(() => {})
 
     const epoch = useStartEpoch()
     const actions = useStakingPoolActions(pool.address, pool.view.stakingToken)
@@ -222,7 +225,7 @@ export function StakingCreatorPanel({
                 error: actions.error,
                 hash: actions.hash,
             },
-            run: () => {},
+            run: () => poolActionRun.current(),
             renderStage: (phase) => (
                 <TxStageRecord
                     phase={phase}
@@ -419,6 +422,7 @@ export function StakingCreatorPanel({
                     isLoading={actions.isPending || actions.isConfirming}
                     onClick={() => {
                         setPoolActionLabel('Recover unallocated rewards')
+                        poolActionRun.current = () => actions.recoverUnallocated()
                         setPoolActionOpen(true)
                         actions.recoverUnallocated()
                     }}
@@ -440,6 +444,7 @@ export function StakingCreatorPanel({
                             disabled={!isBetweenEpochs || actions.isPending || actions.isConfirming}
                             onClick={() => {
                                 setPoolActionLabel('Retire pool')
+                                poolActionRun.current = () => actions.close()
                                 setPoolActionOpen(true)
                                 actions.close()
                             }}

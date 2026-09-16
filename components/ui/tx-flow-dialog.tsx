@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Loader2, X, ExternalLink } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Loader2, X, ExternalLink, Volume2, VolumeX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getExplorerTxUrl } from '@/lib/explorer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { toastSuccess } from '@/lib/toast'
 import { TxStageFlow } from '@/components/ui/tx-stage'
 import { parseRevertReason, fullErrorLog, txPhase, type TxPhase, type TxFlags } from '@/lib/tx-flow'
+import { playTxSound, isTxSoundEnabled, setTxSoundEnabled } from '@/lib/tx-sfx'
 import type { Address } from 'viem'
 
 export interface TxStep {
@@ -173,33 +174,104 @@ export function TxFlowDialog({
     chainId,
     onDone,
 }: TxFlowDialogProps) {
-    if (steps.length === 0) return null
-
-    // Once every step has landed there is no unfinished step to point at, so the last
-    // one stays live and keeps showing its result.
+    // Every hook has to run before the empty-steps bail-out below, so the live step is
+    // resolved defensively rather than after an early return.
     const pendingIndex = steps.findIndex((s) => s.phase !== 'success')
-    const allDone = pendingIndex === -1
-    const liveIndex = allDone ? steps.length - 1 : pendingIndex
-    const live = steps[liveIndex]!
+    const allDone = steps.length > 0 && pendingIndex === -1
+    const liveIndex = allDone ? steps.length - 1 : Math.max(0, pendingIndex)
+    const live = steps[liveIndex]
+    const phase = live?.phase ?? 'idle'
+
+    const [soundOn, setSoundOn] = useState(false)
+    // Read after mount: localStorage during render would not match the server's HTML.
+    useEffect(() => setSoundOn(isTxSoundEnabled()), [])
+
+    const lastPhase = useRef<TxPhase>('idle')
+    useEffect(() => {
+        if (!open || phase === lastPhase.current) return
+        lastPhase.current = phase
+        if (phase === 'pending') playTxSound('submit')
+        // A step landing mid-flow is a tick; the last one landing is the reward.
+        else if (phase === 'success') playTxSound(allDone ? 'success' : 'step')
+        else if (phase === 'error' || phase === 'sim-error') playTxSound('error')
+    }, [open, phase, allDone])
+
+    useEffect(() => {
+        if (!open) lastPhase.current = 'idle'
+    }, [open])
+
+    if (!live) return null
+
     const isLast = liveIndex === steps.length - 1
-    const failed = live.phase === 'error' || live.phase === 'sim-error'
+    const failed = phase === 'error' || phase === 'sim-error'
+    // A signature is in the wallet or a transaction is in a block. Closing here would
+    // strand a flow the user cannot get back to, so the dialog refuses to be dismissed.
+    const isBusyNow = phase === 'pending' || phase === 'confirming'
+
+    const finish = () => {
+        onDone?.()
+        onOpenChange(false)
+    }
+
+    const handleOpenChange = (next: boolean) => {
+        if (next) {
+            onOpenChange(true)
+            return
+        }
+        if (isBusyNow) return
+        // Escape and the corner X have to mean what Done means, or a finished flow leaves
+        // its form unreset and its parent dialog open behind it.
+        if (allDone) {
+            finish()
+            return
+        }
+        onOpenChange(false)
+    }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
-                className={cn('max-w-sm gap-0 p-0', live.phase === 'error' && 'animate-tx-shake')}
+                className={cn(
+                    'max-w-sm gap-0 p-0',
+                    phase === 'error' && 'animate-tx-shake',
+                    isBusyNow && '[&>button]:hidden'
+                )}
+                onInteractOutside={(e) => isBusyNow && e.preventDefault()}
+                onEscapeKeyDown={(e) => isBusyNow && e.preventDefault()}
             >
                 <DialogHeader className="px-5 pt-4">
-                    <DialogTitle className="text-base">{title}</DialogTitle>
+                    <div className="flex items-center justify-between gap-3 pr-6">
+                        <DialogTitle className="text-base">{title}</DialogTitle>
+                        <button
+                            type="button"
+                            aria-label={
+                                soundOn ? 'Mute transaction sounds' : 'Unmute transaction sounds'
+                            }
+                            aria-pressed={soundOn}
+                            onClick={() => {
+                                const next = !soundOn
+                                setTxSoundEnabled(next)
+                                setSoundOn(next)
+                                if (next) playTxSound('step')
+                            }}
+                            className="text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                            {soundOn ? (
+                                <Volume2 className="h-4 w-4" />
+                            ) : (
+                                <VolumeX className="h-4 w-4" />
+                            )}
+                        </button>
+                    </div>
                 </DialogHeader>
 
                 <div className="grid gap-3.5 px-5 pb-5 pt-4">
-                    {live.phase === 'sim-error' ? (
+                    {phase === 'sim-error' ? (
                         <div className="grid min-h-[148px] content-center gap-3.5 rounded-[calc(var(--radius)-1px)] border border-border bg-secondary/40 px-[18px] py-4">
                             <TxErrorPanel error={live.error} />
                         </div>
                     ) : (
-                        live.renderStage(live.phase)
+                        live.renderStage(phase)
                     )}
 
                     <div className="grid">
@@ -246,13 +318,13 @@ export function TxFlowDialog({
                             </Button>
                         )}
 
-                        {live.phase === 'pending' && (
+                        {phase === 'pending' && (
                             <Button variant="outline" className="w-full" disabled>
                                 Confirm in your wallet…
                             </Button>
                         )}
 
-                        {live.phase === 'confirming' && (
+                        {phase === 'confirming' && (
                             <Button variant="outline" className="w-full" disabled>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Confirming…
@@ -261,26 +333,20 @@ export function TxFlowDialog({
 
                         {/* The primary button always names the next signature, so nobody
                             signs something the dialog never spelled out. */}
-                        {live.phase === 'success' && !isLast && (
+                        {phase === 'success' && !isLast && (
                             <Button className="w-full" onClick={steps[liveIndex + 1]!.run}>
                                 {steps[liveIndex + 1]!.label}
                             </Button>
                         )}
 
-                        {live.phase === 'idle' && (
+                        {phase === 'idle' && (
                             <Button className="w-full" onClick={live.run}>
                                 {live.label}
                             </Button>
                         )}
 
                         {allDone && (
-                            <Button
-                                className="w-full"
-                                onClick={() => {
-                                    onDone?.()
-                                    onOpenChange(false)
-                                }}
-                            >
+                            <Button className="w-full" onClick={finish}>
                                 Done
                             </Button>
                         )}

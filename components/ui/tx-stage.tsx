@@ -83,7 +83,11 @@ function PhaseGlyph({ phase }: { phase: TxPhase }) {
     return <Loader2 className="h-2.5 w-2.5 animate-spin" strokeWidth={3} />
 }
 
-/** A value the chain has not returned yet is a skeleton, never a zero. */
+/**
+ * Stands in for a value the chain has not returned yet. Only a figure the transaction
+ * itself produces earns one — a symbol, a pair or a duration is known before the wallet
+ * ever opens, and covering it would be a lie about what we are waiting for.
+ */
 function Skeleton({ className }: { className?: string }) {
     return (
         <span
@@ -101,7 +105,9 @@ function Amount({ side, phase }: { side: TxTokenSide | TxContractSide; phase: Tx
     const decimals = side.kind === 'token' ? (side.displayDecimals ?? 2) : 2
     const counted = useCountUp(target, counting)
 
-    if (phase === 'pending') return <Skeleton />
+    // countTo marks the one value the receipt decides; everything else is already known.
+    if (phase === 'pending' && side.kind === 'token' && side.countTo !== undefined)
+        return <Skeleton />
     return (
         <span
             className={cn(
@@ -340,11 +346,7 @@ export function TxStageRecord({ phase, rows, hash, chainId }: TxStageRecordProps
                         <span className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                             {label}
                         </span>
-                        {phase === 'pending' ? (
-                            <Skeleton className="h-4 w-20" />
-                        ) : (
-                            <span className="font-semibold tabular-nums">{value}</span>
-                        )}
+                        <span className="font-semibold tabular-nums">{value}</span>
                     </div>
                 ))}
             </div>

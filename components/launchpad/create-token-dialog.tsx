@@ -94,10 +94,14 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
         if (isSuccess) handleSuccess()
     }, [isSuccess, handleSuccess])
 
-    useEffect(() => {
-        if (!createdTokenAddress || !isSuccess) return
-        router.push(`/launchpad/token/${createdTokenAddress}?chain=${chainId}`)
-    }, [createdTokenAddress, isSuccess, router, chainId])
+    // Navigating on isSuccess used to unmount the dialog the instant the receipt landed,
+    // so the confirmed frame never got to render. The redirect now waits for Done.
+    const goToToken = useCallback(() => {
+        onOpenChange(false)
+        if (createdTokenAddress) {
+            router.push(`/launchpad/token/${createdTokenAddress}?chain=${chainId}`)
+        }
+    }, [createdTokenAddress, router, chainId, onOpenChange])
 
     useEffect(() => {
         if (isError && error && phase === 'error') {
@@ -203,116 +207,120 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
     const hasUpfrontBuy = form.upfrontBuyAmount && parseFloat(form.upfrontBuyAmount) > 0
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md max-h-[90vh]">
-                <DialogHeader>
-                    <DialogTitle className="text-lg font-semibold">Create Token</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-md max-h-[90vh]">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold">Create Token</DialogTitle>
+                    </DialogHeader>
 
-                <div className="space-y-3.5 overflow-y-auto max-h-[calc(90vh-6rem)] pr-1 sm:max-h-none sm:pr-0">
-                    <div className="flex gap-3">
-                        <LogoUpload onFileSelect={setPendingLogoFile} compact />
-                        <div className="flex-1 space-y-2">
-                            <Input
-                                placeholder="Token Name *"
-                                value={form.name}
-                                onChange={(e) => updateField('name', e.target.value)}
-                            />
-                            <Input
-                                placeholder="SYMBOL *"
-                                value={form.symbol}
-                                onChange={(e) =>
-                                    updateField('symbol', e.target.value.toUpperCase())
-                                }
-                                maxLength={10}
-                                className="uppercase"
-                            />
+                    <div className="space-y-3.5 overflow-y-auto max-h-[calc(90vh-6rem)] pr-1 sm:max-h-none sm:pr-0">
+                        <div className="flex gap-3">
+                            <LogoUpload onFileSelect={setPendingLogoFile} compact />
+                            <div className="flex-1 space-y-2">
+                                <Input
+                                    placeholder="Token Name *"
+                                    value={form.name}
+                                    onChange={(e) => updateField('name', e.target.value)}
+                                />
+                                <Input
+                                    placeholder="SYMBOL *"
+                                    value={form.symbol}
+                                    onChange={(e) =>
+                                        updateField('symbol', e.target.value.toUpperCase())
+                                    }
+                                    maxLength={10}
+                                    className="uppercase"
+                                />
+                            </div>
                         </div>
-                    </div>
 
-                    <Textarea
-                        placeholder="Description (optional)"
-                        value={form.description}
-                        onChange={(e) => updateField('description', e.target.value)}
-                    />
+                        <Textarea
+                            placeholder="Description (optional)"
+                            value={form.description}
+                            onChange={(e) => updateField('description', e.target.value)}
+                        />
 
-                    <div className="space-y-1.5">
-                        <div className="relative">
-                            <Globe className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Website"
-                                value={form.link1}
-                                onChange={(e) => updateField('link1', e.target.value)}
-                                className="pl-9 h-8 text-sm"
-                            />
+                        <div className="space-y-1.5">
+                            <div className="relative">
+                                <Globe className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Website"
+                                    value={form.link1}
+                                    onChange={(e) => updateField('link1', e.target.value)}
+                                    className="pl-9 h-8 text-sm"
+                                />
+                            </div>
+                            <div className="relative">
+                                <Twitter className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Twitter / X"
+                                    value={form.link2}
+                                    onChange={(e) => updateField('link2', e.target.value)}
+                                    className="pl-9 h-8 text-sm"
+                                />
+                            </div>
+                            <div className="relative">
+                                <MessageCircle className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    placeholder="Telegram"
+                                    value={form.link3}
+                                    onChange={(e) => updateField('link3', e.target.value)}
+                                    className="pl-9 h-8 text-sm"
+                                />
+                            </div>
                         </div>
-                        <div className="relative">
-                            <Twitter className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Twitter / X"
-                                value={form.link2}
-                                onChange={(e) => updateField('link2', e.target.value)}
-                                className="pl-9 h-8 text-sm"
-                            />
-                        </div>
-                        <div className="relative">
-                            <MessageCircle className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Telegram"
-                                value={form.link3}
-                                onChange={(e) => updateField('link3', e.target.value)}
-                                className="pl-9 h-8 text-sm"
-                            />
-                        </div>
-                    </div>
 
-                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                            <Coins className="h-3.5 w-3.5" />
-                            Buy Upfront (Optional)
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                <Coins className="h-3.5 w-3.5" />
+                                Buy Upfront (Optional)
+                            </div>
+                            <div className="relative">
+                                <Input
+                                    type="number"
+                                    placeholder="0.0"
+                                    min="0"
+                                    step="0.01"
+                                    value={form.upfrontBuyAmount}
+                                    onChange={(e) =>
+                                        updateField('upfrontBuyAmount', e.target.value)
+                                    }
+                                    className="pr-12"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+                                    KUB
+                                </span>
+                            </div>
+                            {expectedTokens > 0n && (
+                                <p className="text-xs text-muted-foreground">
+                                    ~{formatTokenAmount(expectedTokens)} tokens
+                                </p>
+                            )}
                         </div>
-                        <div className="relative">
-                            <Input
-                                type="number"
-                                placeholder="0.0"
-                                min="0"
-                                step="0.01"
-                                value={form.upfrontBuyAmount}
-                                onChange={(e) => updateField('upfrontBuyAmount', e.target.value)}
-                                className="pr-12"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
-                                KUB
+
+                        <div className="flex items-center justify-between text-sm px-1">
+                            <span className="text-muted-foreground">
+                                Total{hasUpfrontBuy ? ' (fee + buy)' : ''}
                             </span>
+                            <span className="font-semibold">{formatKub(totalCost)} KUB</span>
                         </div>
-                        {expectedTokens > 0n && (
-                            <p className="text-xs text-muted-foreground">
-                                ~{formatTokenAmount(expectedTokens)} tokens
-                            </p>
-                        )}
+
+                        <Button
+                            className="w-full"
+                            size="lg"
+                            onClick={handleCreate}
+                            disabled={isButtonDisabled}
+                            isLoading={isExecuting || isConfirming}
+                            loadingText={getButtonText()}
+                        >
+                            {getButtonText()}
+                        </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
 
-                    <div className="flex items-center justify-between text-sm px-1">
-                        <span className="text-muted-foreground">
-                            Total{hasUpfrontBuy ? ' (fee + buy)' : ''}
-                        </span>
-                        <span className="font-semibold">{formatKub(totalCost)} KUB</span>
-                    </div>
-
-                    <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={handleCreate}
-                        disabled={isButtonDisabled}
-                        isLoading={isExecuting || isConfirming}
-                        loadingText={getButtonText()}
-                    >
-                        {getButtonText()}
-                    </Button>
-                </div>
-            </DialogContent>
-
-            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            {/* Its own Radix root, outside the other one, so the two modals don't fight over focus. */}
             <TxFlowDialog
                 open={txOpen}
                 onOpenChange={setTxOpen}
@@ -348,8 +356,8 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
                     }),
                 ]}
                 chainId={chainId}
-                onDone={() => onOpenChange(false)}
+                onDone={goToToken}
             />
-        </Dialog>
+        </>
     )
 }
