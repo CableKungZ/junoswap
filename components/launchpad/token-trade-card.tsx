@@ -349,6 +349,12 @@ export function TokenTradeCard({
         skipSimulation: !v3BuyEnabled || needsSellApproval,
     })
 
+    // Mirrors forceUnwrapNative above: a third-party dex sell settles in the wrapped native
+    // token (e.g. KKUB), not native KUB, so the UI must say so rather than implying a KUB payout.
+    const sellReceivesWrappedNative = isGraduated && launchpadDex !== 'junoswap'
+    const wrappedNativeSymbol = nativeToken.symbol === 'KUB' ? 'KKUB' : `W${nativeToken.symbol}`
+    const sellOutputSymbol = sellReceivesWrappedNative ? wrappedNativeSymbol : nativeToken.symbol
+
     const canBuy = isGraduated ? canBuyV3 : canBuyBC
     const canSell = isGraduated ? canSellV3 : canSellBC
     const buyExpectedOut = isGraduated ? v3BuyExpectedOut : bcBuyExpectedOut
@@ -731,7 +737,7 @@ export function TokenTradeCard({
                                                 You receive (est.)
                                             </span>
                                             <span className="font-medium text-right min-w-0">
-                                                {formatKub(sellExpectedOut)} KUB
+                                                {formatKub(sellExpectedOut)} {sellOutputSymbol}
                                             </span>
                                         </div>
                                         <div className="flex justify-between gap-2">
@@ -739,7 +745,7 @@ export function TokenTradeCard({
                                                 Min received
                                             </span>
                                             <span className="font-medium text-right min-w-0">
-                                                {formatKub(minNativeOut)} KUB
+                                                {formatKub(minNativeOut)} {sellOutputSymbol}
                                             </span>
                                         </div>
                                         <div className="flex justify-between gap-2">
@@ -752,6 +758,14 @@ export function TokenTradeCard({
                                                     : '2%'}
                                             </span>
                                         </div>
+                                        {sellReceivesWrappedNative && (
+                                            <div className="pt-1 text-[11px] leading-snug text-muted-foreground">
+                                                This pool settles in wrapped {wrappedNativeSymbol},
+                                                not native {nativeToken.symbol} — the third-party
+                                                router doesn&apos;t support direct{' '}
+                                                {nativeToken.symbol} withdrawal.
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             )}
