@@ -16,7 +16,7 @@ import {
 export function useCurveTokenSparklines(
     tokenAddrs: string[],
     chainId: number
-): Map<string, string | null> {
+): { sparklines: Map<string, string | null>; isPending: boolean } {
     const queries = useQueries({
         queries: tokenAddrs.map((addr) => ({
             queryKey: ['curve-token-sparkline', chainId, addr.toLowerCase()],
@@ -46,7 +46,7 @@ export function useCurveTokenSparklines(
         })),
     })
 
-    return useMemo(() => {
+    const sparklines = useMemo(() => {
         const map = new Map<string, string | null>()
         tokenAddrs.forEach((addr, i) => {
             const data = queries[i]?.data
@@ -54,4 +54,5 @@ export function useCurveTokenSparklines(
         })
         return map
     }, [tokenAddrs, queries])
+    return { sparklines, isPending: queries.some((q) => q.isPending) }
 }

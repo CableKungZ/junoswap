@@ -130,7 +130,7 @@ async function fetchTokenActivity(
 export function useGraduatedTokenActivity(
     tokens: GraduatedTokenInput[],
     chainId: number
-): Map<string, GraduatedTokenActivity> {
+): { activity: Map<string, GraduatedTokenActivity>; isPending: boolean } {
     const since = useMemo(() => Math.floor(Date.now() / 60_000) * 60 - DAY_SECONDS, [])
 
     const queries = useQueries({
@@ -143,7 +143,7 @@ export function useGraduatedTokenActivity(
         })),
     })
 
-    return useMemo(() => {
+    const activity = useMemo(() => {
         const map = new Map<string, GraduatedTokenActivity>()
         tokens.forEach((t, i) => {
             const data = queries[i]?.data
@@ -151,4 +151,5 @@ export function useGraduatedTokenActivity(
         })
         return map
     }, [tokens, queries])
+    return { activity, isPending: queries.some((q) => q.isPending) }
 }
