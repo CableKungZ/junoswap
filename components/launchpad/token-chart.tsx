@@ -104,6 +104,7 @@ export function TokenChart({
     const {
         data,
         feeBreakdown,
+        athMarketCap,
         creatorTrades,
         isLoading,
         timeframe,
@@ -557,7 +558,7 @@ export function TokenChart({
 
         const metrics = computeDailyMetrics(displayData, nativeUsdPrice)
         setVol1d(metrics?.volume1d ?? null)
-        onDailyMetricsChange?.(metrics ? { ...metrics, feeBreakdown } : null)
+        onDailyMetricsChange?.(metrics ? { ...metrics, feeBreakdown, athMarketCap } : null)
 
         const VISIBLE_CANDLES = 60
         const len = visibleData.length
@@ -577,6 +578,7 @@ export function TokenChart({
         chartColors,
         onDailyMetricsChange,
         feeBreakdown,
+        athMarketCap,
         creatorTrades,
         timeframe,
     ])

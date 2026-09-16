@@ -479,6 +479,25 @@ export interface DailyMetrics {
     volume1d: number
     priceChange1dPct: number
     feeBreakdown?: FeeBreakdown
+    athMarketCap?: number
+}
+
+// The indexer's TokenSnapshot.athMarketCapNative freezes at graduation (backend doesn't sync it
+// afterward -- see project notes), so it undercounts any peak reached later on the graduated
+// pool. Read the true peak from the same swap history the chart renders instead, always in mcap
+// terms regardless of the user's price/mcap toggle. Bucket size doesn't matter for a max, so a
+// coarse '1d' bucket is used to keep this cheap.
+export function computeAthMarketCap(
+    bcEvents: CurveSwapEvent[],
+    v3Events: V3SwapEvent[],
+    tokenIsToken0: boolean
+): number {
+    const bcCandles = aggregateCandlesticks(bcEvents, '1d', 'mcap')
+    const v3Candles = aggregateV3Candlesticks(v3Events, '1d', 'mcap', tokenIsToken0)
+    let ath = 0
+    for (const c of bcCandles) if (c.high > ath) ath = c.high
+    for (const c of v3Candles) if (c.high > ath) ath = c.high
+    return ath
 }
 
 export function computeDailyMetrics(

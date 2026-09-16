@@ -110,13 +110,22 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const [shareOpen, setShareOpen] = useState(false)
     const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null)
 
-    // The indexer's TokenSnapshot aggregate can stall after graduation on some chains, so it only
-    // sets a floor here — live reserves/swaps (dailyMetrics, liveGraduatedMarketCap) win when present.
+    // The indexer's TokenSnapshot aggregate freezes at graduation (stops syncing after the token
+    // moves to a pool), so it can't be trusted for the true peak. The chart already replays every
+    // swap the token ever had, so its own max is the real ATH -- fall back to the frozen snapshot
+    // only while that history is still loading.
     const athMarketCap = useMemo(() => {
+        if (dailyMetrics?.athMarketCap) return String(dailyMetrics.athMarketCap)
         const snapshotAth = snapshotAthMarketCap ? parseFloat(snapshotAthMarketCap) : 0
         const liveMcap = isGraduated ? (liveGraduatedMarketCap ?? parseFloat(marketCap)) : 0
         return String(Math.max(snapshotAth, liveMcap))
-    }, [snapshotAthMarketCap, isGraduated, liveGraduatedMarketCap, marketCap])
+    }, [
+        dailyMetrics?.athMarketCap,
+        snapshotAthMarketCap,
+        isGraduated,
+        liveGraduatedMarketCap,
+        marketCap,
+    ])
 
     const priceChange1dPct =
         dailyMetrics?.priceChange1dPct ??

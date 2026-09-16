@@ -10,6 +10,7 @@ import { ponderClient } from '@/lib/ponder-client'
 import {
     aggregateCandlesticks,
     aggregateV3Candlesticks,
+    computeAthMarketCap,
     computeFeeBreakdown,
     extractCreatorTrades,
     stitchCandlesticks,
@@ -112,6 +113,16 @@ export function useTokenPriceHistory(
 
     const feeBreakdown = useMemo(() => computeFeeBreakdown(rawEvents ?? []), [rawEvents])
 
+    const athMarketCap = useMemo(
+        () =>
+            computeAthMarketCap(
+                rawEvents ?? [],
+                (rawV3Events ?? []) as V3SwapEvent[],
+                tokenIsToken0
+            ),
+        [rawEvents, rawV3Events, tokenIsToken0]
+    )
+
     const creatorTrades = useMemo(
         () =>
             creatorAddress
@@ -128,6 +139,7 @@ export function useTokenPriceHistory(
     return {
         data,
         feeBreakdown,
+        athMarketCap,
         creatorTrades,
         isLoading: isLoadingBc || (isGraduated && isLoadingV3),
         timeframe,
