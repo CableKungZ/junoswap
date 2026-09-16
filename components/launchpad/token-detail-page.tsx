@@ -373,6 +373,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                             <DurianfunTradeCard
                                 tokenAddr={tokenAddr}
                                 tokenSymbol={symbol}
+                                tokenLogo={tokenInfo.logo}
                                 marketAddr={tokenInfo.market}
                                 chainId={chainId}
                             />

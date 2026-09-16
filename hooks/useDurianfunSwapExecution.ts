@@ -43,6 +43,9 @@ interface UseDurianfunSwapExecutionResult {
     approve: () => void
     isApproving: boolean
     isApproveConfirming: boolean
+    isApproveSuccess: boolean
+    approveError: Error | null
+    approveHash: `0x${string}` | undefined
 }
 
 export function useDurianfunSwapExecution({
@@ -73,6 +76,7 @@ export function useDurianfunSwapExecution({
         data: approveHash,
         writeContract: writeApprove,
         isPending: isApproving,
+        error: approveWriteError,
     } = useWriteContract()
 
     const { data: approveReceipt } = useQuery({
@@ -87,6 +91,10 @@ export function useDurianfunSwapExecution({
         refetchInterval: (query) => (query.state.data ? false : 1000),
     })
     const isApproveConfirming = !!approveHash && !approveReceipt
+    const isApproveSuccess = approveReceipt?.status === 'success'
+    const approveError =
+        (approveWriteError as Error | null) ??
+        (approveReceipt?.status === 'reverted' ? new Error('Approval reverted') : null)
 
     const approve = () => {
         if (!tokenAddr || !marketAddr) return
@@ -200,5 +208,8 @@ export function useDurianfunSwapExecution({
         approve,
         isApproving,
         isApproveConfirming,
+        isApproveSuccess,
+        approveError,
+        approveHash,
     }
 }
