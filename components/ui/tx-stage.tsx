@@ -6,8 +6,7 @@ import { cn } from '@/lib/utils'
 import { formatFeeTier } from '@/lib/liquidity-helpers'
 import { getExplorerTxUrl } from '@/lib/explorer'
 import { TokenIcon } from '@/components/ui/token-icon'
-import { useCountUp } from '@/hooks/useCountUp'
-import { formatStageNumber, formatStageText, type TxPhase } from '@/lib/tx-flow'
+import { formatStageText, type TxPhase } from '@/lib/tx-flow'
 
 interface TokenRef {
     symbol: string
@@ -19,8 +18,6 @@ export interface TxTokenSide {
     token: TokenRef
     /** Already formatted for display — the stage never does its own rounding. */
     amount: string
-    /** When set, the amount counts up to this figure while the tx confirms. */
-    countTo?: number
 }
 
 export interface TxContractSide {
@@ -92,36 +89,13 @@ function PhaseGlyph({ phase }: { phase: TxPhase }) {
     return <Loader2 className="h-2.5 w-2.5 animate-spin" strokeWidth={3} />
 }
 
-/**
- * Stands in for a value the chain has not returned yet. Only a figure the transaction
- * itself produces earns one — a symbol, a pair or a duration is known before the wallet
- * ever opens, and covering it would be a lie about what we are waiting for.
- */
-function Skeleton({ className }: { className?: string }) {
-    return (
-        <span
-            className={cn(
-                'inline-block h-5 w-16 rounded bg-foreground/[0.07] animate-tx-shimmer',
-                className
-            )}
-        />
-    )
-}
-
-function Amount({ side, phase }: { side: TxTokenSide | TxContractSide; phase: TxPhase }) {
-    const counting = side.kind === 'token' && side.countTo !== undefined && phase === 'confirming'
-    const target = side.kind === 'token' ? (side.countTo ?? 0) : 0
-    const counted = useCountUp(target, counting)
-
-    // countTo marks the one value the receipt decides; everything else is already known.
-    if (phase === 'pending' && side.kind === 'token' && side.countTo !== undefined)
-        return <Skeleton />
+function Amount({ side }: { side: TxTokenSide | TxContractSide }) {
     return (
         <span
             title={side.amount}
             className="max-w-full truncate whitespace-nowrap text-xl font-semibold leading-tight tracking-tight tabular-nums"
         >
-            {counting ? formatStageNumber(counted) : formatStageText(side.amount)}
+            {formatStageText(side.amount)}
         </span>
     )
 }
@@ -166,7 +140,7 @@ function PositionChip({ side }: { side: TxPositionSide }) {
     )
 }
 
-function Side({ side, phase }: { side: TxSide; phase: TxPhase }) {
+function Side({ side }: { side: TxSide }) {
     if (side.kind === 'position')
         return (
             <div className="grid min-w-0 justify-items-center gap-1.5">
@@ -183,7 +157,7 @@ function Side({ side, phase }: { side: TxSide; phase: TxPhase }) {
                     {side.address ? shortAddress(side.address).slice(0, 5) : '0x'}
                 </span>
             )}
-            <Amount side={side} phase={phase} />
+            <Amount side={side} />
             <span className="whitespace-nowrap font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 {side.kind === 'token' ? side.token.symbol : side.label}
             </span>
@@ -349,10 +323,10 @@ export function TxStageFlow({ phase, from, to, hash, chainId }: TxStageFlowProps
     return (
         <StageShell phase={phase} hash={hash} chainId={chainId}>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <Side side={from} phase={phase} />
+                <Side side={from} />
                 <Rail phase={phase} />
                 <div className={cn(phase === 'success' && 'animate-tx-land')}>
-                    <Side side={to} phase={phase} />
+                    <Side side={to} />
                 </div>
             </div>
         </StageShell>

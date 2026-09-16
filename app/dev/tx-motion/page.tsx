@@ -37,7 +37,7 @@ const SIM_ERROR = Object.assign(
 const SIDES: Record<string, { from: TxSide; to: TxSide }> = {
     Swap: {
         from: { kind: 'token', token: KUB, amount: '1.5' },
-        to: { kind: 'token', token: JUNO, amount: '318.42', countTo: 318.42 },
+        to: { kind: 'token', token: JUNO, amount: '318.42' },
     },
     Approve: {
         from: { kind: 'token', token: KUB, amount: 'Wallet' },
@@ -45,7 +45,7 @@ const SIDES: Record<string, { from: TxSide; to: TxSide }> = {
     },
     Stake: {
         from: { kind: 'token', token: JUNO, amount: '5,000' },
-        to: { kind: 'contract', label: 'JUNO Pool', amount: '5,000', countTo: 5000 } as TxSide,
+        to: { kind: 'contract', label: 'JUNO Pool', amount: '5,000' } as TxSide,
     },
     'Stake NFT': {
         from: {
@@ -68,7 +68,7 @@ const SIDES: Record<string, { from: TxSide; to: TxSide }> = {
             token0: JUNO,
             token1: KUB,
         },
-        to: { kind: 'token', token: JUNO, amount: '148.06', countTo: 148.06 },
+        to: { kind: 'token', token: JUNO, amount: '148.06' },
     },
 }
 

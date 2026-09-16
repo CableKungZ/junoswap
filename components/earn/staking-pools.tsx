@@ -209,9 +209,6 @@ function PoolCard({
                         kind: 'token',
                         token: pool.rewardTokenInfo,
                         amount: formatTokenAmount(pool.user.earned, pool.rewardTokenInfo.decimals),
-                        countTo: Number(
-                            formatTokenAmount(pool.user.earned, pool.rewardTokenInfo.decimals)
-                        ),
                     }}
                 />
             ),

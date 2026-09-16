@@ -881,29 +881,6 @@
         animation: tx-rail-fill 0.46s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
     }
 
-    /* A value the chain has not returned yet reads as a skeleton, not a zero. */
-    @keyframes tx-shimmer {
-        from {
-            background-position: 120% 0;
-        }
-        to {
-            background-position: -20% 0;
-        }
-    }
-
-    .animate-tx-shimmer {
-        background-image: linear-gradient(
-            90deg,
-            hsl(var(--foreground) / 0.07) 0%,
-            hsl(var(--foreground) / 0.07) 40%,
-            transparent 50%,
-            hsl(var(--foreground) / 0.07) 60%,
-            hsl(var(--foreground) / 0.07) 100%
-        );
-        background-size: 300% 100%;
-        animation: tx-shimmer 1.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-    }
-
     /* Overshoot then settle — the whole success celebration, 520ms of it. */
     @keyframes tx-land {
         0% {
@@ -1041,13 +1018,6 @@
 
     .animate-tx-draw {
         stroke-dashoffset: 0;
-    }
-
-    /* The skeleton still has to cover the unknown value, so flatten it rather than hide it. */
-    .animate-tx-shimmer {
-        animation: none !important;
-        background-image: none;
-        background-color: hsl(var(--foreground) / 0.07);
     }
 
     .animate-tx-sheen {

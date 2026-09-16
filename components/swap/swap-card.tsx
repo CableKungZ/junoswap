@@ -443,7 +443,6 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     kind: 'token',
                     token: tokenOut,
                     amount: displayAmountOut,
-                    countTo: Number(displayAmountOut.replace(/,/g, '')) || undefined,
                 }}
             />
         )

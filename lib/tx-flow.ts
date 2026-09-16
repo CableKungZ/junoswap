@@ -76,16 +76,6 @@ export function fullErrorLog(error: unknown): string {
 }
 
 /**
- * Eased progress of a count-up, kept pure so the hook around it stays a thin
- * requestAnimationFrame wrapper with nothing to test.
- */
-export function countValue(to: number, elapsed: number, duration: number): number {
-    if (duration <= 0 || !Number.isFinite(to)) return to
-    const t = Math.min(1, Math.max(0, elapsed / duration))
-    return to * (1 - Math.pow(1 - t, 3))
-}
-
-/**
  * Keeps a stage amount inside its column: huge values go compact (1.23M), long fractions
  * are trimmed by magnitude, and dust collapses to "<0.0001".
  */

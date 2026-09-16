@@ -623,21 +623,11 @@ export function TokenTradeCard({
             kind: 'token' as const,
             token: nativeToken,
             amount: isSell ? formatEther(sellExpectedOut ?? 0n) : buyAmount || '0',
-            ...(isSell
-                ? {
-                      countTo: Number(formatEther(sellExpectedOut ?? 0n)),
-                  }
-                : {}),
         }
         const tokenSide = {
             kind: 'token' as const,
             token: launchToken,
             amount: isSell ? sellAmount || '0' : formatUnits(buyExpectedOut ?? 0n, tokenDecimals),
-            ...(isSell
-                ? {}
-                : {
-                      countTo: Number(formatUnits(buyExpectedOut ?? 0n, tokenDecimals)),
-                  }),
         }
         txSteps.push(
             actionStep({
