@@ -256,3 +256,14 @@ export function resolvePlatformAdapter(
     }
     return ponderAdapter
 }
+
+/** True when a non-graduated third-party token has no registered adapter, so the ponder
+ *  fallback will just come back empty -- the UI should say "service unavailable" instead of
+ *  the ordinary "no data yet" (which implies the token itself has no trades/holders). */
+export function isThirdPartyDataUnavailable(
+    platform: LaunchpadPlatform | undefined,
+    isGraduated: boolean | undefined,
+    market: Address | undefined
+): boolean {
+    return !isGraduated && !!market && !!platform && !THIRD_PARTY_ADAPTERS[platform]
+}

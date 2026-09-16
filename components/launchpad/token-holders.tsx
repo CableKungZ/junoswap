@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatUnits, type Address } from 'viem'
 import { useTokenHolders } from '@/hooks/useTokenHolders'
 import type { HolderData } from '@/hooks/useTokenHolders'
+import { isThirdPartyDataUnavailable } from '@/services/launchpad/platform-adapter'
 import type { LaunchpadPlatform } from '@/types/launchpad'
 import { PortfolioLink } from '@/components/ui/portfolio-link'
 
@@ -113,6 +114,8 @@ export function TokenHolders({
         : rawHolders
     const holderCount = filteredPool ? Math.max(0, rawHolderCount - 1) : rawHolderCount
 
+    const serviceUnavailable = isThirdPartyDataUnavailable(platform, isGraduated, market)
+
     const totalPages = Math.max(1, Math.ceil(holders.length / PAGE_SIZE))
     const page = Math.min(requestedPage, totalPages)
     const paginatedHolders = holders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -160,6 +163,11 @@ export function TokenHolders({
                             <LoadingState />
                         </Table>
                     </div>
+                ) : holders.length === 0 && serviceUnavailable ? (
+                    <EmptyState
+                        title="No service available"
+                        description="Holder data isn't supported for this platform yet"
+                    />
                 ) : holders.length === 0 ? (
                     <EmptyState
                         title="No holders yet"

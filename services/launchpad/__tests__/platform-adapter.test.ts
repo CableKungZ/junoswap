@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { toHolders, resolvePlatformAdapter } from '@/services/launchpad/platform-adapter'
+import {
+    toHolders,
+    resolvePlatformAdapter,
+    isThirdPartyDataUnavailable,
+} from '@/services/launchpad/platform-adapter'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 
 describe('toHolders', () => {
     it('drops zero balances, dedupes by address and sorts descending', () => {
@@ -40,5 +45,26 @@ describe('resolvePlatformAdapter', () => {
     it('falls back to the ponder adapter for an unregistered platform', () => {
         const adapter = resolvePlatformAdapter(undefined, false, MARKET)
         expect(adapter).toBe(resolvePlatformAdapter('junoswap', false, undefined))
+    })
+})
+
+describe('isThirdPartyDataUnavailable', () => {
+    it('is false for a platform with a registered adapter', () => {
+        expect(isThirdPartyDataUnavailable('durianfun', false, MARKET)).toBe(false)
+    })
+
+    it('is true for a non-graduated third party with no registered adapter', () => {
+        const futurePlatform = 'somefuturelaunchpad' as LaunchpadPlatform
+        expect(isThirdPartyDataUnavailable(futurePlatform, false, MARKET)).toBe(true)
+    })
+
+    it('is false once the token has graduated (ponder covers it)', () => {
+        const futurePlatform = 'somefuturelaunchpad' as LaunchpadPlatform
+        expect(isThirdPartyDataUnavailable(futurePlatform, true, MARKET)).toBe(false)
+    })
+
+    it('is false without a market address (nothing third-party to fetch)', () => {
+        const futurePlatform = 'somefuturelaunchpad' as LaunchpadPlatform
+        expect(isThirdPartyDataUnavailable(futurePlatform, false, undefined)).toBe(false)
     })
 })

@@ -261,6 +261,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         creatorAddress={tokenInfo?.creator}
                         onDailyMetricsChange={setDailyMetrics}
                         durianfunMarket={isThirdPartyCurve ? tokenInfo?.market : undefined}
+                        market={tokenInfo?.market}
+                        platform={tokenInfo?.platform}
                     />
 
                     {(tokenInfo?.description ||

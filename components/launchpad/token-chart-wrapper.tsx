@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import type { Address } from 'viem'
 import type { DailyMetrics } from '@/services/launchpad/chart'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { Loader2 } from 'lucide-react'
 
 const TokenChart = dynamic(() => import('./token-chart').then((mod) => mod.TokenChart), {
@@ -30,6 +31,8 @@ interface TokenChartWrapperProps {
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
     durianfunMarket?: Address
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 export function TokenChartWrapper(props: TokenChartWrapperProps) {

@@ -7,6 +7,7 @@ import { useAccount } from 'wagmi'
 
 import { useTokenSwapEvents } from '@/hooks/useTokenSwapEvents'
 import { useDebounce } from '@/hooks/useDebounce'
+import { isThirdPartyDataUnavailable } from '@/services/launchpad/platform-adapter'
 import type { LaunchpadPlatform } from '@/types/launchpad'
 import { formatKub, formatTokenAmount, formatCompact } from '@/services/launchpad/launchpad'
 import { cn, formatTimeAgo, formatFullDate } from '@/lib/utils'
@@ -217,6 +218,8 @@ export function RecentTrades({
         setPage(1)
     }, [filterKey])
 
+    const serviceUnavailable = isThirdPartyDataUnavailable(platform, isGraduated, market)
+
     const { data: result, isLoading } = useTokenSwapEvents(
         tokenAddr,
         page,
@@ -415,6 +418,11 @@ export function RecentTrades({
                     <EmptyState
                         title="No matching trades"
                         description="Try adjusting your filters"
+                    />
+                ) : filteredTrades.length === 0 && serviceUnavailable ? (
+                    <EmptyState
+                        title="No service available"
+                        description="Trade history isn't supported for this platform yet"
                     />
                 ) : filteredTrades.length === 0 ? (
                     <EmptyState

@@ -24,6 +24,8 @@ import {
 } from '@/lib/creator-marker-primitive'
 import type { Address } from 'viem'
 import { formatEther } from 'viem'
+import { isThirdPartyDataUnavailable } from '@/services/launchpad/platform-adapter'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { useChartColors, toLocalChartTime } from '@/lib/lightweight-chart-theme'
 import { useTokenPriceHistory, TIMEFRAMES } from '@/hooks/useTokenPriceHistory'
 import type { ChartMode } from '@/types/chart'
@@ -51,6 +53,8 @@ interface TokenChartProps {
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
     durianfunMarket?: Address
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 function formatMcap(value: number): string {
@@ -84,6 +88,8 @@ export function TokenChart({
     onDailyMetricsChange,
     className,
     durianfunMarket,
+    market,
+    platform,
 }: TokenChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<IChartApi | null>(null)
@@ -661,12 +667,20 @@ export function TokenChart({
                 />
             </div>
 
-            {!isLoading && displayData.length === 0 && (
-                <EmptyState
-                    title="No trading data yet"
-                    className="pointer-events-none absolute inset-x-0 bottom-0 top-11"
-                />
-            )}
+            {!isLoading &&
+                displayData.length === 0 &&
+                (isThirdPartyDataUnavailable(platform, isGraduated, market) ? (
+                    <EmptyState
+                        title="No service available"
+                        description="Chart data isn't supported for this platform yet"
+                        className="pointer-events-none absolute inset-x-0 bottom-0 top-11"
+                    />
+                ) : (
+                    <EmptyState
+                        title="No trading data yet"
+                        className="pointer-events-none absolute inset-x-0 bottom-0 top-11"
+                    />
+                ))}
         </div>
     )
 }
