@@ -19,10 +19,12 @@ function getAudioContext(): AudioContext | null {
 
 export function isTxSoundEnabled(): boolean {
     try {
-        return window.localStorage.getItem(STORAGE_KEY) === '1'
+        // On unless the user has muted it; only an explicit '0' turns it off.
+        return window.localStorage.getItem(STORAGE_KEY) !== '0'
     } catch {
-        // SSR (no window), private browsing, or storage disabled — default off.
-        return false
+        // Storage blocked (private browsing) still gets sound. On the server there is no
+        // AudioContext, so playTxSound bails before this answer matters.
+        return true
     }
 }
 

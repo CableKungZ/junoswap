@@ -85,7 +85,7 @@ export default function TxMotionDevPage() {
     const [phase, setPhase] = useState<TxPhase>('confirming')
     const [flowOpen, setFlowOpen] = useState(false)
     const [stepCount, setStepCount] = useState(3)
-    const [soundOn, setSoundOn] = useState(false)
+    const [soundOn, setSoundOn] = useState(true)
     // Read after mount: localStorage during render would not match the server's HTML.
     useEffect(() => setSoundOn(isTxSoundEnabled()), [])
 
@@ -151,8 +151,8 @@ export default function TxMotionDevPage() {
             <section className="mt-8 grid gap-3">
                 <h2 className="text-lg font-semibold tracking-tight">Sound</h2>
                 <p className="text-sm text-muted-foreground">
-                    Off by default. Browsers keep audio silent until you have clicked something on
-                    the page, so press the toggle first.
+                    On by default. Browsers keep audio silent until you have clicked something on
+                    the page, so the first sound only plays after a click.
                 </p>
                 <div className="flex flex-wrap gap-2">
                     <Button

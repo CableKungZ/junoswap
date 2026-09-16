@@ -182,7 +182,7 @@ export function TxFlowDialog({
     const live = steps[liveIndex]
     const phase = live?.phase ?? 'idle'
 
-    const [soundOn, setSoundOn] = useState(false)
+    const [soundOn, setSoundOn] = useState(true)
     // Read after mount: localStorage during render would not match the server's HTML.
     useEffect(() => setSoundOn(isTxSoundEnabled()), [])
 

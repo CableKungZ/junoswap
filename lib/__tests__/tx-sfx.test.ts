@@ -7,8 +7,8 @@ describe('tx-sfx', () => {
         expect(() => playTxSound('success')).not.toThrow()
     })
 
-    it('isTxSoundEnabled defaults to false', () => {
-        expect(isTxSoundEnabled()).toBe(false)
+    it('isTxSoundEnabled defaults to true', () => {
+        expect(isTxSoundEnabled()).toBe(true)
     })
 
     it('round-trips through a localStorage stub', () => {
@@ -24,11 +24,11 @@ describe('tx-sfx', () => {
         }
 
         try {
-            expect(isTxSoundEnabled()).toBe(false)
-            setTxSoundEnabled(true)
             expect(isTxSoundEnabled()).toBe(true)
             setTxSoundEnabled(false)
             expect(isTxSoundEnabled()).toBe(false)
+            setTxSoundEnabled(true)
+            expect(isTxSoundEnabled()).toBe(true)
         } finally {
             delete (globalThis as { window?: unknown }).window
         }
@@ -43,8 +43,8 @@ describe('tx-sfx', () => {
 
         try {
             expect(() => isTxSoundEnabled()).not.toThrow()
-            expect(isTxSoundEnabled()).toBe(false)
-            expect(() => setTxSoundEnabled(true)).not.toThrow()
+            expect(isTxSoundEnabled()).toBe(true)
+            expect(() => setTxSoundEnabled(false)).not.toThrow()
         } finally {
             delete (globalThis as { window?: unknown }).window
         }
