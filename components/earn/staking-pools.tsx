@@ -43,7 +43,7 @@ import { formatBalance, formatTokenAmount, parseTokenAmount } from '@/lib/tokens
 import { toastError, toastSuccess } from '@/lib/toast'
 import { txPhase } from '@/lib/tx-flow'
 import { TxFlowDialog, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
-import { TxStageFlow } from '@/components/ui/tx-stage'
+import { TxStageFlow, TxStageRecord } from '@/components/ui/tx-stage'
 import type { StakingPool, StakingPoolFilter, StakingPoolStatus } from '@/types/staking'
 
 const SECONDS_PER_DAY = 86_400
@@ -382,7 +382,13 @@ function ManagePoolDialog({
     // useStakingPoolActions writes approve, stake and withdraw through one hook, so its
     // flags describe whichever call is in flight. These say which step owns them, and
     // carry a landed step past the point where the shared flags move on.
-    const [flowKind, setFlowKind] = useState<'stake' | 'withdraw'>('stake')
+    const [flowKind, setFlowKind] = useState<'stake' | 'withdraw' | 'exit' | 'withdraw-lot'>(
+        'stake'
+    )
+    // What the flow moves, fixed at click time: the input may be cleared, and exit and lot
+    // withdrawals never read it.
+    const [flowAmount, setFlowAmount] = useState(0n)
+    const flowLot = useRef(0n)
     const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
     const [approveDone, setApproveDone] = useState(false)
     const [mainDone, setMainDone] = useState(false)
@@ -466,12 +472,38 @@ function ManagePoolDialog({
         kind: 'contract' as const,
         label: `${pool.stakingTokenInfo.symbol} pool`,
         address: pool.address,
-        amount: flowKind === 'stake' ? 'Staked' : 'Staked',
+        amount: 'Staked',
     }
     const tokenSide = {
         kind: 'token' as const,
         token: pool.stakingTokenInfo,
-        amount: amount || '0',
+        amount: formatTokenAmount(flowAmount, decimals),
+    }
+    const runMain = (kind: typeof flowKind, value: bigint) => {
+        if (kind === 'stake') actions.stake(value)
+        else if (kind === 'withdraw') actions.withdraw(value)
+        else if (kind === 'exit') actions.exit()
+        else actions.withdrawFrom(flowLot.current, value)
+    }
+    const startFlow = (kind: typeof flowKind, value: bigint, approve = false) => {
+        setFlowKind(kind)
+        setFlowAmount(value)
+        setFlowNeedsApproval(approve)
+        setApproveDone(false)
+        setMainDone(false)
+        setTxOpen(true)
+        if (approve) {
+            queuedStake.current = value
+            actions.approve()
+            return
+        }
+        runMain(kind, value)
+    }
+    const MAIN_LABEL: Record<typeof flowKind, string> = {
+        stake: 'Stake',
+        withdraw: 'Withdraw',
+        exit: pool.user.earned > 0n ? 'Withdraw all & claim' : 'Withdraw all',
+        'withdraw-lot': 'Withdraw deposit',
     }
     const txSteps: TxStep[] = []
     if (flowNeedsApproval) {
@@ -481,7 +513,7 @@ function ManagePoolDialog({
             hash: approveDone ? undefined : actions.hash,
             error: actions.error,
             run: () => {
-                queuedStake.current = parsed
+                queuedStake.current = flowAmount
                 actions.approve()
             },
             renderStage: (phase) => (
@@ -495,7 +527,7 @@ function ManagePoolDialog({
         })
     }
     txSteps.push({
-        label: flowKind === 'stake' ? 'Stake' : 'Withdraw',
+        label: MAIN_LABEL[flowKind],
         phase: mainDone
             ? 'success'
             : flowNeedsApproval && !approveDone
@@ -503,7 +535,7 @@ function ManagePoolDialog({
               : txPhase(sharedFlags),
         hash: flowNeedsApproval && !approveDone ? undefined : actions.hash,
         error: actions.error,
-        run: () => (flowKind === 'stake' ? actions.stake(parsed) : actions.withdraw(parsed)),
+        run: () => runMain(flowKind, flowAmount),
         renderStage: (phase) => (
             <TxStageFlow
                 phase={phase}
@@ -583,7 +615,7 @@ function ManagePoolDialog({
                                 variant="outline"
                                 className="w-full"
                                 disabled={isBusy}
-                                onClick={() => actions.exit()}
+                                onClick={() => startFlow('exit', pool.user.withdrawable)}
                             >
                                 Withdraw all
                                 {pool.user.earned > 0n ? ' & claim' : ''} (
@@ -608,20 +640,7 @@ function ManagePoolDialog({
                             size="lg"
                             disabled={isBusy || parsed <= 0n || parsed > max}
                             isLoading={isBusy}
-                            onClick={() => {
-                                setFlowKind(activeMode)
-                                setFlowNeedsApproval(needsApproval)
-                                setApproveDone(false)
-                                setMainDone(false)
-                                setTxOpen(true)
-                                if (needsApproval) {
-                                    queuedStake.current = parsed
-                                    actions.approve()
-                                    return
-                                }
-                                if (activeMode === 'stake') actions.stake(parsed)
-                                else actions.withdraw(parsed)
-                            }}
+                            onClick={() => startFlow(activeMode, parsed, needsApproval)}
                         >
                             {label()}
                         </Button>
@@ -662,12 +681,10 @@ function ManagePoolDialog({
                                                     size="sm"
                                                     variant="outline"
                                                     disabled={!unlocked || isBusy}
-                                                    onClick={() =>
-                                                        actions.withdrawFrom(
-                                                            BigInt(lot.index),
-                                                            lot.amount
-                                                        )
-                                                    }
+                                                    onClick={() => {
+                                                        flowLot.current = BigInt(lot.index)
+                                                        startFlow('withdraw-lot', lot.amount)
+                                                    }}
                                                 >
                                                     Withdraw
                                                 </Button>
@@ -746,6 +763,38 @@ export function StakingPools({ onCreate }: { onCreate: () => void }) {
     // One transaction for every pool that owes the viewer something.
     const claimable = useMemo(() => pools.filter((p) => p.user.earned > 0n), [pools])
     const batch = useClaimAllStaking()
+    // Frozen at click: the claimed pools drop out of `claimable` once balances refetch.
+    const [claimAllPools, setClaimAllPools] = useState<StakingPool[] | null>(null)
+    const claimAllSteps: TxStep[] = claimAllPools
+        ? [
+              actionStep({
+                  label: `Claim from ${claimAllPools.length} pools`,
+                  flags: {
+                      isPending: batch.isPending,
+                      isConfirming: batch.isConfirming,
+                      isSuccess: batch.isSuccess,
+                      isError: !!batch.error,
+                      error: batch.error,
+                      hash: batch.hash,
+                  },
+                  run: () => batch.claimAll(claimAllPools.map((p) => p.address)),
+                  renderStage: (phase) => (
+                      <TxStageRecord
+                          phase={phase}
+                          chainId={chainId}
+                          hash={batch.hash}
+                          rows={claimAllPools.map(
+                              (p) =>
+                                  [
+                                      `${p.stakingTokenInfo.symbol} pool`,
+                                      `${formatTokenAmount(p.user.earned, p.rewardTokenInfo.decimals)} ${p.rewardTokenInfo.symbol}`,
+                                  ] as const
+                          )}
+                      />
+                  ),
+              }),
+          ]
+        : []
     useOnTxSuccess(true, batch.isSuccess, batch.hash, () => {
         toastSuccess('Rewards claimed')
         queryClient.invalidateQueries()
@@ -786,11 +835,21 @@ export function StakingPools({ onCreate }: { onCreate: () => void }) {
                         disabled={batch.isPending || batch.isConfirming}
                         isLoading={batch.isPending || batch.isConfirming}
                         loadingText="Claiming..."
-                        onClick={() => batch.claimAll(claimable.map((p) => p.address))}
+                        onClick={() => {
+                            setClaimAllPools(claimable)
+                            batch.claimAll(claimable.map((p) => p.address))
+                        }}
                     >
                         Claim all ({claimable.length})
                     </Button>
                 )}
+                <TxFlowDialog
+                    open={claimAllPools !== null}
+                    onOpenChange={(o) => !o && setClaimAllPools(null)}
+                    title="Claim all rewards"
+                    steps={claimAllSteps}
+                    chainId={chainId}
+                />
                 <Button variant="outline" onClick={onCreate}>
                     <Plus />
                     Create Program
