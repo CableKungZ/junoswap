@@ -10,6 +10,7 @@ import {
     computeCurve,
 } from '@coshi190/juno-moneta-sdk'
 import { computePoolPrice } from '@/lib/tick-math'
+import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import {
     aggregatePricePoints,
@@ -22,6 +23,7 @@ const DAY_SECONDS = 86400
 export interface GraduatedTokenActivity {
     lastSwapAt: number
     priceChange1dPct: number | null
+    marketCap: number | null
 }
 
 export interface GraduatedTokenInput {
@@ -74,11 +76,25 @@ async function fetchTokenActivity(
             limit: 1,
             offset: 0,
         })
-        const lastSwapAt = latest.items[0]?.timestamp ?? graduatedAt ?? 0
+        const latestSwap = latest.items[0]
+        const lastSwapAt = latestSwap?.timestamp ?? graduatedAt ?? 0
 
-        return { lastSwapAt, priceChange1dPct: metrics?.priceChange1dPct ?? null }
+        // The most recent swap's own sqrtPriceX96 is the live price regardless of whether it
+        // falls inside the `since` (1d) window used for priceChange1dPct above -- so a token with
+        // no trades in the last 24h still gets its real last-known price instead of nothing.
+        const marketCap = latestSwap
+            ? computePoolPrice({
+                  sqrtPriceX96: BigInt(latestSwap.sqrtPriceX96),
+                  decimals0: 18,
+                  decimals1: 18,
+                  invert: latestSwap.tokenIsToken0 !== 1,
+              }) * TOTAL_SUPPLY
+            : null
+
+        return { lastSwapAt, priceChange1dPct: metrics?.priceChange1dPct ?? null, marketCap }
     } catch (e) {
-        if (isPonderError(e)) return { lastSwapAt: graduatedAt ?? 0, priceChange1dPct: null }
+        if (isPonderError(e))
+            return { lastSwapAt: graduatedAt ?? 0, priceChange1dPct: null, marketCap: null }
         throw e
     }
 }

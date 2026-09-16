@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useTokenList } from '@/hooks/useTokenList'
-import { useGraduatedMarketCaps } from '@/hooks/useGraduatedMarketCaps'
 import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import type { LaunchpadPlatformFilter, LaunchpadSortKey } from '@/types/launchpad'
@@ -29,18 +28,13 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                 .map((t) => ({ address: t.address, graduatedAt: t.graduatedAt ?? null })),
         [tokens]
     )
-    const graduatedAddresses = useMemo(
-        () => graduatedTokens.map((t) => t.address),
-        [graduatedTokens]
-    )
-    const liveMarketCaps = useGraduatedMarketCaps(graduatedAddresses, chainId)
     const liveActivity = useGraduatedTokenActivity(graduatedTokens, chainId)
 
     const enrichedTokens = useMemo(() => {
         return tokens.map((token) => {
             const snapshot = snapshotMap.get(token.address.toLowerCase())
-            const liveMarketCap = liveMarketCaps.get(token.address.toLowerCase())
             const activity = liveActivity.get(token.address.toLowerCase())
+            const liveMarketCap = activity?.marketCap
 
             return {
                 token,
@@ -48,16 +42,16 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                 tokenSymbol: token.symbol,
                 isGraduated: !!token.isGraduated,
                 marketCap:
-                    liveMarketCap !== undefined ? String(liveMarketCap) : snapshot?.marketCapNative,
+                    liveMarketCap != null ? String(liveMarketCap) : snapshot?.marketCapNative,
                 athMarketCap:
-                    liveMarketCap !== undefined && snapshot?.athMarketCapNative
+                    liveMarketCap != null && snapshot?.athMarketCapNative
                         ? String(Math.max(liveMarketCap, parseFloat(snapshot.athMarketCapNative)))
                         : snapshot?.athMarketCapNative,
                 priceChange1dPct:
                     activity?.priceChange1dPct ?? snapshot?.priceChange1dPct ?? undefined,
             }
         })
-    }, [tokens, snapshotMap, liveMarketCaps, liveActivity])
+    }, [tokens, snapshotMap, liveActivity])
 
     const filtered = useMemo(() => {
         const byPlatform = enrichedTokens.filter(({ token }) => {
