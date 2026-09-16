@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useCreateToken } from '@/hooks/useCreateToken'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import { toastError, toastSuccess, toastWarning } from '@/lib/toast'
+import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 import { uploadToPinata } from '@/app/actions/upload-to-pinata'
 import { getChainMetadata } from '@/lib/wagmi'
 import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
@@ -32,6 +34,7 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
 
     const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
     const [uploadingLogo, setUploadingLogo] = useState(false)
+    const [txOpen, setTxOpen] = useState(false)
 
     const [form, setForm] = useState<CreateTokenForm>({
         name: '',
@@ -84,8 +87,8 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
                 onClick: () => window.open(`${metadata.explorer}/tx/${hash}`, '_blank'),
             },
         })
-        onOpenChange(false)
-    }, [chainId, hash, onOpenChange])
+        // The tx dialog owns the success frame; it redirects to the token page from there.
+    }, [chainId, hash])
 
     useEffect(() => {
         if (isSuccess) handleSuccess()
@@ -176,6 +179,7 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
             setPendingLogoFile(null)
         }
 
+        setTxOpen(true)
         create(logoUrl)
     }
 
@@ -307,6 +311,45 @@ export function CreateTokenDialog({ open, onOpenChange }: CreateTokenDialogProps
                     </Button>
                 </div>
             </DialogContent>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Launch token"
+                steps={[
+                    actionStep({
+                        label: `Launch ${form.symbol || 'token'}`,
+                        flags: {
+                            isPending: isExecuting,
+                            isConfirming,
+                            isSuccess,
+                            isError,
+                            error,
+                            hash,
+                        },
+                        run: () => create(form.logo),
+                        renderStage: (stagePhase) => (
+                            <TxStageRecord
+                                phase={stagePhase}
+                                chainId={chainId}
+                                hash={hash}
+                                rows={[
+                                    ['Name', form.name || '—'],
+                                    ['Symbol', form.symbol || '—'],
+                                    ['Curve', 'Bonding'],
+                                    [
+                                        'Upfront buy',
+                                        hasUpfrontBuy ? `${form.upfrontBuyAmount} KUB` : 'None',
+                                    ],
+                                ]}
+                            />
+                        ),
+                    }),
+                ]}
+                chainId={chainId}
+                onDone={() => onOpenChange(false)}
+            />
         </Dialog>
     )
 }
