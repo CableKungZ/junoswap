@@ -8,6 +8,7 @@ import { getExplorerTxUrl } from '@/lib/explorer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { TxStageFlow } from '@/components/ui/tx-stage'
+import { useUiPrefsStore } from '@/store/ui-prefs-store'
 import {
     autoRunIndex,
     parseRevertReason,
@@ -184,6 +185,8 @@ function TxErrorPanel({ error }: { error: unknown }) {
  * needs — a single unstake or approve → approve → mint — and the stage follows
  * whichever step is live.
  */
+const isTerminalFailure = (phase: TxPhase) => phase === 'error' || phase === 'sim-error'
+
 export function TxFlowDialog({
     open,
     onOpenChange,
@@ -203,10 +206,11 @@ export function TxFlowDialog({
     // Call sites still toast their results for flows without this dialog; while it is open
     // it already shows each result (with the full log), so those toasts only repeat it.
     // Layout effect so they are gone before paint. Toasts from before it opened are left.
+    const visible = useUiPrefsStore((s) => s.txDialogs)
     const { toasts } = useSonner()
     const toastsBeforeOpen = useRef<Set<string | number> | null>(null)
     useLayoutEffect(() => {
-        if (!open) {
+        if (!open || !visible) {
             toastsBeforeOpen.current = null
             return
         }
@@ -214,7 +218,7 @@ export function TxFlowDialog({
         for (const t of toasts) {
             if (t.id !== COPY_TOAST_ID && !toastsBeforeOpen.current.has(t.id)) toast.dismiss(t.id)
         }
-    }, [open, toasts])
+    }, [open, visible, toasts])
 
     const autoIndex = autoRunIndex(steps)
     const autoRan = useRef(new Set<number>())
@@ -228,10 +232,22 @@ export function TxFlowDialog({
         steps[autoIndex]!.run()
     }, [open, autoIndex, steps])
 
-    if (!live) return null
+    // Hidden, the flow still runs — steps chain through autoRun above and the call sites'
+    // toasts report each result — but nobody is there to press Done or dismiss a failure,
+    // so both happen here the moment they apply.
+    const hiddenOutcome =
+        !open || visible ? null : allDone ? 'done' : isTerminalFailure(phase) ? 'failed' : null
+    const onDoneRef = useRef(onDone)
+    onDoneRef.current = onDone
+    useEffect(() => {
+        if (hiddenOutcome === 'done') onDoneRef.current?.()
+        if (hiddenOutcome) onOpenChange(false)
+    }, [hiddenOutcome, onOpenChange])
+
+    if (!live || !visible) return null
 
     const isLast = liveIndex === steps.length - 1
-    const failed = phase === 'error' || phase === 'sim-error'
+    const failed = isTerminalFailure(phase)
     // A signature is in the wallet or a transaction is in a block. Closing here would
     // strand a flow the user cannot get back to, so the dialog refuses to be dismissed.
     const isBusyNow = phase === 'pending' || phase === 'confirming'
