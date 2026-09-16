@@ -172,17 +172,19 @@ export function TokenCard({
                         </div>
 
                         <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                            {token.platform === 'durianfun' ? (
-                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                    <PlatformLogo platform="durianfun" />
-                                    DurianFun
-                                </span>
-                            ) : (
-                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                                    <PlatformLogo platform="junoswap" />
-                                    Junoswap
-                                </span>
-                            )}
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                {token.platform === 'durianfun' ? (
+                                    <>
+                                        <PlatformLogo platform="durianfun" />
+                                        DurianFun
+                                    </>
+                                ) : (
+                                    <>
+                                        <PlatformLogo platform="junoswap" />
+                                        Junoswap
+                                    </>
+                                )}
+                            </span>
                             {isGraduated && (
                                 <span className="shrink-0 rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
                                     Graduated
