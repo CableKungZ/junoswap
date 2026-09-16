@@ -46,6 +46,38 @@ function absBigInt(n: bigint): bigint {
     return n < 0n ? -n : n
 }
 
+/** Pure: a V3 pool swap row -> buy/sell SwapEventData from the launch token's side. */
+export function v3SwapToSwapEvent(
+    e: {
+        amount0: string
+        amount1: string
+        tokenIsToken0: number
+        txFrom: string
+        timestamp: number
+        transactionHash: string
+        blockNumber: string | number
+    },
+    tokenAddr: Address
+): SwapEventData {
+    const tokenIsToken0 = e.tokenIsToken0 === 1
+    const tokenAmount = BigInt(tokenIsToken0 ? e.amount0 : e.amount1)
+    const nativeAmount = BigInt(tokenIsToken0 ? e.amount1 : e.amount0)
+    // The pool pays tokens out (negative delta) on a buy.
+    const isBuy = tokenAmount < 0n
+    return {
+        blockNumber: BigInt(e.blockNumber),
+        timestamp: Number(e.timestamp),
+        sender: e.txFrom as Address, // actual signer, not the router
+        isBuy,
+        tokenAddr,
+        amountIn: absBigInt(isBuy ? nativeAmount : tokenAmount),
+        amountOut: absBigInt(isBuy ? tokenAmount : nativeAmount),
+        reserveIn: 0n,
+        reserveOut: 0n,
+        transactionHash: e.transactionHash as `0x${string}`,
+    }
+}
+
 function toIsBuy(isBuy: boolean | undefined): number | undefined {
     return isBuy === undefined ? undefined : isBuy ? 1 : 0
 }
@@ -118,29 +150,7 @@ const ponderAdapter: LaunchpadPlatformAdapter = {
                 transactionHash: e.transactionHash as `0x${string}`,
             }))
 
-            let v3Items = v3Result.items.map((e) => {
-                const amount0 = BigInt(e.amount0)
-                const amount1 = BigInt(e.amount1)
-
-                const tokenIsToken0 = e.tokenIsToken0 === 1
-                const tokenAmount = tokenIsToken0 ? amount0 : amount1
-                const nativeAmount = tokenIsToken0 ? amount1 : amount0
-
-                const isBuy = tokenAmount < 0n
-
-                return {
-                    blockNumber: BigInt(e.blockNumber),
-                    timestamp: e.timestamp,
-                    sender: e.txFrom as Address, // actual signer, not the router
-                    isBuy,
-                    tokenAddr,
-                    amountIn: absBigInt(isBuy ? nativeAmount : tokenAmount),
-                    amountOut: absBigInt(isBuy ? tokenAmount : nativeAmount),
-                    reserveIn: 0n,
-                    reserveOut: 0n,
-                    transactionHash: e.transactionHash as `0x${string}`,
-                }
-            })
+            let v3Items = v3Result.items.map((e) => v3SwapToSwapEvent(e, tokenAddr))
 
             if (filters?.isBuy !== undefined) {
                 v3Items = v3Items.filter((item) => item.isBuy === filters.isBuy)

@@ -3,6 +3,7 @@ import {
     toHolders,
     resolvePlatformAdapter,
     isThirdPartyDataUnavailable,
+    v3SwapToSwapEvent,
 } from '@/services/launchpad/platform-adapter'
 import type { LaunchpadPlatform } from '@/types/launchpad'
 
@@ -64,5 +65,31 @@ describe('isThirdPartyDataUnavailable', () => {
     it('is false without a market address (nothing third-party to fetch)', () => {
         const futurePlatform = 'somefuturelaunchpad' as LaunchpadPlatform
         expect(isThirdPartyDataUnavailable(futurePlatform, false, undefined)).toBe(false)
+    })
+})
+
+describe('v3SwapToSwapEvent', () => {
+    const base = {
+        txFrom: '0xabc',
+        timestamp: 100,
+        transactionHash: '0xhash',
+        blockNumber: '7',
+    }
+    const token = '0x00000000000000000000000000000000000000aa' as const
+
+    it('token paid out by the pool is a buy: native in, token out', () => {
+        const e = v3SwapToSwapEvent(
+            { ...base, tokenIsToken0: 1, amount0: '-500', amount1: '20' },
+            token
+        )
+        expect(e).toMatchObject({ isBuy: true, amountIn: 20n, amountOut: 500n, sender: '0xabc' })
+    })
+
+    it('token paid into the pool is a sell, reading the token from amount1 when token1', () => {
+        const e = v3SwapToSwapEvent(
+            { ...base, tokenIsToken0: 0, amount0: '-20', amount1: '500' },
+            token
+        )
+        expect(e).toMatchObject({ isBuy: false, amountIn: 500n, amountOut: 20n })
     })
 })
