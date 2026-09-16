@@ -42,7 +42,17 @@ async function fetchTokenActivity(
     since: number
 ): Promise<GraduatedTokenActivity> {
     try {
-        const v3Points = await fetchV3PricesSince(ponderClient, { tokenAddr, chainId, since })
+        // Querying v3Points from exactly `since` (the same cutoff computeDailyMetrics uses for
+        // "24h ago") leaves no point *before* the cutoff to anchor against -- a token with a
+        // single trade inside the window then has priceThen === priceNow, always reading 0%. Look
+        // further back (capped at 30 days, or graduation if more recent) so a real anchor exists;
+        // computeDailyMetrics still only counts volume/change within the actual 24h window.
+        const historyStart = Math.max(graduatedAt ?? 0, since - DAY_SECONDS * 29)
+        const v3Points = await fetchV3PricesSince(ponderClient, {
+            tokenAddr,
+            chainId,
+            since: historyStart,
+        })
         const points: PricePoint[] = v3Points.map((e) => ({
             timestamp: e.timestamp,
             price: computePoolPrice({
