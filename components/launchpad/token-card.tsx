@@ -101,6 +101,7 @@ export function TokenCard({
     const { nativeUsdPrice } = useNativeUsdPriceContext()
     const symbol = tokenSymbol || token.symbol || '???'
     const name = tokenName || token.name || ''
+    const isJunoswap = !token.platform || token.platform === 'junoswap'
     const hasAth = !!athMarketCap && parseFloat(athMarketCap) > 0
 
     const formatMarketCap = (value: string) =>
@@ -152,15 +153,15 @@ export function TokenCard({
                                 </span>
                             )}
                         </div>
-                        {/* Name and description always render (nbsp when empty) so the creator row, tags and
-                            mcap stay aligned across cards in the same grid row. */}
                         <p className="truncate text-xs text-muted-foreground">{name || ' '}</p>
-                        <p
-                            className="truncate text-xs text-muted-foreground/80"
-                            title={token.description || undefined}
-                        >
-                            {token.description || ' '}
-                        </p>
+                        {!isJunoswap && token.description && (
+                            <p
+                                className="truncate text-xs text-muted-foreground/80"
+                                title={token.description}
+                            >
+                                {token.description}
+                            </p>
+                        )}
                         <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                             <span className="truncate">{formatAddress(token.creator)}</span>
                             <Sprout className="h-3 w-3 shrink-0" />
