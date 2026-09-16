@@ -62,7 +62,8 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const { poolAddress, isLoading: isPoolLoading } = useGraduatedPoolAddress(
         isGraduated ? tokenAddr : undefined,
         wrappedNative as Address | undefined,
-        chainId
+        chainId,
+        isGraduated ? tokenInfo?.ammPool : undefined
     )
 
     const { marketCap: liveGraduatedMarketCap } = useGraduatedPoolPrice({
