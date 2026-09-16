@@ -153,7 +153,7 @@ function TradeRow({
 function LoadingState() {
     return (
         <TableBody>
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
                 <TableRow key={i}>
                     <TableCell>
                         <div className="h-5 w-12 animate-pulse rounded bg-muted" />
@@ -406,7 +406,10 @@ export function RecentTrades({
                 </div>
             </div>
 
-            <CardContent className="p-0">
+            {/* min-height covers a full 10-row table (440px) plus the pagination footer (53px) --
+                without the footer's share, the card shrinks during the loading flash (no footer
+                rendered yet) and grows once data + pagination land, producing a visible jump. */}
+            <CardContent className="min-h-[493px] p-0">
                 {isLoading ? (
                     <div className="px-2">
                         <Table>
