@@ -386,8 +386,11 @@ function ManagePoolDialog({
     // withdrawals never read it.
     const [flowAmount, setFlowAmount] = useState(0n)
     const flowLot = useRef(0n)
-    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
-    const [approveDone, setApproveDone] = useState(false)
+    // The step before the main call, if any: an approval ahead of a stake, or a reward claim
+    // ahead of a withdrawal so earnings land before the stake leaves.
+    const [flowPrep, setFlowPrep] = useState<'approve' | 'claim' | null>(null)
+    const [prepDone, setPrepDone] = useState(false)
+    const [flowReward, setFlowReward] = useState(0n)
     const [mainDone, setMainDone] = useState(false)
     const { lots } = useStakingLots(pool?.address, open)
     const [lotPage, setLotPage] = useState(1)
@@ -400,21 +403,21 @@ function ManagePoolDialog({
         setMode('stake')
         setAmount('')
         setLotPage(1)
-        queuedStake.current = null
-        setApproveDone(false)
+        queuedMain.current = null
+        setPrepDone(false)
         setMainDone(false)
     }, [open, pool?.address])
 
-    // One click: the approval carries the stake it was for, so the wallet asks twice but the
+    // One click: the prep step carries the call it was for, so the wallet asks twice but the
     // user never has to come back and press the button again.
-    const queuedStake = useRef<bigint | null>(null)
+    const queuedMain = useRef<(() => void) | null>(null)
 
     useOnTxSuccess(open, actions.isSuccess, actions.hash, () => {
-        const queued = queuedStake.current
-        queuedStake.current = null
-        if (queued !== null) {
-            setApproveDone(true)
-            actions.stake(queued)
+        const queued = queuedMain.current
+        queuedMain.current = null
+        if (queued) {
+            setPrepDone(true)
+            queued()
             return
         }
         setMainDone(true)
@@ -455,7 +458,8 @@ function ManagePoolDialog({
                 : 'Insufficient balance'
         }
         if (needsApproval) return `Approve & Stake`
-        return activeMode === 'stake' ? 'Stake' : 'Withdraw'
+        if (activeMode === 'stake') return 'Stake'
+        return pool.user.earned > 0n ? 'Claim & Withdraw' : 'Withdraw'
     }
 
     const sharedFlags = {
@@ -482,19 +486,27 @@ function ManagePoolDialog({
         else if (kind === 'exit') actions.exit()
         else actions.withdrawFrom(flowLot.current, value)
     }
+    const runPrep = (prep: 'approve' | 'claim', kind: typeof flowKind, value: bigint) => {
+        queuedMain.current = () => runMain(kind, value)
+        if (prep === 'approve') actions.approve()
+        else actions.claim()
+    }
     const startFlow = (kind: typeof flowKind, value: bigint, approve = false) => {
+        // exit() already pays out rewards, so only the plain withdrawals get a claim first.
+        const prep = approve
+            ? 'approve'
+            : kind !== 'stake' && kind !== 'exit' && pool.user.earned > 0n
+              ? 'claim'
+              : null
         setFlowKind(kind)
         setFlowAmount(value)
-        setFlowNeedsApproval(approve)
-        setApproveDone(false)
+        setFlowReward(pool.user.earned)
+        setFlowPrep(prep)
+        setPrepDone(false)
         setMainDone(false)
         setTxOpen(true)
-        if (approve) {
-            queuedStake.current = value
-            actions.approve()
-            return
-        }
-        runMain(kind, value)
+        if (prep) runPrep(prep, kind, value)
+        else runMain(kind, value)
     }
     const MAIN_LABEL: Record<typeof flowKind, string> = {
         stake: 'Stake',
@@ -503,16 +515,13 @@ function ManagePoolDialog({
         'withdraw-lot': 'Withdraw deposit',
     }
     const txSteps: TxStep[] = []
-    if (flowNeedsApproval) {
+    if (flowPrep === 'approve') {
         txSteps.push({
             label: `Approve ${pool.stakingTokenInfo.symbol}`,
-            phase: approveDone ? 'success' : txPhase(sharedFlags),
-            hash: approveDone ? undefined : actions.hash,
+            phase: prepDone ? 'success' : txPhase(sharedFlags),
+            hash: prepDone ? undefined : actions.hash,
             error: actions.error,
-            run: () => {
-                queuedStake.current = flowAmount
-                actions.approve()
-            },
+            run: () => runPrep('approve', flowKind, flowAmount),
             renderStage: (phase) => (
                 <TxStageFlow
                     phase={phase}
@@ -523,14 +532,32 @@ function ManagePoolDialog({
             ),
         })
     }
+    if (flowPrep === 'claim') {
+        txSteps.push({
+            label: `Claim ${pool.rewardTokenInfo.symbol} rewards`,
+            phase: prepDone ? 'success' : txPhase(sharedFlags),
+            hash: prepDone ? undefined : actions.hash,
+            error: actions.error,
+            run: () => runPrep('claim', flowKind, flowAmount),
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={prepDone ? undefined : actions.hash}
+                    from={{ ...poolSide, amount: 'Earned' }}
+                    to={{
+                        kind: 'token',
+                        token: pool.rewardTokenInfo,
+                        amount: formatTokenAmount(flowReward, pool.rewardTokenInfo.decimals),
+                    }}
+                />
+            ),
+        })
+    }
     txSteps.push({
         label: MAIN_LABEL[flowKind],
-        phase: mainDone
-            ? 'success'
-            : flowNeedsApproval && !approveDone
-              ? 'idle'
-              : txPhase(sharedFlags),
-        hash: flowNeedsApproval && !approveDone ? undefined : actions.hash,
+        phase: mainDone ? 'success' : flowPrep && !prepDone ? 'idle' : txPhase(sharedFlags),
+        hash: flowPrep && !prepDone ? undefined : actions.hash,
         error: actions.error,
         run: () => runMain(flowKind, flowAmount),
         renderStage: (phase) => (
