@@ -225,20 +225,6 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         </div>
                     </div>
 
-                    {isDurianfun && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span className="inline-flex w-fit cursor-default items-center rounded-full border border-[rgb(204,255,0)]/25 bg-[rgb(204,255,0)]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(204,255,0)]">
-                                    Third-party
-                                </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                This token was created on DurianFun, not Junoswap — trading,
-                                contracts, and token safety are not managed or audited by Junoswap.
-                            </TooltipContent>
-                        </Tooltip>
-                    )}
-
                     <ShareTokenDialog
                         open={shareOpen}
                         onOpenChange={setShareOpen}
@@ -278,13 +264,30 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         platform={tokenInfo?.platform}
                     />
 
-                    {(tokenInfo?.description ||
+                    {(isDurianfun ||
+                        tokenInfo?.description ||
                         tokenInfo?.link1 ||
                         tokenInfo?.link2 ||
                         tokenInfo?.link3 ||
                         tokenInfo?.link4) && (
                         <div className="rounded-xl border bg-card p-4">
-                            <h3 className="mb-2 text-sm font-semibold">About {symbol}</h3>
+                            <div className="mb-2 flex items-center gap-2">
+                                <h3 className="text-sm font-semibold">About {symbol}</h3>
+                                {isDurianfun && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="inline-flex w-fit cursor-default items-center rounded-full border border-[rgb(204,255,0)]/25 bg-[rgb(204,255,0)]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(204,255,0)]">
+                                                Third-party
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            This token was created on DurianFun, not Junoswap —
+                                            trading, contracts, and token safety are not managed or
+                                            audited by Junoswap.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
+                            </div>
                             {tokenInfo?.description && (
                                 <p className="text-sm text-muted-foreground break-words min-w-0">
                                     {tokenInfo.description}
