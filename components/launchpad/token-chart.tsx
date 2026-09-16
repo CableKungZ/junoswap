@@ -111,7 +111,7 @@ export function TokenChart({
         setTimeframe,
         chartMode,
         setChartMode,
-    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress)
+    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress, platform)
 
     const { price: livePoolPrice } = useGraduatedPoolPrice({
         poolAddress,

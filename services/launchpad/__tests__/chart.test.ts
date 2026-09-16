@@ -326,7 +326,12 @@ describe('tokenNativeCandles', () => {
 
 describe('computeFeeBreakdown', () => {
     it('returns zeros for no events', () => {
-        expect(computeFeeBreakdown([])).toEqual({ nativeFees: 0, tokenFees: 0, totalNative: 0 })
+        expect(computeFeeBreakdown([])).toEqual({
+            nativeFees: 0,
+            tokenFees: 0,
+            totalNative: 0,
+            feeBps: 100,
+        })
     })
 
     it('attributes buy fees to native, sell fees to tokens, and combines both in KUB', () => {
@@ -341,6 +346,20 @@ describe('computeFeeBreakdown', () => {
         expect(tokenFees).toBeCloseTo(5, 10) // 1% of 500 tokens
         // 1% of (100 KUB buy in + 40 KUB sell out)
         expect(totalNative).toBeCloseTo(1.4, 10)
+    })
+
+    it('charges Durianfun 1.17% in KUB on both sides, sells off the gross proceeds', () => {
+        // A real Durianfun round trip (0x51d6…fd7f): the curve reserve moved 0.098833 KUB each
+        // way, so the buy paid 0.001167 KUB and the sell 0.0011564 KUB in fees.
+        const events = [
+            makeEvent(1, true, 100000000000000000n, 64853481354849072770925n, 0n, 0n),
+            makeEvent(2, false, 64853481354849072770925n, 97679618890000000n, 0n, 0n),
+        ]
+        const fees = computeFeeBreakdown(events, 'durianfun')
+        expect(fees.tokenFees).toBe(0)
+        expect(fees.feeBps).toBe(117)
+        expect(fees.nativeFees).toBeCloseTo(0.00117 + 0.0011564, 6)
+        expect(fees.totalNative).toBeCloseTo(fees.nativeFees, 12)
     })
 })
 

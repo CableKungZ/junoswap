@@ -4,8 +4,18 @@ import { TIMEFRAME_DURATIONS } from '@/types/chart'
 import { computeCurve } from '@coshi190/juno-moneta-sdk'
 import { computePoolPrice } from '@/lib/tick-math'
 import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 
-const PUMP_FEE_BPS = 100n
+/**
+ * Trading fee per launchpad curve. Junoswap takes 1% of the input side, so sell fees are paid in
+ * the launch token. Durianfun takes 1.17% in KUB on both sides: off `kubIn` on a buy, and off the
+ * gross proceeds on a sell (the seller receives gross minus fee). Mirrors the junoswap-core
+ * indexer's curve registry (JUNOSWAP_V1_CURVE / DURIANFUN_CURVE feeBps).
+ */
+export const CURVE_FEE_BPS: Record<LaunchpadPlatform, number> = {
+    junoswap: 100,
+    durianfun: 117,
+}
 
 function calculateVolume(event: CurveSwapEvent): number {
     return event.isBuy
@@ -450,29 +460,40 @@ export function buildCreatorMarkers(
 }
 
 export interface FeeBreakdown {
-    nativeFees: number // KUB collected from buy-side fees
-    tokenFees: number // launch tokens collected from sell-side fees
+    nativeFees: number // KUB collected in fees
+    tokenFees: number // launch tokens collected from sell-side fees (Junoswap only)
     totalNative: number // KUB-denominated combined total (sell fees valued at the KUB received)
+    feeBps: number
 }
 
-export function computeFeeBreakdown(events: CurveSwapEvent[]): FeeBreakdown {
-    const feeRate = Number(PUMP_FEE_BPS) / 10000
+export function computeFeeBreakdown(
+    events: CurveSwapEvent[],
+    platform: LaunchpadPlatform = 'junoswap'
+): FeeBreakdown {
+    const feeBps = CURVE_FEE_BPS[platform]
+    const feeRate = feeBps / 10000
     let nativeFees = 0
     let tokenFees = 0
     let totalNative = 0
 
     for (const e of events) {
         const amountIn = parseFloat(formatEther(e.amountIn))
+        const amountOut = parseFloat(formatEther(e.amountOut))
         if (e.isBuy) {
             nativeFees += amountIn * feeRate
             totalNative += amountIn * feeRate
+        } else if (platform === 'durianfun') {
+            // amountOut is net of the fee, so the fee on the gross is out * rate / (1 - rate).
+            const fee = (amountOut * feeRate) / (1 - feeRate)
+            nativeFees += fee
+            totalNative += fee
         } else {
             tokenFees += amountIn * feeRate
-            totalNative += parseFloat(formatEther(e.amountOut)) * feeRate
+            totalNative += amountOut * feeRate
         }
     }
 
-    return { nativeFees, tokenFees, totalNative }
+    return { nativeFees, tokenFees, totalNative, feeBps }
 }
 
 export interface DailyMetrics {

@@ -17,6 +17,7 @@ import {
 } from '@/services/launchpad/chart'
 import type { V3SwapEvent } from '@/services/launchpad/chart'
 import type { Timeframe, ChartMode } from '@/types/chart'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 
 export const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d']
 
@@ -27,7 +28,8 @@ export function useTokenPriceHistory(
     tokenAddr: Address | undefined,
     isGraduated?: boolean,
     graduatedAt?: number | null,
-    creatorAddress?: Address
+    creatorAddress?: Address,
+    platform?: LaunchpadPlatform
 ) {
     const [timeframe, setTimeframe] = useState<Timeframe>('15m')
     const [chartMode, setChartMode] = useState<ChartMode>('mcap')
@@ -111,7 +113,10 @@ export function useTokenPriceHistory(
         return bcCandles
     }, [rawEvents, rawV3Events, timeframe, chartMode, isGraduated, tokenIsToken0, graduatedAt])
 
-    const feeBreakdown = useMemo(() => computeFeeBreakdown(rawEvents ?? []), [rawEvents])
+    const feeBreakdown = useMemo(
+        () => computeFeeBreakdown(rawEvents ?? [], platform),
+        [rawEvents, platform]
+    )
 
     const athMarketCap = useMemo(
         () =>
