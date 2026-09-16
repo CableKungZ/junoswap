@@ -18,6 +18,9 @@ import { useSwapExecution } from '@/hooks/useSwapExecution'
 import { useAggRouterSwapExecution } from '@/hooks/useAggRouterSwapExecution'
 import { useAggregatePlan } from '@/hooks/useAggregatePlan'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
+import { txPhase } from '@/lib/tx-flow'
+import { TxFlowDialog, approvalStep, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow } from '@/components/ui/tx-stage'
 import { useSwapUrlSync } from '@/hooks/useSwapUrlSync'
 import { useChainTokens } from '@/hooks/useChainTokens'
 import { calculateMinOutput } from '@/services/dex/slippage'
@@ -51,6 +54,10 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
     const { address, isConnected } = useAccount()
     const chainId = useChainId()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
+    const [txOpen, setTxOpen] = useState(false)
+    // Frozen when the flow opens: the allowance lands mid-flow and rebuilding from
+    // needsApproval would delete the step being watched.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
     const [isRateFlipped, setIsRateFlipped] = useState(false)
     const { tokens: chainTokens, isLoading: isLoadingTokens } = useChainTokens(chainId)
     const tokens = tokensOverride || chainTokens
@@ -255,6 +262,9 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         needsApproval,
         isApproving,
         isConfirming: isConfirmingApprovalRaw,
+        isSuccess: isApprovalSuccess,
+        isError: isApprovalError,
+        error: approvalError,
         approve,
         hash: approvalHash,
     } = useTokenApproval({
@@ -403,6 +413,92 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
     ])
     const isConfirmingApproval = approvalHash && isConfirmingApprovalRaw
     const isConfirmingSwap = swapHash && isConfirmingSwapRaw
+
+    /**
+     * Approve then swap, plus the KKUB unwrap tail on the chains that need it — that last
+     * leg is its own signature, so it is its own step rather than a spinner after success.
+     */
+    const swapSteps: TxStep[] = []
+    if (tokenIn && tokenOut) {
+        if (flowNeedsApproval) {
+            swapSteps.push(
+                approvalStep({
+                    token: tokenIn,
+                    spenderLabel: 'Juno Router',
+                    chainId,
+                    run: approve,
+                    flags: {
+                        isPending: isApproving,
+                        isConfirming: !!isConfirmingApproval,
+                        isSuccess: isApprovalSuccess,
+                        isError: isApprovalError,
+                        error: approvalError,
+                        hash: approvalHash,
+                    },
+                })
+            )
+        }
+        const swapStage = (phase: ReturnType<typeof txPhase>) => (
+            <TxStageFlow
+                phase={phase}
+                chainId={chainId}
+                hash={swapHash}
+                from={{ kind: 'token', token: tokenIn, amount: amountIn || '0' }}
+                to={{
+                    kind: 'token',
+                    token: tokenOut,
+                    amount: displayAmountOut,
+                    countTo: Number(displayAmountOut.replace(/,/g, '')) || undefined,
+                    displayDecimals: 4,
+                }}
+            />
+        )
+        swapSteps.push(
+            actionStep({
+                label: isKubUnwrapDirect
+                    ? `Unwrap ${tokenIn.symbol}`
+                    : `Swap ${tokenIn.symbol} for ${tokenOut.symbol}`,
+                flags: {
+                    isPending: isPreparing || isExecuting,
+                    isConfirming: !!isConfirmingSwap,
+                    isSuccess,
+                    isError: swapIsError,
+                    error: swapError,
+                    hash: swapHash,
+                },
+                run: swap,
+                renderStage: swapStage,
+            })
+        )
+        if (skipUnwrap && !isKubUnwrapDirect) {
+            swapSteps.push(
+                actionStep({
+                    label: `Unwrap to ${tokenOut.symbol}`,
+                    flags: {
+                        isPending: isApprovingUnwrap || isWithdrawing,
+                        isConfirming: isConfirmingUnwrapApproval || isConfirmingWithdraw,
+                        isSuccess: isUnwrapSuccess,
+                        isError: isUnwrapError,
+                        hash: unwrapHash,
+                    },
+                    run: startUnwrap,
+                    renderStage: (phase) => (
+                        <TxStageFlow
+                            phase={phase}
+                            chainId={chainId}
+                            hash={unwrapHash}
+                            from={{
+                                kind: 'token',
+                                token: { symbol: `W${tokenOut.symbol}` },
+                                amount: displayAmountOut,
+                            }}
+                            to={{ kind: 'token', token: tokenOut, amount: displayAmountOut }}
+                        />
+                    ),
+                })
+            )
+        }
+    }
     const handleSwapTokens = () => {
         swapTokens()
     }
@@ -743,6 +839,8 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                                 setIsConnectModalOpen(true)
                                 return
                             }
+                            setFlowNeedsApproval(needsApprovalCheck)
+                            setTxOpen(true)
                             if (needsApprovalCheck) {
                                 if (pinnedUseAgg === null) setPinnedUseAgg(liveUseAgg)
                                 approve()
@@ -815,6 +913,15 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     </Button>
                 </div>
                 <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+
+                <TxFlowDialog
+                    open={txOpen}
+                    onOpenChange={setTxOpen}
+                    title={isKubUnwrapDirect ? 'Unwrap' : 'Swap'}
+                    steps={swapSteps}
+                    chainId={chainId}
+                    onDone={() => setAmountIn('')}
+                />
             </CardContent>
         </Card>
     )
