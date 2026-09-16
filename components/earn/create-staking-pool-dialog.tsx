@@ -260,7 +260,9 @@ export function CreateStakingPoolDialog({
                     chainId={chainId}
                     from={{
                         kind: 'token',
-                        token: { symbol: 'Fee' },
+                        token: chainTokens.find(
+                            (t) => t.address.toLowerCase() === create.fee?.token.toLowerCase()
+                        ) ?? { symbol: 'Fee' },
                         amount: 'Wallet',
                     }}
                     to={factorySide('Unlimited')}

@@ -1,16 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { TxFlowDialog, type TxStep } from '@/components/ui/tx-flow-dialog'
 import { TxStageFlow, TxStageRecord, type TxSide } from '@/components/ui/tx-stage'
 import { cn } from '@/lib/utils'
-import { playTxSound, isTxSoundEnabled, setTxSoundEnabled, type TxSound } from '@/lib/tx-sfx'
 import type { TxPhase } from '@/lib/tx-flow'
 
 const PHASES: TxPhase[] = ['idle', 'pending', 'confirming', 'success', 'error', 'sim-error']
-const SOUNDS: TxSound[] = ['submit', 'step', 'success', 'error']
 const CHAIN_ID = 96
 
 const KUB = { symbol: 'KUB' }
@@ -39,7 +37,7 @@ const SIM_ERROR = Object.assign(
 const SIDES: Record<string, { from: TxSide; to: TxSide }> = {
     Swap: {
         from: { kind: 'token', token: KUB, amount: '1.5' },
-        to: { kind: 'token', token: JUNO, amount: '318.42', countTo: 318.42, displayDecimals: 2 },
+        to: { kind: 'token', token: JUNO, amount: '318.42', countTo: 318.42 },
     },
     Approve: {
         from: { kind: 'token', token: KUB, amount: 'Wallet' },
@@ -70,7 +68,7 @@ const SIDES: Record<string, { from: TxSide; to: TxSide }> = {
             token0: JUNO,
             token1: KUB,
         },
-        to: { kind: 'token', token: JUNO, amount: '148.06', countTo: 148.06, displayDecimals: 4 },
+        to: { kind: 'token', token: JUNO, amount: '148.06', countTo: 148.06 },
     },
 }
 
@@ -85,10 +83,6 @@ export default function TxMotionDevPage() {
     const [phase, setPhase] = useState<TxPhase>('confirming')
     const [flowOpen, setFlowOpen] = useState(false)
     const [stepCount, setStepCount] = useState(3)
-    const [soundOn, setSoundOn] = useState(true)
-    // Read after mount: localStorage during render would not match the server's HTML.
-    useEffect(() => setSoundOn(isTxSoundEnabled()), [])
-
     /**
      * The dialog derives everything from step phases, so driving it here means replaying
      * a scripted flow rather than faking its internals.
@@ -140,39 +134,12 @@ export default function TxMotionDevPage() {
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                     Dev · not linked from the app
                 </span>
-                <h1 className="text-3xl font-bold tracking-tight">Transaction motion & sound</h1>
+                <h1 className="text-3xl font-bold tracking-tight">Transaction motion</h1>
                 <p className="max-w-[62ch] text-sm text-muted-foreground">
-                    Every stage layout in every phase, plus the four synthesized sounds. Nothing
-                    here touches a chain — the stages are fed fixed values so the motion can be
-                    judged on its own.
+                    Every stage layout in every phase. Nothing here touches a chain — the stages are
+                    fed fixed values so the motion can be judged on its own.
                 </p>
             </header>
-
-            <section className="mt-8 grid gap-3">
-                <h2 className="text-lg font-semibold tracking-tight">Sound</h2>
-                <p className="text-sm text-muted-foreground">
-                    On by default. Browsers keep audio silent until you have clicked something on
-                    the page, so the first sound only plays after a click.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                    <Button
-                        variant={soundOn ? 'default' : 'outline'}
-                        onClick={() => {
-                            const next = !soundOn
-                            setTxSoundEnabled(next)
-                            setSoundOn(next)
-                            if (next) playTxSound('step')
-                        }}
-                    >
-                        Sound {soundOn ? 'on' : 'off'}
-                    </Button>
-                    {SOUNDS.map((s) => (
-                        <Button key={s} variant="outline" onClick={() => playTxSound(s)}>
-                            {s}
-                        </Button>
-                    ))}
-                </div>
-            </section>
 
             <section className="mt-10 grid gap-3">
                 <h2 className="text-lg font-semibold tracking-tight">Full flow</h2>
@@ -264,7 +231,7 @@ export default function TxMotionDevPage() {
                 <h2 className="text-lg font-semibold tracking-tight">Reduced motion</h2>
                 <p className={cn('max-w-[62ch] text-sm text-muted-foreground')}>
                     Turn on the OS setting and reload: every scene should freeze on a readable
-                    resting frame, the sheen and sparks drop out, and all four sounds go silent.
+                    resting frame, the sheen and sparks drop out.
                 </p>
             </section>
 

@@ -18,7 +18,9 @@ import { useSwapExecution } from '@/hooks/useSwapExecution'
 import { useAggRouterSwapExecution } from '@/hooks/useAggRouterSwapExecution'
 import { useAggregatePlan } from '@/hooks/useAggregatePlan'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { txPhase } from '@/lib/tx-flow'
+import { INTERMEDIARY_TOKENS } from '@/lib/routing-config'
 import { TxFlowDialog, approvalStep, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
 import { TxStageFlow } from '@/components/ui/tx-stage'
 import { useSwapUrlSync } from '@/hooks/useSwapUrlSync'
@@ -267,6 +269,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         error: approvalError,
         approve,
         hash: approvalHash,
+        reset: resetApproval,
     } = useTokenApproval({
         token: tokenIn ?? tokens[0]!,
         owner: address,
@@ -304,6 +307,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
     })
     const {
         swap,
+        canSwap,
         isPreparing,
         isExecuting,
         isConfirming: isConfirmingSwapRaw,
@@ -330,15 +334,16 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
         amount: isKubUnwrapDirect ? amountInBigInt : amountOutMinimum,
         owner: address,
     })
-    useEffect(() => {
-        if (isSuccess && skipUnwrap && !isUnwrapping && !isUnwrapSuccess && !isUnwrapError) {
-            startUnwrap()
-        }
-    }, [isSuccess, skipUnwrap, isUnwrapping, isUnwrapSuccess, isUnwrapError, startUnwrap])
-    useEffect(() => {
-        const finalSuccess = skipUnwrap ? isUnwrapSuccess : isSuccess
-        const finalHash = skipUnwrap ? unwrapHash : swapHash
-        if (finalSuccess && finalHash) {
+    // Keyed on the swap hash: a finished swap stays isSuccess, so a plain effect would unwrap
+    // again or re-toast whenever a dep (token pick, refetch identity) changes during a quote.
+    useOnTxSuccess(skipUnwrap, isSuccess, swapHash, () => {
+        if (!isUnwrapping && !isUnwrapSuccess && !isUnwrapError) startUnwrap()
+    })
+    useOnTxSuccess(
+        true,
+        skipUnwrap ? isUnwrapSuccess : isSuccess,
+        skipUnwrap ? unwrapHash : swapHash,
+        (finalHash) => {
             const meta = getChainMetadata(chainId)
             const explorerUrl = meta?.explorer
                 ? `${meta.explorer}/tx/${finalHash}`
@@ -352,17 +357,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
             refetchBalanceIn?.()
             refetchBalanceOut?.()
         }
-    }, [
-        skipUnwrap,
-        isKubUnwrapDirect,
-        isSuccess,
-        isUnwrapSuccess,
-        swapHash,
-        unwrapHash,
-        chainId,
-        refetchBalanceIn,
-        refetchBalanceOut,
-    ])
+    )
     useEffect(() => {
         if (isUnwrapError) {
             toastError('KKUB unwrap failed. You received KKUB instead of KUB.')
@@ -449,7 +444,6 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     token: tokenOut,
                     amount: displayAmountOut,
                     countTo: Number(displayAmountOut.replace(/,/g, '')) || undefined,
-                    displayDecimals: 4,
                 }}
             />
         )
@@ -466,8 +460,13 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     error: swapError,
                     hash: swapHash,
                 },
-                run: swap,
+                run: () => {
+                    if (skipUnwrap) resetUnwrap()
+                    swap()
+                },
                 renderStage: swapStage,
+                // Follows the approval once the swap has re-simulated against the new allowance.
+                autoRun: canSwap && !isPreparing,
             })
         )
         if (skipUnwrap && !isKubUnwrapDirect) {
@@ -489,7 +488,11 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                             hash={unwrapHash}
                             from={{
                                 kind: 'token',
-                                token: { symbol: `W${tokenOut.symbol}` },
+                                token: tokens.find(
+                                    (t) =>
+                                        t.address.toLowerCase() ===
+                                        INTERMEDIARY_TOKENS[chainId]?.wrappedNative.toLowerCase()
+                                ) ?? { symbol: `W${tokenOut.symbol}`, logo: tokenOut.logo },
                                 amount: displayAmountOut,
                             }}
                             to={{ kind: 'token', token: tokenOut, amount: displayAmountOut }}
@@ -839,6 +842,7 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                                 setIsConnectModalOpen(true)
                                 return
                             }
+                            resetApproval()
                             setFlowNeedsApproval(needsApprovalCheck)
                             setTxOpen(true)
                             if (needsApprovalCheck) {
@@ -920,7 +924,10 @@ export function SwapCard({ tokens: tokensOverride, showChart, onToggleChart }: S
                     title={isKubUnwrapDirect ? 'Unwrap' : 'Swap'}
                     steps={swapSteps}
                     chainId={chainId}
-                    onDone={() => setAmountIn('')}
+                    onDone={() => {
+                        resetApproval()
+                        setAmountIn('')
+                    }}
                 />
             </CardContent>
         </Card>

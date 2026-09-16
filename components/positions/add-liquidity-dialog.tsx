@@ -180,6 +180,7 @@ export function AddLiquidityDialog({
         isError: isApproveError0,
         error: approveError0,
         hash: approveHash0,
+        reset: resetApproval0,
     } = useTokenApproval({
         token: token0,
         owner: address,
@@ -195,6 +196,7 @@ export function AddLiquidityDialog({
         isError: isApproveError1,
         error: approveError1,
         hash: approveHash1,
+        reset: resetApproval1,
     } = useTokenApproval({
         token: token1,
         owner: address,
@@ -203,6 +205,7 @@ export function AddLiquidityDialog({
     })
     const {
         mint,
+        canMint,
         isPreparing,
         isExecuting,
         isConfirming,
@@ -388,6 +391,7 @@ export function AddLiquidityDialog({
                     spender,
                     chainId,
                     run: approve1,
+                    autoRun: true,
                     flags: {
                         isPending: isApproving1,
                         isConfirming: isConfirming1,
@@ -425,6 +429,7 @@ export function AddLiquidityDialog({
                     hash,
                 },
                 run: mint,
+                autoRun: canMint,
                 renderStage: (phase) => (
                     <TxStageRecord phase={phase} chainId={chainId} hash={hash} rows={rows} />
                 ),
@@ -466,9 +471,12 @@ export function AddLiquidityDialog({
         simulationError,
         hash,
         mint,
+        canMint,
     ])
 
     const handleSubmit = () => {
+        resetApproval0()
+        resetApproval1()
         setFlowApprovals({ token0: needsApproval0, token1: needsApproval1 })
         setTxOpen(true)
         if (needsApproval0) approve0()
@@ -816,6 +824,8 @@ export function AddLiquidityDialog({
                 steps={txSteps}
                 chainId={chainId}
                 onDone={() => {
+                    resetApproval0()
+                    resetApproval1()
                     resetForm()
                     onClose()
                 }}

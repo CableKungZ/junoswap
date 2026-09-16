@@ -121,10 +121,6 @@ export function StakingCreatorPanel({
         setEpochDone(true)
         toastSuccess('Next epoch funded')
         queryClient.invalidateQueries()
-        setRewardAmount('')
-        setStartMode('now')
-        setStartAt('')
-        setCapValue('')
         onSettled()
     })
 
@@ -195,7 +191,7 @@ export function StakingCreatorPanel({
             : flowNeedsApproval && !approveDone
               ? 'idle'
               : txPhase(epochFlags),
-        hash: epoch.hash,
+        hash: flowNeedsApproval && !approveDone ? undefined : epoch.hash,
         error: epoch.error,
         run: submitEpoch,
         renderStage: (phase) => (
@@ -248,6 +244,12 @@ export function StakingCreatorPanel({
                 title="Fund next epoch"
                 steps={epochSteps}
                 chainId={chainId}
+                onDone={() => {
+                    setRewardAmount('')
+                    setStartMode('now')
+                    setStartAt('')
+                    setCapValue('')
+                }}
             />
             <TxFlowDialog
                 open={poolActionOpen}

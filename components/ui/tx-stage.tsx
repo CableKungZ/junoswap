@@ -7,11 +7,11 @@ import { formatFeeTier } from '@/lib/liquidity-helpers'
 import { getExplorerTxUrl } from '@/lib/explorer'
 import { TokenIcon } from '@/components/ui/token-icon'
 import { useCountUp } from '@/hooks/useCountUp'
-import type { TxPhase } from '@/lib/tx-flow'
+import { formatStageNumber, formatStageText, type TxPhase } from '@/lib/tx-flow'
 
 interface TokenRef {
     symbol: string
-    logoURI?: string | null
+    logo?: string | null
 }
 
 export interface TxTokenSide {
@@ -21,8 +21,6 @@ export interface TxTokenSide {
     amount: string
     /** When set, the amount counts up to this figure while the tx confirms. */
     countTo?: number
-    /** Decimals to render the counting value with. Defaults to 2. */
-    displayDecimals?: number
 }
 
 export interface TxContractSide {
@@ -45,6 +43,17 @@ export interface TxPositionSide {
 }
 
 export type TxSide = TxTokenSide | TxContractSide | TxPositionSide
+
+// Block time plus ~0.5s. The bar only estimates; success still waits for the receipt, and
+// snaps the bar to full once it actually lands.
+const CONFIRM_MS: Record<number, number> = {
+    96: 3500, // KUB mainnet, 3s blocks
+    25925: 3500, // KUB testnet, 3s blocks
+    8899: 5500, // JBC, 5s blocks
+    8453: 2500, // Base, 2s blocks
+    480: 2500, // World Chain, 2s blocks
+    56: 1250, // BSC, 0.75s blocks
+}
 
 const shortAddress = (address: Address) => `${address.slice(0, 5)}…${address.slice(-3)}`
 
@@ -102,7 +111,6 @@ function Skeleton({ className }: { className?: string }) {
 function Amount({ side, phase }: { side: TxTokenSide | TxContractSide; phase: TxPhase }) {
     const counting = side.kind === 'token' && side.countTo !== undefined && phase === 'confirming'
     const target = side.kind === 'token' ? (side.countTo ?? 0) : 0
-    const decimals = side.kind === 'token' ? (side.displayDecimals ?? 2) : 2
     const counted = useCountUp(target, counting)
 
     // countTo marks the one value the receipt decides; everything else is already known.
@@ -110,16 +118,10 @@ function Amount({ side, phase }: { side: TxTokenSide | TxContractSide; phase: Tx
         return <Skeleton />
     return (
         <span
-            className={cn(
-                'whitespace-nowrap text-xl font-semibold leading-tight tracking-tight tabular-nums'
-            )}
+            title={side.amount}
+            className="max-w-full truncate whitespace-nowrap text-xl font-semibold leading-tight tracking-tight tabular-nums"
         >
-            {counting
-                ? counted.toLocaleString('en-US', {
-                      minimumFractionDigits: decimals,
-                      maximumFractionDigits: decimals,
-                  })
-                : side.amount}
+            {counting ? formatStageNumber(counted) : formatStageText(side.amount)}
         </span>
     )
 }
@@ -143,9 +145,9 @@ function PositionChip({ side }: { side: TxPositionSide }) {
                 </>
             )}
             <div className="flex -space-x-2">
-                <TokenIcon src={side.token0.logoURI} symbol={side.token0.symbol} size="xs" />
+                <TokenIcon src={side.token0.logo} symbol={side.token0.symbol} size="xs" />
                 <TokenIcon
-                    src={side.token1.logoURI}
+                    src={side.token1.logo}
                     symbol={side.token1.symbol}
                     size="xs"
                     className="ring-2 ring-secondary"
@@ -175,7 +177,7 @@ function Side({ side, phase }: { side: TxSide; phase: TxPhase }) {
     return (
         <div className="grid min-w-0 justify-items-center gap-1.5">
             {side.kind === 'token' ? (
-                <TokenIcon src={side.token.logoURI} symbol={side.token.symbol} size="sm" />
+                <TokenIcon src={side.token.logo} symbol={side.token.symbol} size="sm" />
             ) : (
                 <span className="grid h-8 w-8 place-items-center rounded-full border border-border bg-secondary font-mono text-[9px] text-muted-foreground">
                     {side.address ? shortAddress(side.address).slice(0, 5) : '0x'}
@@ -185,6 +187,14 @@ function Side({ side, phase }: { side: TxSide; phase: TxPhase }) {
             <span className="whitespace-nowrap font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 {side.kind === 'token' ? side.token.symbol : side.label}
             </span>
+            {side.kind === 'contract' && side.address && (
+                <span
+                    title={side.address}
+                    className="-mt-1 whitespace-nowrap font-mono text-[10px] text-muted-foreground/70"
+                >
+                    {`${side.address.slice(0, 6)}…${side.address.slice(-4)}`}
+                </span>
+            )}
         </div>
     )
 }
@@ -230,8 +240,20 @@ function Meter({
     hash?: `0x${string}`
     chainId: number
 }) {
-    const width =
-        phase === 'success' ? 'w-full' : phase === 'error' ? 'w-2/5' : phase === 'idle' ? 'w-0' : ''
+    const width: Record<TxPhase, string> = {
+        idle: 'w-0',
+        pending: 'w-[8%]',
+        confirming: 'w-full',
+        success: 'w-full',
+        error: 'w-2/5',
+        'sim-error': 'w-0',
+    }
+    // A width transition rather than a keyframe: when the receipt lands mid-run, the bar
+    // finishes from wherever it is instead of restarting.
+    // Confirmed cancels the transition rather than shortening it: confirming already targets
+    // w-full, so the width doesn't change and a running transition would keep crawling.
+    // Dropping the property ends it at its end value on the spot.
+    const duration = phase === 'confirming' ? (CONFIRM_MS[chainId] ?? 3500) : 300
     const note: Record<TxPhase, string> = {
         idle: '',
         pending: 'awaiting signature',
@@ -244,12 +266,16 @@ function Meter({
         <div className="grid gap-1.5">
             <div className="h-[3px] overflow-hidden rounded-sm bg-border">
                 <div
+                    style={{
+                        transitionDuration: `${duration}ms`,
+                        transitionTimingFunction: phase === 'confirming' ? 'linear' : 'ease-out',
+                    }}
                     className={cn(
-                        'h-full rounded-sm transition-[width] duration-500',
-                        phase === 'success' ? 'bg-positive' : 'bg-primary',
-                        phase === 'sim-error' ? 'w-0' : width,
-                        phase === 'confirming' && 'w-[8%] animate-tx-meter',
-                        phase === 'pending' && 'w-[8%]'
+                        'h-full rounded-sm',
+                        phase === 'success'
+                            ? 'bg-positive transition-none'
+                            : 'bg-primary transition-[width] motion-reduce:transition-none',
+                        width[phase]
                     )}
                 />
             </div>
@@ -281,14 +307,26 @@ interface StageShellProps {
 
 function StageShell({ phase, hash, chainId, children }: StageShellProps) {
     return (
-        <div className="relative grid min-h-[148px] content-center gap-3.5 overflow-hidden rounded-[calc(var(--radius)-1px)] border border-border bg-secondary/40 px-[18px] pb-[18px] pt-4">
+        <div
+            className={cn(
+                'relative grid min-h-[172px] content-center gap-4 overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-secondary/80 via-secondary/35 to-background px-5 pb-5 pt-5 shadow-inner',
+                phase === 'pending' && 'border-primary/25',
+                phase === 'confirming' && 'border-primary/35 shadow-primary/5',
+                phase === 'success' && 'border-positive/30',
+                (phase === 'error' || phase === 'sim-error') && 'border-negative/30'
+            )}
+        >
+            <span
+                aria-hidden
+                className="pointer-events-none absolute -right-16 -top-20 h-40 w-40 rounded-full bg-primary/[0.08] blur-3xl"
+            />
             {phase === 'success' && (
                 <span
                     aria-hidden
                     className="pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,transparent_38%,hsl(var(--positive)/0.16)_50%,transparent_62%)] opacity-0 animate-tx-sheen"
                 />
             )}
-            <div className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="relative flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', LAMP_COLOR[phase])} />
                 {STATUS_LABEL[phase]}
             </div>
@@ -346,7 +384,9 @@ export function TxStageRecord({ phase, rows, hash, chainId }: TxStageRecordProps
                         <span className="font-mono text-[10.5px] uppercase tracking-wider text-muted-foreground">
                             {label}
                         </span>
-                        <span className="font-semibold tabular-nums">{value}</span>
+                        <span title={value} className="min-w-0 truncate font-semibold tabular-nums">
+                            {formatStageText(value)}
+                        </span>
                     </div>
                 ))}
             </div>

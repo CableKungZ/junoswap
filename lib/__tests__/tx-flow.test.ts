@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { txPhase, parseRevertReason, isUserRejection, countValue } from '@/lib/tx-flow'
+import {
+    txPhase,
+    parseRevertReason,
+    isUserRejection,
+    countValue,
+    formatStageNumber,
+    formatStageText,
+    autoRunIndex,
+} from '@/lib/tx-flow'
 
 const HASH = '0x7f3a000000000000000000000000000000000000000000000000000000000c21' as const
 
@@ -83,5 +91,48 @@ describe('countValue', () => {
 
     it('returns the target when there is no duration to animate over', () => {
         expect(countValue(42, 0, 0)).toBe(42)
+    })
+})
+
+describe('formatStageNumber', () => {
+    it('compacts and trims by magnitude', () => {
+        expect(formatStageNumber(100000)).toBe('100,000')
+        expect(formatStageNumber(1234.56789)).toBe('1,234.57')
+        expect(formatStageNumber(12_345_678)).toBe('12.35M')
+        expect(formatStageNumber(3e18)).toBe('3.00e+18')
+        expect(formatStageNumber(1.123456789)).toBe('1.1235')
+        expect(formatStageNumber(0.000123456)).toBe('0.0001235')
+        expect(formatStageNumber(0.00000001)).toBe('<0.0001')
+        expect(formatStageNumber(0)).toBe('0')
+    })
+})
+
+describe('formatStageText', () => {
+    it('formats a leading amount and leaves other text alone', () => {
+        expect(formatStageText('100000.123456789012')).toBe('100,000.12')
+        expect(formatStageText('1,234.567891 KUB')).toBe('1,234.57 KUB')
+        expect(formatStageText('Unlimited')).toBe('Unlimited')
+        expect(formatStageText('0x70138f…6144e')).toBe('0x70138f…6144e')
+        expect(formatStageText('2026-09-16')).toBe('2026-09-16')
+    })
+})
+
+describe('autoRunIndex', () => {
+    it('starts the next ready step once everything before it landed', () => {
+        expect(
+            autoRunIndex([
+                { phase: 'success' },
+                { phase: 'success' },
+                { phase: 'idle', autoRun: true },
+            ])
+        ).toBe(2)
+    })
+
+    it('never starts the first step, a step still waiting on readiness, or one already running', () => {
+        expect(autoRunIndex([{ phase: 'idle', autoRun: true }])).toBeNull()
+        expect(autoRunIndex([{ phase: 'success' }, { phase: 'idle', autoRun: false }])).toBeNull()
+        expect(autoRunIndex([{ phase: 'success' }, { phase: 'pending', autoRun: true }])).toBeNull()
+        expect(autoRunIndex([{ phase: 'success' }, { phase: 'error', autoRun: true }])).toBeNull()
+        expect(autoRunIndex([{ phase: 'success' }, { phase: 'success', autoRun: true }])).toBeNull()
     })
 })

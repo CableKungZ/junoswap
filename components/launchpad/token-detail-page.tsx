@@ -380,6 +380,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                             <TokenTradeCard
                                 tokenAddr={tokenAddr}
                                 tokenSymbol={symbol}
+                                tokenLogo={tokenInfo?.logo}
                                 tokenDecimals={decimals}
                                 isGraduated={isGraduated}
                                 poolAddress={poolAddress}

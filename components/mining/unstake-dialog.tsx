@@ -105,7 +105,6 @@ export function UnstakeDialog({
                         token: incentive.rewardTokenInfo,
                         amount: formattedRewards,
                         countTo: Number(formattedRewards.replace(/,/g, '')),
-                        displayDecimals: 4,
                     }}
                 />
             ),

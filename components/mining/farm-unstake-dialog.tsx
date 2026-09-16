@@ -198,7 +198,6 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
                               token: rewardToken,
                               amount: formattedTotal,
                               countTo: Number(formattedTotal.replace(/,/g, '')),
-                              displayDecimals: 4,
                           }}
                       />
                   ),

@@ -84,7 +84,7 @@ export function useDurianfunSwapExecution({
             return r
         },
         enabled: !!approveHash && !!publicClient,
-        refetchInterval: (query) => (query.state.data ? false : 2000),
+        refetchInterval: (query) => (query.state.data ? false : 1000),
     })
     const isApproveConfirming = !!approveHash && !approveReceipt
 
@@ -166,7 +166,7 @@ export function useDurianfunSwapExecution({
             return publicClient.getTransactionReceipt({ hash })
         },
         enabled: !!hash && !!publicClient,
-        refetchInterval: (query) => (query.state.data ? false : 2000),
+        refetchInterval: (query) => (query.state.data ? false : 1000),
     })
 
     const isConfirming = !!hash && !receipt

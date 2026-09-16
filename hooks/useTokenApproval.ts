@@ -26,6 +26,8 @@ interface UseTokenApprovalResult {
     error: Error | null
     hash: Address | undefined
     approve: () => void
+    /** Clears a finished approval, so the next flow doesn't start with this step ticked. */
+    reset: () => void
 }
 
 export function useTokenApproval({
@@ -63,14 +65,16 @@ export function useTokenApproval({
         hash,
         chainId: token?.chainId,
     })
+    // Sticky on purpose: both success paths below call reset(), which clears `hash` and with it
+    // receiptSuccess. Deriving success from the hash made a landed approval flip back to
+    // not-approved, stranding multi-step flows on their approve step.
     const [approvalDetected, setApprovalDetected] = useState(false)
     const isSuccess = receiptSuccess || approvalDetected
     const isConfirming = !!hash && receiptPending && !approvalDetected
+    const approvalKey = `${token?.address}:${spender}:${owner}`
     useEffect(() => {
-        if (!hash) {
-            setApprovalDetected(false)
-        }
-    }, [hash])
+        setApprovalDetected(false)
+    }, [approvalKey])
     useEffect(() => {
         if (!isConfirming || !amountToApprove) return
         const pollInterval = setInterval(() => {
@@ -85,6 +89,7 @@ export function useTokenApproval({
     }, [isConfirming, amountToApprove, refetchAllowance, reset])
     useEffect(() => {
         if (receiptSuccess) {
+            setApprovalDetected(true)
             refetchAllowance().then(() => {
                 reset()
             })
@@ -102,6 +107,10 @@ export function useTokenApproval({
             chainId: token.chainId,
         })
     }, [token, spender, owner, isTokenNative, approve])
+    const clear = useCallback(() => {
+        setApprovalDetected(false)
+        reset()
+    }, [reset])
     return {
         allowance,
         needsApproval: needsToApprove,
@@ -112,5 +121,6 @@ export function useTokenApproval({
         error,
         hash,
         approve: handleApprove,
+        reset: clear,
     }
 }

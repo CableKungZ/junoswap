@@ -76,6 +76,7 @@ export function IncreaseLiquidityDialog({
         isError: isApproveError0,
         error: approveError0,
         hash: approveHash0,
+        reset: resetApproval0,
     } = useTokenApproval({
         token: selectedPosition?.token0Info ?? null,
         owner: address,
@@ -91,6 +92,7 @@ export function IncreaseLiquidityDialog({
         isError: isApproveError1,
         error: approveError1,
         hash: approveHash1,
+        reset: resetApproval1,
     } = useTokenApproval({
         token: selectedPosition?.token1Info ?? null,
         owner: address,
@@ -99,6 +101,7 @@ export function IncreaseLiquidityDialog({
     })
     const {
         increase,
+        canIncrease,
         isPreparing,
         isExecuting,
         isConfirming,
@@ -231,6 +234,7 @@ export function IncreaseLiquidityDialog({
                     spender: dexConfig?.positionManager,
                     chainId,
                     run: approve1,
+                    autoRun: true,
                     flags: {
                         isPending: isApproving1,
                         isConfirming: isConfirming1,
@@ -257,6 +261,7 @@ export function IncreaseLiquidityDialog({
                     hash,
                 },
                 run: increase,
+                autoRun: canIncrease,
                 renderStage: (phase) => (
                     <TxStageRecord
                         phase={phase}
@@ -274,6 +279,8 @@ export function IncreaseLiquidityDialog({
     }
 
     const handleSubmit = () => {
+        resetApproval0()
+        resetApproval1()
         setFlowApprovals({ token0: needsApproval0, token1: needsApproval1 })
         setTxOpen(true)
         if (needsApproval0) approve0()
@@ -403,6 +410,8 @@ export function IncreaseLiquidityDialog({
                 steps={txSteps}
                 chainId={chainId}
                 onDone={() => {
+                    resetApproval0()
+                    resetApproval1()
                     setAmount0('')
                     setAmount1('')
                     setActiveInput(null)

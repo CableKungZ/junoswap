@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { Token } from '@/types/token'
+import type { RecipientIssue } from '@/lib/tokens'
 import { useAccount, useChainId } from 'wagmi'
 import type { Address } from 'viem'
 import { toast } from 'sonner'
@@ -12,9 +13,11 @@ import { TokenSelect } from '@/components/swap/token-select'
 import { useChainTokens } from '@/hooks/useChainTokens'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useSendToken } from '@/hooks/useSendToken'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { isValidNumberInput } from '@/lib/utils'
 import {
     isValidTokenAddress,
+    getRecipientIssue,
     formatBalance,
     formatTokenAmount,
     parseTokenAmount,
@@ -24,6 +27,12 @@ import { toastError } from '@/lib/toast'
 import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
 import { TxStageFlow } from '@/components/ui/tx-stage'
 import { Check } from 'lucide-react'
+const RECIPIENT_ISSUE_TEXT: Record<RecipientIssue, string> = {
+    zero: 'This is the zero address — tokens sent here are burned.',
+    'token-contract': "This is the token's own contract — tokens sent here are usually lost.",
+    self: 'This is your own wallet.',
+}
+
 interface SendDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -58,15 +67,36 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
     const isValidRecipient = isValidTokenAddress(trimmedRecipient)
     const recipient: Address | null = isValidRecipient ? (trimmedRecipient as Address) : null
 
-    const { send, isExecuting, isConfirming, isSuccess, isError, error, hash, reset } =
-        useSendToken({ token: selectedToken, recipient, amount })
+    const recipientIssue = recipient
+        ? getRecipientIssue(recipient, address, selectedToken?.address)
+        : null
+
+    const {
+        send,
+        isPreparing,
+        isExecuting,
+        isConfirming,
+        isSuccess,
+        isError,
+        error,
+        hash,
+        simulationError,
+        reset,
+    } = useSendToken({ token: selectedToken, recipient, amount })
 
     const rawAmount =
         selectedToken && amount ? parseTokenAmount(amount, selectedToken.decimals) : 0n
     const hasInsufficientBalance = !!selectedToken && rawAmount > 0n && rawAmount > balance
     const isBusy = isExecuting || isConfirming
     const canSend =
-        !!selectedToken && isValidRecipient && rawAmount > 0n && !hasInsufficientBalance && !isBusy
+        !!selectedToken &&
+        isValidRecipient &&
+        recipientIssue !== 'zero' &&
+        recipientIssue !== 'token-contract' &&
+        rawAmount > 0n &&
+        !hasInsufficientBalance &&
+        !isPreparing &&
+        !isBusy
 
     const handleMax = () => {
         if (selectedToken && balance > 0n) {
@@ -74,19 +104,17 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
         }
     }
 
-    useEffect(() => {
-        if (isSuccess && hash) {
-            const explorerUrl = getExplorerTxUrl(chainId, hash)
-            toast.success('Send successful!', {
-                action: {
-                    label: 'View Transaction',
-                    onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
-                },
-            })
-            // The tx dialog owns the success frame and closes both from its Done button.
-            refetch()
-        }
-    }, [isSuccess, hash, chainId, refetch])
+    useOnTxSuccess(true, isSuccess, hash, (hash) => {
+        const explorerUrl = getExplorerTxUrl(chainId, hash)
+        toast.success('Send successful!', {
+            action: {
+                label: 'View Transaction',
+                onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
+            },
+        })
+        // The tx dialog owns the success frame and closes both from its Done button.
+        refetch()
+    })
 
     useEffect(() => {
         if (isError && error) {
@@ -110,7 +138,15 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
         ? [
               actionStep({
                   label: `Send ${selectedToken.symbol}`,
-                  flags: { isPending: isExecuting, isConfirming, isSuccess, isError, error, hash },
+                  flags: {
+                      isPending: isExecuting,
+                      isConfirming,
+                      isSuccess,
+                      isError,
+                      error,
+                      hash,
+                      simulationError,
+                  },
                   run: send,
                   renderStage: (phase) => (
                       <TxStageFlow
@@ -122,7 +158,7 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
                               kind: 'contract',
                               label: 'Recipient',
                               address: recipient ?? undefined,
-                              amount: amount || '0',
+                              amount: `${amount || '0'} ${selectedToken.symbol}`,
                           }}
                       />
                   ),
@@ -202,6 +238,18 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
                             />
                         </div>
 
+                        {recipientIssue && (
+                            <p
+                                className={
+                                    recipientIssue === 'self'
+                                        ? 'text-xs text-muted-foreground'
+                                        : 'text-xs text-destructive'
+                                }
+                            >
+                                {RECIPIENT_ISSUE_TEXT[recipientIssue]}
+                            </p>
+                        )}
+
                         {hasInsufficientBalance && (
                             <p className="text-xs text-destructive">Insufficient balance</p>
                         )}
@@ -211,8 +259,10 @@ export function SendDialog({ open, onOpenChange }: SendDialogProps) {
                             size="lg"
                             onClick={handleSend}
                             disabled={!canSend}
-                            isLoading={isBusy}
-                            loadingText={isConfirming ? 'Confirming…' : 'Sending…'}
+                            isLoading={isBusy || (isPreparing && rawAmount > 0n)}
+                            loadingText={
+                                isConfirming ? 'Confirming…' : isBusy ? 'Sending…' : 'Checking…'
+                            }
                         >
                             Send
                         </Button>

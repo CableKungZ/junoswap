@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast, useSonner } from 'sonner'
 import { Check, Loader2, X, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,14 @@ import { getExplorerTxUrl } from '@/lib/explorer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { TxStageFlow } from '@/components/ui/tx-stage'
-import { parseRevertReason, fullErrorLog, txPhase, type TxPhase, type TxFlags } from '@/lib/tx-flow'
+import {
+    autoRunIndex,
+    parseRevertReason,
+    fullErrorLog,
+    txPhase,
+    type TxPhase,
+    type TxFlags,
+} from '@/lib/tx-flow'
 import type { Address } from 'viem'
 
 const COPY_TOAST_ID = 'tx-flow-copy'
@@ -22,6 +29,12 @@ export interface TxStep {
     run: () => void
     /** The stage to show while this step is the live one. */
     renderStage: (phase: TxPhase) => React.ReactNode
+    /**
+     * Start this step without a click once the steps before it land. Pass readiness, not
+     * just true, when `run` needs something that arrives after the previous step (a fresh
+     * simulation) — `run` fires once per open, so firing early would strand the flow.
+     */
+    autoRun?: boolean
 }
 
 /**
@@ -35,9 +48,11 @@ export function approvalStep(input: {
     chainId: number
     run: () => void
     flags: TxFlags
+    autoRun?: boolean
 }): TxStep {
-    const { token, spenderLabel, spender, chainId, run, flags } = input
+    const { token, spenderLabel, spender, chainId, run, flags, autoRun } = input
     return {
+        autoRun,
         label: `Approve ${token.symbol}`,
         phase: txPhase(flags),
         hash: flags.hash,
@@ -66,8 +81,10 @@ export function actionStep(input: {
     flags: TxFlags
     run: () => void
     renderStage: (phase: TxPhase) => React.ReactNode
+    autoRun?: boolean
 }): TxStep {
     return {
+        autoRun: input.autoRun,
         label: input.label,
         phase: txPhase(input.flags),
         hash: input.flags.hash,
@@ -198,6 +215,18 @@ export function TxFlowDialog({
             if (t.id !== COPY_TOAST_ID && !toastsBeforeOpen.current.has(t.id)) toast.dismiss(t.id)
         }
     }, [open, toasts])
+
+    const autoIndex = autoRunIndex(steps)
+    const autoRan = useRef(new Set<number>())
+    useEffect(() => {
+        if (!open) {
+            autoRan.current.clear()
+            return
+        }
+        if (autoIndex === null || autoRan.current.has(autoIndex)) return
+        autoRan.current.add(autoIndex)
+        steps[autoIndex]!.run()
+    }, [open, autoIndex, steps])
 
     if (!live) return null
 

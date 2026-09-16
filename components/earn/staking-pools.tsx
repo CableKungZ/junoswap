@@ -212,7 +212,6 @@ function PoolCard({
                         countTo: Number(
                             formatTokenAmount(pool.user.earned, pool.rewardTokenInfo.decimals)
                         ),
-                        displayDecimals: 4,
                     }}
                 />
             ),
@@ -416,7 +415,6 @@ function ManagePoolDialog({
             return
         }
         setMainDone(true)
-        setAmount('')
         toastSuccess('Transaction confirmed')
         // The tx dialog owns the success frame and closes from its Done button.
         onSuccess()
@@ -503,7 +501,7 @@ function ManagePoolDialog({
             : flowNeedsApproval && !approveDone
               ? 'idle'
               : txPhase(sharedFlags),
-        hash: actions.hash,
+        hash: flowNeedsApproval && !approveDone ? undefined : actions.hash,
         error: actions.error,
         run: () => (flowKind === 'stake' ? actions.stake(parsed) : actions.withdraw(parsed)),
         renderStage: (phase) => (

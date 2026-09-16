@@ -28,8 +28,7 @@
         --input: 0 0% 94%;
         --ring: 0 0% 3.9%;
         --radius: 0.5rem;
-        }
-
+    }
 
     .dark {
         --background: 230 15% 3.5%;
@@ -103,7 +102,6 @@
             transform: translateY(0);
         }
     }
-
 }
 
 @layer utilities {
@@ -751,7 +749,8 @@
     }
 
     @keyframes hero-bob {
-        0%, 100% {
+        0%,
+        100% {
             transform: translateY(0);
             opacity: 0.6;
         }
@@ -880,22 +879,6 @@
     .animate-tx-rail-fill {
         transform-origin: left;
         animation: tx-rail-fill 0.46s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
-    }
-
-    @keyframes tx-meter {
-        0% {
-            width: 6%;
-        }
-        55% {
-            width: 62%;
-        }
-        100% {
-            width: 88%;
-        }
-    }
-
-    .animate-tx-meter {
-        animation: tx-meter 2.6s cubic-bezier(0.25, 0.9, 0.35, 1) infinite;
     }
 
     /* A value the chain has not returned yet reads as a skeleton, not a zero. */
@@ -1040,7 +1023,6 @@
     .animate-tx-lamp,
     .animate-tx-rail-run,
     .animate-tx-rail-fill,
-    .animate-tx-meter,
     .animate-tx-land,
     .animate-tx-row-in,
     .animate-tx-srail,

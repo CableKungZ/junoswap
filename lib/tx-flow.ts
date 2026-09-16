@@ -84,3 +84,44 @@ export function countValue(to: number, elapsed: number, duration: number): numbe
     const t = Math.min(1, Math.max(0, elapsed / duration))
     return to * (1 - Math.pow(1 - t, 3))
 }
+
+/**
+ * Keeps a stage amount inside its column: huge values go compact (1.23M), long fractions
+ * are trimmed by magnitude, and dust collapses to "<0.0001".
+ */
+export function formatStageNumber(n: number): string {
+    if (!Number.isFinite(n)) return String(n)
+    const abs = Math.abs(n)
+    if (abs === 0) return '0'
+    if (abs < 0.0001) return n < 0 ? '>-0.0001' : '<0.0001'
+    if (abs >= 1e15) return n.toExponential(2)
+    if (abs >= 1e6)
+        return n.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 2 })
+    if (abs >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+    if (abs >= 1) return n.toLocaleString('en-US', { maximumFractionDigits: 4 })
+    return n.toLocaleString('en-US', { maximumSignificantDigits: 4 })
+}
+
+/**
+ * Reformats a label that leads with an amount ("1,234.567891 KUB"). Anything else —
+ * addresses, dates, ticks, "Unlimited" — passes through, since digits there aren't amounts.
+ */
+export function formatStageText(text: string): string {
+    const match = /^(-?\d[\d,]*(?:\.\d+)?)(\s+\S.*)?$/.exec(text.trim())
+    if (!match) return text
+    const n = Number(match[1]!.replace(/,/g, ''))
+    return Number.isFinite(n) ? formatStageNumber(n) + (match[2] ?? '') : text
+}
+
+/**
+ * The step a multi-step flow should start by itself: the first unfinished one, once every
+ * step before it has landed, if it opted in and is ready. Null when nothing should fire.
+ */
+export function autoRunIndex(
+    steps: readonly { phase: TxPhase; autoRun?: boolean }[]
+): number | null {
+    const next = steps.findIndex((s) => s.phase !== 'success')
+    if (next <= 0) return null
+    const step = steps[next]!
+    return step.phase === 'idle' && step.autoRun ? next : null
+}
