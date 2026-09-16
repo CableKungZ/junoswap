@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import {
     Dialog,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useUnstakePosition } from '@/hooks/useStaking'
+import { useUnstakeAndWithdraw } from '@/hooks/useStaking'
 import { usePendingRewards } from '@/hooks/useRewards'
 import { formatRewardAmount } from '@/lib/format'
 import { formatTimeRemaining } from '@/services/mining/incentives'
@@ -19,7 +19,7 @@ import { toastSuccess, toastError } from '@/lib/toast'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
-import { TxStageFlow } from '@/components/ui/tx-stage'
+import { TxStageFlow, type TxSide } from '@/components/ui/tx-stage'
 import type { StakedPosition } from '@/types/earn'
 
 interface UnstakeDialogProps {
@@ -45,66 +45,94 @@ export function UnstakeDialog({
         position?.tokenId,
         program
     )
-    const { unstake, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useUnstakePosition(position?.tokenId, incentive, address, program, true)
-    useOnTxSuccess(open, isSuccess, hash, () => {
+    const tokenIds = useMemo(() => (position ? [position.tokenId] : []), [position])
+    const { unstake, withdraw } = useUnstakeAndWithdraw(tokenIds, incentive, address, program)
+    // Read at click: once the unstake lands the pending reward reads zero, and the claim
+    // step's success frame should still show what was paid out.
+    const [flowReward, setFlowReward] = useState('')
+    useOnTxSuccess(open, withdraw.isSuccess, withdraw.hash, () => {
         if (address && position) {
             markUnstaked(chainId, address, position.tokenId)
         }
-        toastSuccess('Position unstaked successfully!')
+        toastSuccess('Position unstaked and withdrawn')
         // The tx dialog owns the success frame and closes both from its Done button.
         onSuccess?.()
     })
+    const error = unstake.error ?? withdraw.error
     useEffect(() => {
         if (error) {
             toastError(error)
         }
     }, [error])
     if (!selectedStakedPosition || !position || !incentive) return null
-    const isLoading = isPreparing || isExecuting || isConfirming
+    const isLoading = unstake.isPreparing || unstake.isExecuting || unstake.isConfirming
     const getButtonText = () => {
-        if (isPreparing) return 'Preparing...'
-        if (isExecuting) return 'Confirm in wallet...'
-        if (isConfirming) return 'Unstaking...'
+        if (unstake.isPreparing) return 'Preparing...'
+        if (unstake.isExecuting) return 'Confirm in wallet...'
+        if (unstake.isConfirming) return 'Unstaking...'
         return 'Unstake & Claim'
     }
     const formattedRewards = formatRewardAmount(pendingRewards, incentive.rewardTokenInfo.decimals)
     const handleUnstake = () => {
+        setFlowReward(formattedRewards)
         setTxOpen(true)
-        unstake()
+        unstake.run()
     }
-    // One multicall: unstakeToken + claimReward + withdrawToken. The reward is what the
-    // user is waiting on, so it is the side that counts up.
+    const positionSide: TxSide = {
+        kind: 'position',
+        tokenId: position.tokenId,
+        feeTier: position.fee,
+        inRange: position.inRange,
+        token0: position.token0Info,
+        token1: position.token1Info,
+    }
     const txSteps = [
         actionStep({
-            label: `Unstake position #${position.tokenId.toString()}`,
+            label: 'Unstake & claim rewards',
             flags: {
-                isPending: isPreparing || isExecuting,
-                isConfirming,
-                isSuccess,
-                isError: !!error,
-                error,
-                hash,
+                isPending: unstake.isPreparing || unstake.isExecuting,
+                isConfirming: unstake.isConfirming,
+                isSuccess: unstake.isSuccess,
+                isError: !!unstake.error,
+                error: unstake.error,
+                simulationError: unstake.simulationError,
+                hash: unstake.hash,
             },
-            run: unstake,
+            run: unstake.run,
             renderStage: (phase) => (
                 <TxStageFlow
                     phase={phase}
                     chainId={chainId}
-                    hash={hash}
-                    from={{
-                        kind: 'position',
-                        tokenId: position.tokenId,
-                        feeTier: position.fee,
-                        inRange: position.inRange,
-                        token0: position.token0Info,
-                        token1: position.token1Info,
-                    }}
+                    hash={unstake.hash}
+                    from={positionSide}
                     to={{
                         kind: 'token',
                         token: incentive.rewardTokenInfo,
-                        amount: formattedRewards,
+                        amount: flowReward || formattedRewards,
                     }}
+                />
+            ),
+        }),
+        actionStep({
+            label: `Withdraw position #${position.tokenId.toString()}`,
+            flags: {
+                isPending: withdraw.isPreparing || withdraw.isExecuting,
+                isConfirming: withdraw.isConfirming,
+                isSuccess: withdraw.isSuccess,
+                isError: !!withdraw.error,
+                error: withdraw.error,
+                simulationError: withdraw.simulationError,
+                hash: withdraw.hash,
+            },
+            run: withdraw.run,
+            autoRun: withdraw.canRun,
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={withdraw.hash}
+                    from={{ kind: 'contract', label: 'Farm staker', amount: 'Unstaked' }}
+                    to={positionSide}
                 />
             ),
         }),
@@ -170,7 +198,8 @@ export function UnstakeDialog({
                                 )}
                             </div>
                             <div className="text-sm text-muted-foreground mt-1">
-                                Will be claimed automatically when you unstake
+                                Claimed when you unstake, then the position is withdrawn in a second
+                                signature
                             </div>
                         </div>
                     </div>
@@ -186,7 +215,7 @@ export function UnstakeDialog({
             <TxFlowDialog
                 open={txOpen}
                 onOpenChange={setTxOpen}
-                title="Unstake & claim"
+                title="Unstake position"
                 steps={txSteps}
                 chainId={chainId}
                 onDone={onClose}

@@ -18,14 +18,14 @@ import { useIncentives } from '@/hooks/useIncentives'
 import { useStakerDeposits } from '@/hooks/useStakerDeposits'
 import { useFarmStakes, toStakedPosition } from '@/hooks/useFarmStakes'
 import { usePendingRewardsMultiple } from '@/hooks/useRewards'
-import { useUnstakePositions } from '@/hooks/useStaking'
+import { useUnstakeAndWithdraw } from '@/hooks/useStaking'
 import { formatRewardAmount } from '@/lib/format'
 import { formatBalance, getDisplayToken } from '@/lib/tokens'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { toastError, toastSuccess } from '@/lib/toast'
 import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
-import { TxStageFlow } from '@/components/ui/tx-stage'
+import { TxStageFlow, type TxSide } from '@/components/ui/tx-stage'
 import { cn } from '@/lib/utils'
 import type { Incentive } from '@/types/earn'
 
@@ -103,23 +103,36 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
             .map((stake) => stake.position.tokenId)
     }, [myStakes, selectedIds])
 
-    const { unstake, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useUnstakePositions(selectedTokenIds, incentive, address, incentive?.program ?? 'v3')
+    // Frozen at click: unstaked positions drop out of `myStakes` once the stake list refetches,
+    // and the withdraw that follows still has to name them.
+    const [flow, setFlow] = useState<{
+        ids: bigint[]
+        reward: string
+        lead: (typeof myStakes)[number]['position']
+    } | null>(null)
+    const flowIds = flow?.ids ?? selectedTokenIds
+    const { unstake, withdraw } = useUnstakeAndWithdraw(
+        flowIds,
+        incentive,
+        address,
+        incentive?.program ?? 'v3'
+    )
 
-    useOnTxSuccess(open, isSuccess, hash, () => {
+    useOnTxSuccess(open, withdraw.isSuccess, withdraw.hash, () => {
         if (address) {
-            for (const tokenId of selectedTokenIds) markUnstaked(chainId, address, tokenId)
+            for (const tokenId of flowIds) markUnstaked(chainId, address, tokenId)
         }
-        const count = selectedTokenIds.length
+        const count = flowIds.length
         toastSuccess(
             count === 1
-                ? 'Position unstaked and rewards claimed'
-                : `${count} positions unstaked and rewards claimed`
+                ? 'Position unstaked and withdrawn'
+                : `${count} positions unstaked and withdrawn`
         )
         // The tx dialog owns the success frame and closes both from its Done button.
         onSuccess?.()
     })
 
+    const error = unstake.error ?? withdraw.error
     useEffect(() => {
         if (error) toastError(error)
     }, [error])
@@ -135,13 +148,13 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
 
     const allSelected = myStakes.length > 0 && selectedTokenIds.length === myStakes.length
     const rewardToken = getDisplayToken(incentive.rewardTokenInfo)
-    const isBusy = isPreparing || isExecuting || isConfirming
+    const isBusy = unstake.isPreparing || unstake.isExecuting || unstake.isConfirming
     const buttonLabel =
         selectedTokenIds.length === 0
             ? 'Select a position'
-            : isExecuting
+            : unstake.isExecuting
               ? 'Confirm in wallet...'
-              : isConfirming
+              : unstake.isConfirming
                 ? 'Unstaking...'
                 : selectedTokenIds.length === 1
                   ? 'Unstake & Claim'
@@ -158,46 +171,75 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
         0n
     )
     const formattedTotal = formatRewardAmount(totalReward, incentive.rewardTokenInfo.decimals)
-    const leadPosition = selectedStakes[0]?.position
+    const leadPosition = flow?.lead
     const handleUnstake = () => {
+        const lead = selectedStakes[0]?.position
+        if (!lead) return
+        // Nothing is frozen yet, so the simulation run() sends is already for this selection.
+        setFlow({ ids: selectedTokenIds, reward: formattedTotal, lead })
         setTxOpen(true)
-        unstake()
+        unstake.run()
     }
-    const txSteps = leadPosition
+    const count = flowIds.length
+    const positionSide: TxSide | null = leadPosition
+        ? {
+              kind: 'position',
+              tokenId: leadPosition.tokenId,
+              count,
+              feeTier: leadPosition.fee,
+              inRange: leadPosition.inRange,
+              token0: leadPosition.token0Info,
+              token1: leadPosition.token1Info,
+          }
+        : null
+    const txSteps = positionSide
         ? [
               actionStep({
-                  label:
-                      selectedTokenIds.length === 1
-                          ? `Unstake position #${leadPosition.tokenId.toString()}`
-                          : `Unstake ${selectedTokenIds.length} positions`,
+                  label: 'Unstake & claim rewards',
                   flags: {
-                      isPending: isPreparing || isExecuting,
-                      isConfirming,
-                      isSuccess,
-                      isError: !!error,
-                      error,
-                      hash,
+                      isPending: unstake.isPreparing || unstake.isExecuting,
+                      isConfirming: unstake.isConfirming,
+                      isSuccess: unstake.isSuccess,
+                      isError: !!unstake.error,
+                      error: unstake.error,
+                      simulationError: unstake.simulationError,
+                      hash: unstake.hash,
                   },
-                  run: unstake,
+                  run: unstake.run,
                   renderStage: (phase) => (
                       <TxStageFlow
                           phase={phase}
                           chainId={chainId}
-                          hash={hash}
-                          from={{
-                              kind: 'position',
-                              tokenId: leadPosition.tokenId,
-                              count: selectedTokenIds.length,
-                              feeTier: leadPosition.fee,
-                              inRange: leadPosition.inRange,
-                              token0: leadPosition.token0Info,
-                              token1: leadPosition.token1Info,
-                          }}
+                          hash={unstake.hash}
+                          from={positionSide}
                           to={{
                               kind: 'token',
                               token: rewardToken,
-                              amount: formattedTotal,
+                              amount: flow?.reward ?? formattedTotal,
                           }}
+                      />
+                  ),
+              }),
+              actionStep({
+                  label: count === 1 ? 'Withdraw position' : `Withdraw ${count} positions`,
+                  flags: {
+                      isPending: withdraw.isPreparing || withdraw.isExecuting,
+                      isConfirming: withdraw.isConfirming,
+                      isSuccess: withdraw.isSuccess,
+                      isError: !!withdraw.error,
+                      error: withdraw.error,
+                      simulationError: withdraw.simulationError,
+                      hash: withdraw.hash,
+                  },
+                  run: withdraw.run,
+                  autoRun: withdraw.canRun,
+                  renderStage: (phase) => (
+                      <TxStageFlow
+                          phase={phase}
+                          chainId={chainId}
+                          hash={withdraw.hash}
+                          from={{ kind: 'contract', label: 'Farm staker', amount: 'Unstaked' }}
+                          to={positionSide}
                       />
                   ),
               }),
@@ -218,7 +260,8 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
                                 {getDisplayToken(incentive.poolToken1).symbol}
                             </div>
                             <div className="mt-1 text-sm text-muted-foreground">
-                                Selected positions leave in one transaction, rewards included.
+                                Rewards are claimed first, then the selected positions are withdrawn
+                                — two signatures.
                             </div>
                         </div>
 
@@ -348,7 +391,10 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
             {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
             <TxFlowDialog
                 open={txOpen}
-                onOpenChange={setTxOpen}
+                onOpenChange={(next) => {
+                    setTxOpen(next)
+                    if (!next) setFlow(null)
+                }}
                 title="Unstake & claim"
                 steps={txSteps}
                 chainId={chainId}
