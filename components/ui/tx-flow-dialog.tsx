@@ -7,7 +7,9 @@ import { getExplorerTxUrl } from '@/lib/explorer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toastSuccess } from '@/lib/toast'
-import { parseRevertReason, fullErrorLog, type TxPhase } from '@/lib/tx-flow'
+import { TxStageFlow } from '@/components/ui/tx-stage'
+import { parseRevertReason, fullErrorLog, txPhase, type TxPhase, type TxFlags } from '@/lib/tx-flow'
+import type { Address } from 'viem'
 
 export interface TxStep {
     label: string
@@ -18,6 +20,59 @@ export interface TxStep {
     run: () => void
     /** The stage to show while this step is the live one. */
     renderStage: (phase: TxPhase) => React.ReactNode
+}
+
+/**
+ * The step every action that spends an ERC20 starts with. Identical everywhere, so it
+ * lives here rather than being retyped at each call site.
+ */
+export function approvalStep(input: {
+    token: { symbol: string; logoURI?: string | null }
+    spenderLabel: string
+    spender?: Address
+    chainId: number
+    run: () => void
+    flags: TxFlags
+}): TxStep {
+    const { token, spenderLabel, spender, chainId, run, flags } = input
+    return {
+        label: `Approve ${token.symbol}`,
+        phase: txPhase(flags),
+        hash: flags.hash,
+        error: flags.simulationError ?? flags.error,
+        run,
+        renderStage: (phase) => (
+            <TxStageFlow
+                phase={phase}
+                chainId={chainId}
+                hash={flags.hash}
+                from={{ kind: 'token', token, amount: 'Wallet' }}
+                to={{
+                    kind: 'contract',
+                    label: spenderLabel,
+                    address: spender,
+                    amount: 'Unlimited',
+                }}
+            />
+        ),
+    }
+}
+
+/** The step that does the work. Only the stage differs between actions. */
+export function actionStep(input: {
+    label: string
+    flags: TxFlags
+    run: () => void
+    renderStage: (phase: TxPhase) => React.ReactNode
+}): TxStep {
+    return {
+        label: input.label,
+        phase: txPhase(input.flags),
+        hash: input.flags.hash,
+        error: input.flags.simulationError ?? input.flags.error,
+        run: input.run,
+        renderStage: input.renderStage,
+    }
 }
 
 export interface TxFlowDialogProps {

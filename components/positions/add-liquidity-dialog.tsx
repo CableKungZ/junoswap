@@ -32,9 +32,8 @@ import type { AddLiquidityParams, RangeConfig, V3PoolData } from '@/types/earn'
 import { DEFAULT_RANGE_CONFIG } from '@/types/earn'
 import { toastError } from '@/lib/toast'
 import { toast } from 'sonner'
-import { txPhase } from '@/lib/tx-flow'
-import { TxFlowDialog, type TxStep } from '@/components/ui/tx-flow-dialog'
-import { TxStageFlow, TxStageRecord } from '@/components/ui/tx-stage'
+import { TxFlowDialog, actionStep, approvalStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 
 const FEE_COPY: Record<number, string> = {
     100: 'Best for stable pairs',
@@ -360,54 +359,43 @@ export function AddLiquidityDialog({
     const txSteps = useMemo<TxStep[]>(() => {
         if (!token0 || !token1) return []
         const spender = dexConfig?.positionManager
-        const approvalStep = (
-            token: Token,
-            run: () => void,
-            flags: Parameters<typeof txPhase>[0]
-        ): TxStep => ({
-            label: `Approve ${token.symbol}`,
-            phase: txPhase(flags),
-            hash: flags.hash,
-            error: flags.error,
-            run,
-            renderStage: (phase) => (
-                <TxStageFlow
-                    phase={phase}
-                    chainId={chainId}
-                    hash={flags.hash}
-                    from={{ kind: 'token', token, amount: 'Wallet' }}
-                    to={{
-                        kind: 'contract',
-                        label: 'Position Manager',
-                        address: spender,
-                        amount: 'Unlimited',
-                    }}
-                />
-            ),
-        })
-
         const steps: TxStep[] = []
+
         if (flowApprovals.token0) {
             steps.push(
-                approvalStep(token0, approve0, {
-                    isPending: isApproving0,
-                    isConfirming: isConfirming0,
-                    isSuccess: isApproved0,
-                    isError: isApproveError0,
-                    error: approveError0,
-                    hash: approveHash0,
+                approvalStep({
+                    token: token0,
+                    spenderLabel: 'Position Manager',
+                    spender,
+                    chainId,
+                    run: approve0,
+                    flags: {
+                        isPending: isApproving0,
+                        isConfirming: isConfirming0,
+                        isSuccess: isApproved0,
+                        isError: isApproveError0,
+                        error: approveError0,
+                        hash: approveHash0,
+                    },
                 })
             )
         }
         if (flowApprovals.token1) {
             steps.push(
-                approvalStep(token1, approve1, {
-                    isPending: isApproving1,
-                    isConfirming: isConfirming1,
-                    isSuccess: isApproved1,
-                    isError: isApproveError1,
-                    error: approveError1,
-                    hash: approveHash1,
+                approvalStep({
+                    token: token1,
+                    spenderLabel: 'Position Manager',
+                    spender,
+                    chainId,
+                    run: approve1,
+                    flags: {
+                        isPending: isApproving1,
+                        isConfirming: isConfirming1,
+                        isSuccess: isApproved1,
+                        isError: isApproveError1,
+                        error: approveError1,
+                        hash: approveHash1,
+                    },
                 })
             )
         }
@@ -424,24 +412,24 @@ export function AddLiquidityDialog({
             ],
         ]
 
-        steps.push({
-            label: pool ? 'Add liquidity' : 'Create pool & add liquidity',
-            phase: txPhase({
-                isPending: isPreparing || isExecuting,
-                isConfirming,
-                isSuccess,
-                isError: !!error,
-                error,
-                simulationError,
-                hash,
-            }),
-            hash,
-            error: simulationError ?? error,
-            run: mint,
-            renderStage: (phase) => (
-                <TxStageRecord phase={phase} chainId={chainId} hash={hash} rows={rows} />
-            ),
-        })
+        steps.push(
+            actionStep({
+                label: pool ? 'Add liquidity' : 'Create pool & add liquidity',
+                flags: {
+                    isPending: isPreparing || isExecuting,
+                    isConfirming,
+                    isSuccess,
+                    isError: !!error,
+                    error,
+                    simulationError,
+                    hash,
+                },
+                run: mint,
+                renderStage: (phase) => (
+                    <TxStageRecord phase={phase} chainId={chainId} hash={hash} rows={rows} />
+                ),
+            })
+        )
         return steps
     }, [
         token0,
