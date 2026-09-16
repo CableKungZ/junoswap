@@ -7,7 +7,6 @@ import {
 } from '@coshi190/juno-moneta-sdk'
 import { ponderClient } from '@/lib/ponder-client'
 import { INITIAL_TOKEN_SUPPLY } from '@/lib/launchpad-curve'
-import { fetchDurianfunMarketSwaps, fetchDurianfunHolders } from './durianfun'
 import type { HolderData, LaunchpadPlatform, SwapEventData } from '@/types/launchpad'
 
 export interface SwapHistoryFilters {
@@ -195,56 +194,17 @@ const ponderAdapter: LaunchpadPlatformAdapter = {
     },
 }
 
-/**
- * Non-graduated Durianfun tokens trade on their own per-token market contract, which isn't
- * indexed anywhere else -- everything here reads straight from chain (see durianfun.ts).
- */
-const durianfunAdapter: LaunchpadPlatformAdapter = {
-    async fetchSwapHistory({ tokenAddr, market, page, pageSize, filters }) {
-        if (!market) return { data: [], totalCount: 0 }
+// Third-party platforms whose data ISN'T indexed by ponder yet, keyed by platform id. As of
+// SDK 0.50.0, coshi's indexer tags every launchToken/tokenSnapshot/swapEvent/tokenHolder row
+// with launchpadId and already covers Durianfun end-to-end (swaps, holders, snapshots, and a
+// graduated ammPool address) through the same queries ponderAdapter uses below -- no
+// third-party adapter needed for it any more. Register one here only for a launchpad ponder
+// genuinely doesn't index; nothing else in the data-fetching layer needs to change.
+const THIRD_PARTY_ADAPTERS: Partial<Record<LaunchpadPlatform, LaunchpadPlatformAdapter>> = {}
 
-        const swaps = await fetchDurianfunMarketSwaps(market)
-        const filtered = swaps.filter((s) => {
-            if (filters?.isBuy !== undefined && s.isBuy !== filters.isBuy) return false
-            if (filters?.sender && s.sender.toLowerCase() !== filters.sender.toLowerCase())
-                return false
-            return true
-        })
-
-        const offset = (page - 1) * pageSize
-        const data: SwapEventData[] = filtered.slice(offset, offset + pageSize).map((s) => ({
-            blockNumber: s.blockNumber,
-            timestamp: s.timestamp,
-            sender: s.sender,
-            isBuy: s.isBuy,
-            tokenAddr,
-            amountIn: s.amountIn,
-            amountOut: s.amountOut,
-            reserveIn: 0n,
-            reserveOut: 0n,
-            transactionHash: s.transactionHash,
-        }))
-
-        return { data, totalCount: filtered.length }
-    },
-
-    async fetchHolders({ tokenAddr, market }) {
-        if (!market) return { holders: [], holderCount: 0 }
-        const rows = await fetchDurianfunHolders(tokenAddr, market)
-        const holders = toHolders(rows)
-        return { holders, holderCount: holders.length }
-    },
-}
-
-// Third-party platforms that need their own on-chain adapter while NOT graduated (a graduated
-// token of any platform falls through to ponderAdapter above). Add a new platform here --
-// nothing else in the data-fetching layer needs to change.
-const THIRD_PARTY_ADAPTERS: Partial<Record<LaunchpadPlatform, LaunchpadPlatformAdapter>> = {
-    durianfun: durianfunAdapter,
-}
-
-/** Picks the right data source for a token: registered on-chain reads while non-graduated, or
- *  the shared ponder index otherwise (Junoswap's own tokens always use the latter). */
+/** Picks the right data source for a token: a registered adapter for a platform ponder doesn't
+ *  index, or the shared ponder index otherwise (which covers every platform ponder does know
+ *  about, graduated or not). */
 export function resolvePlatformAdapter(
     platform: LaunchpadPlatform | undefined,
     isGraduated: boolean | undefined,
@@ -257,13 +217,23 @@ export function resolvePlatformAdapter(
     return ponderAdapter
 }
 
-/** True when a non-graduated third-party token has no registered adapter, so the ponder
- *  fallback will just come back empty -- the UI should say "service unavailable" instead of
- *  the ordinary "no data yet" (which implies the token itself has no trades/holders). */
+// Platforms ponder is confirmed to index (junoswap always; durianfun since SDK 0.50.0) --
+// used below to tell "ponder legitimately has nothing for this token yet" apart from "ponder
+// doesn't know this platform at all". Add a platform here once its data is confirmed flowing
+// through the indexed tables; until then a new platform is presumed unindexed unless it has a
+// registered adapter.
+const INDEXED_PLATFORMS = new Set<LaunchpadPlatform>(['junoswap', 'durianfun'])
+
+/** True when a non-graduated third-party token belongs to a platform ponder neither indexes
+ *  nor has a registered adapter for -- the ponder fallback would just come back empty, so the
+ *  UI should say "service unavailable" instead of the ordinary "no data yet" (which implies
+ *  the token itself has no trades/holders). */
 export function isThirdPartyDataUnavailable(
     platform: LaunchpadPlatform | undefined,
     isGraduated: boolean | undefined,
     market: Address | undefined
 ): boolean {
-    return !isGraduated && !!market && !!platform && !THIRD_PARTY_ADAPTERS[platform]
+    if (isGraduated || !market || !platform) return false
+    if (INDEXED_PLATFORMS.has(platform)) return false
+    return !THIRD_PARTY_ADAPTERS[platform]
 }

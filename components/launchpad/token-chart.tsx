@@ -52,7 +52,6 @@ interface TokenChartProps {
     creatorAddress?: Address
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
-    durianfunMarket?: Address
     market?: Address
     platform?: LaunchpadPlatform
 }
@@ -87,7 +86,6 @@ export function TokenChart({
     creatorAddress,
     onDailyMetricsChange,
     className,
-    durianfunMarket,
     market,
     platform,
 }: TokenChartProps) {
@@ -112,7 +110,7 @@ export function TokenChart({
         setTimeframe,
         chartMode,
         setChartMode,
-    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress, durianfunMarket)
+    } = useTokenPriceHistory(tokenAddr, isGraduated, graduatedAt, creatorAddress)
 
     const { price: livePoolPrice } = useGraduatedPoolPrice({
         poolAddress,

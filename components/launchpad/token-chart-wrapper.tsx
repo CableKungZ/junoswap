@@ -30,7 +30,6 @@ interface TokenChartWrapperProps {
     creatorAddress?: Address
     onDailyMetricsChange?: (metrics: DailyMetrics | null) => void
     className?: string
-    durianfunMarket?: Address
     market?: Address
     platform?: LaunchpadPlatform
 }

@@ -23,12 +23,10 @@ describe('toHolders', () => {
 const MARKET = '0x2222222222222222222222222222222222222222' as const
 
 describe('resolvePlatformAdapter', () => {
-    it('routes non-graduated durianfun tokens with a market to the durianfun adapter', () => {
-        const adapter = resolvePlatformAdapter('durianfun', false, MARKET)
-        expect(adapter.fetchSwapHistory).toBeTypeOf('function')
-        // Distinguish from the ponder adapter by behavior: durianfun's adapter returns
-        // empty immediately when called without a market, ponder's does a network fetch.
-        expect(adapter).not.toBe(resolvePlatformAdapter('junoswap', false, undefined))
+    it('routes non-graduated durianfun tokens to the ponder adapter (indexed since SDK 0.50.0)', () => {
+        const durianfun = resolvePlatformAdapter('durianfun', false, MARKET)
+        const junoswap = resolvePlatformAdapter('junoswap', false, undefined)
+        expect(durianfun).toBe(junoswap)
     })
 
     it('falls back to the ponder adapter once a durianfun token has graduated', () => {
@@ -49,7 +47,7 @@ describe('resolvePlatformAdapter', () => {
 })
 
 describe('isThirdPartyDataUnavailable', () => {
-    it('is false for a platform with a registered adapter', () => {
+    it('is false for durianfun (indexed by ponder since SDK 0.50.0)', () => {
         expect(isThirdPartyDataUnavailable('durianfun', false, MARKET)).toBe(false)
     })
 

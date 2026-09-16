@@ -19,8 +19,12 @@ export interface LaunchToken {
     isGraduated?: boolean
     /** Which launchpad minted this token. Absent means 'junoswap' (the original source). */
     platform?: LaunchpadPlatform
-    /** Third-party bonding-curve market contract for this token (durianfun only). */
+    /** Third-party bonding-curve market contract for this token, pre-graduation. */
     market?: Address
+    /** Graduated pool address, indexed for any platform — read this instead of guessing a
+     *  fee tier to find the pool. */
+    ammPool?: Address
+    graduationTarget?: number | null
 }
 
 export type LaunchpadSortKey = 'last-trade' | 'market-cap' | 'new' | 'oldest'
