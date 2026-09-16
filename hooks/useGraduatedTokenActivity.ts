@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import {
     fetchBondingCurvePricesSince,
-    fetchV3PricesSince,
+    fetchV3History,
     fetchTokenV3Swaps,
     computeCurve,
 } from '@coshi190/juno-moneta-sdk'
@@ -14,6 +14,7 @@ import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
 import { ponderClient, isPonderError } from '@/lib/ponder-client'
 import {
     aggregatePricePoints,
+    buildHourlySparkline,
     computeDailyMetrics,
     type PricePoint,
 } from '@/services/launchpad/chart'
@@ -24,6 +25,8 @@ export interface GraduatedTokenActivity {
     lastSwapAt: number
     priceChange1dPct: number | null
     marketCap: number | null
+    athMarketCap: number | null
+    sparklinePath: string | null
 }
 
 export interface GraduatedTokenInput {
@@ -42,17 +45,12 @@ async function fetchTokenActivity(
     since: number
 ): Promise<GraduatedTokenActivity> {
     try {
-        // Querying v3Points from exactly `since` (the same cutoff computeDailyMetrics uses for
-        // "24h ago") leaves no point *before* the cutoff to anchor against -- a token with a
-        // single trade inside the window then has priceThen === priceNow, always reading 0%. Look
-        // further back (capped at 30 days, or graduation if more recent) so a real anchor exists;
-        // computeDailyMetrics still only counts volume/change within the actual 24h window.
-        const historyStart = Math.max(graduatedAt ?? 0, since - DAY_SECONDS * 29)
-        const v3Points = await fetchV3PricesSince(ponderClient, {
-            tokenAddr,
-            chainId,
-            since: historyStart,
-        })
+        // Full history via fetchV3History (auto-paginates, same function the token detail page
+        // uses), not fetchV3PricesSince -- that one is a single unpaginated page capped at 1000
+        // rows ordered oldest-first, so any token with >1000 post-graduation swaps silently lost
+        // everything after the 1000th (breaking both the 24h-change recency and the ATH, which is
+        // why the list page's ATH used to read lower than the detail page's true full-history max).
+        const v3Points = await fetchV3History(ponderClient, { tokenAddr, chainId })
         const points: PricePoint[] = v3Points.map((e) => ({
             timestamp: e.timestamp,
             price: computePoolPrice({
@@ -78,7 +76,14 @@ async function fetchTokenActivity(
             points.sort((a, b) => a.timestamp - b.timestamp)
         }
 
-        const metrics = computeDailyMetrics(aggregatePricePoints(points, '1h'), null)
+        const hourly = aggregatePricePoints(points, '1h')
+        const metrics = computeDailyMetrics(hourly, null)
+
+        let athPrice = 0
+        for (const p of points) if (p.price > athPrice) athPrice = p.price
+        const athMarketCap = athPrice > 0 ? athPrice * TOTAL_SUPPLY : null
+
+        const sparklinePath = buildHourlySparkline(hourly)
 
         const latest = await fetchTokenV3Swaps(ponderClient, {
             tokenAddr,
@@ -101,10 +106,22 @@ async function fetchTokenActivity(
               }) * TOTAL_SUPPLY
             : null
 
-        return { lastSwapAt, priceChange1dPct: metrics?.priceChange1dPct ?? null, marketCap }
+        return {
+            lastSwapAt,
+            priceChange1dPct: metrics?.priceChange1dPct ?? null,
+            marketCap,
+            athMarketCap,
+            sparklinePath,
+        }
     } catch (e) {
         if (isPonderError(e))
-            return { lastSwapAt: graduatedAt ?? 0, priceChange1dPct: null, marketCap: null }
+            return {
+                lastSwapAt: graduatedAt ?? 0,
+                priceChange1dPct: null,
+                marketCap: null,
+                athMarketCap: null,
+                sparklinePath: null,
+            }
         throw e
     }
 }

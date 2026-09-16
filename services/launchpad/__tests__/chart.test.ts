@@ -5,10 +5,13 @@ import {
     aggregateV3Candlesticks,
     buildContinuousSeries,
     buildCreatorMarkers,
+    buildSparklinePath,
     computeDailyMetrics,
     computeFeeBreakdown,
+    downsamplePrices,
     extractCreatorTrades,
     sanitizeCandles,
+    splitSparklineByDirection,
     stitchCandlesticks,
     tokenNativeCandles,
     ratioCandles,
@@ -338,6 +341,62 @@ describe('computeFeeBreakdown', () => {
         expect(tokenFees).toBeCloseTo(5, 10) // 1% of 500 tokens
         // 1% of (100 KUB buy in + 40 KUB sell out)
         expect(totalNative).toBeCloseTo(1.4, 10)
+    })
+})
+
+describe('downsamplePrices', () => {
+    it('returns the series unchanged when already small enough', () => {
+        expect(downsamplePrices([1, 2, 3], 12)).toEqual([1, 2, 3])
+    })
+
+    it('keeps a single-sample spike and dip that even spacing would skip', () => {
+        const prices = Array.from({ length: 100 }, () => 10)
+        prices[37] = 50
+        prices[63] = 1
+        const sampled = downsamplePrices(prices, 5)
+        expect(sampled).toContain(50)
+        expect(sampled).toContain(1)
+        expect(sampled.length).toBeLessThanOrEqual(12)
+    })
+
+    it('always keeps the first and last price, in order', () => {
+        const prices = Array.from({ length: 100 }, (_, i) => Math.sin(i) + i / 10)
+        const sampled = downsamplePrices(prices, 5)
+        expect(sampled[0]).toBe(prices[0])
+        expect(sampled.at(-1)).toBe(prices[99])
+    })
+})
+
+describe('buildSparklinePath', () => {
+    it('returns null for fewer than 2 points', () => {
+        expect(buildSparklinePath([])).toBeNull()
+        expect(buildSparklinePath([5])).toBeNull()
+    })
+
+    it('maps min/max price to the bottom/top of the viewBox', () => {
+        const path = buildSparklinePath([1, 5, 3])
+        expect(path).toBe('M4,100 L52,12 L100,56')
+    })
+
+    it('draws a flat middle line for a constant series (no div-by-zero)', () => {
+        const path = buildSparklinePath([2, 2, 2])
+        expect(path).toBe('M4,56 L52,56 L100,56')
+    })
+})
+
+describe('splitSparklineByDirection', () => {
+    it('groups consecutive rising/falling segments, sharing the turning point', () => {
+        expect(splitSparklineByDirection('M0,50 L10,40 L20,30 L30,60 L40,20')).toEqual([
+            { d: 'M0,50 L10,40 L20,30', isUp: true },
+            { d: 'M20,30 L30,60', isUp: false },
+            { d: 'M30,60 L40,20', isUp: true },
+        ])
+    })
+
+    it('folds flat segments into the preceding run', () => {
+        expect(splitSparklineByDirection('M0,50 L10,60 L20,60')).toEqual([
+            { d: 'M0,50 L10,60 L20,60', isUp: false },
+        ])
     })
 })
 

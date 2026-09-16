@@ -52,33 +52,6 @@ function LogoMark({ size = 24 }: { size?: number }) {
     )
 }
 
-// Meme-style "stonks" line scribbled across the token image on the share card -- decorative,
-// not real price data (the dialog doesn't have chart history), so a fixed jagged path is enough.
-// Direction/color follow priceChange1dPct so it still reads as "up" or "down" at a glance.
-const CHART_OVERLAY_PATH_UP = 'M4,92 L20,78 L32,86 L46,58 L58,66 L72,32 L84,40 L100,12'
-const CHART_OVERLAY_PATH_DOWN = 'M4,20 L20,34 L32,26 L46,54 L58,46 L72,80 L84,72 L100,100'
-
-function ChartOverlay({ isUp }: { isUp: boolean }) {
-    const color = isUp ? '#4ade80' : '#f87171'
-    return (
-        <svg
-            viewBox="0 0 112 112"
-            className="pointer-events-none absolute inset-1.5 h-28 w-28"
-            aria-hidden="true"
-        >
-            <path
-                d={isUp ? CHART_OVERLAY_PATH_UP : CHART_OVERLAY_PATH_DOWN}
-                fill="none"
-                stroke={color}
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ filter: `drop-shadow(0 0 4px ${color})` }}
-            />
-        </svg>
-    )
-}
-
 export function ShareTokenDialog({
     open,
     onOpenChange,
@@ -225,7 +198,7 @@ export function ShareTokenDialog({
                                     <ArrowRight className="h-3 w-3" />
                                 </div>
                             </div>
-                            <div className="relative shrink-0 rounded-2xl border border-white/10 bg-white/5 p-1.5">
+                            <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 p-1.5">
                                 {logoDataUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element -- data URL captured by html-to-image; next/image would defeat the purpose
                                     <img
@@ -242,9 +215,6 @@ export function ShareTokenDialog({
                                         className="h-28 w-28 rounded-xl"
                                     />
                                 )}
-                                <ChartOverlay
-                                    isUp={priceChange1dPct == null || priceChange1dPct >= 0}
-                                />
                             </div>
                         </div>
                     </div>

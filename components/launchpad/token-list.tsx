@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
+import { useCurveTokenSparklines } from '@/hooks/useCurveTokenSparklines'
 import { useLaunchpadChainId } from '@/hooks/useLaunchpadChainId'
 import type { LaunchpadPlatformFilter, LaunchpadSortKey } from '@/types/launchpad'
 import { TokenCard } from './token-card'
@@ -29,29 +30,40 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
         [tokens]
     )
     const liveActivity = useGraduatedTokenActivity(graduatedTokens, chainId)
+    const curveTokenAddrs = useMemo(
+        () => tokens.filter((t) => !t.isGraduated).map((t) => t.address),
+        [tokens]
+    )
+    const curveSparklines = useCurveTokenSparklines(curveTokenAddrs, chainId)
 
     const enrichedTokens = useMemo(() => {
         return tokens.map((token) => {
             const snapshot = snapshotMap.get(token.address.toLowerCase())
             const activity = liveActivity.get(token.address.toLowerCase())
             const liveMarketCap = activity?.marketCap
+            const lastSwapAt = activity?.lastSwapAt ?? snapshot?.lastSwapAt ?? 0
 
             return {
                 token,
                 tokenName: token.name,
                 tokenSymbol: token.symbol,
                 isGraduated: !!token.isGraduated,
+                lastSwapAt,
                 marketCap:
                     liveMarketCap != null ? String(liveMarketCap) : snapshot?.marketCapNative,
                 athMarketCap:
-                    liveMarketCap != null && snapshot?.athMarketCapNative
-                        ? String(Math.max(liveMarketCap, parseFloat(snapshot.athMarketCapNative)))
+                    activity?.athMarketCap != null
+                        ? String(activity.athMarketCap)
                         : snapshot?.athMarketCapNative,
                 priceChange1dPct:
                     activity?.priceChange1dPct ?? snapshot?.priceChange1dPct ?? undefined,
+                sparklinePath:
+                    activity?.sparklinePath ??
+                    curveSparklines.get(token.address.toLowerCase()) ??
+                    null,
             }
         })
-    }, [tokens, snapshotMap, liveActivity])
+    }, [tokens, snapshotMap, liveActivity, curveSparklines])
 
     const filtered = useMemo(() => {
         const byPlatform = enrichedTokens.filter(({ token }) => {
@@ -73,18 +85,9 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
     const sorted = useMemo(() => {
         return [...filtered].sort((a, b) => {
             switch (sortKey) {
-                case 'last-trade': {
-                    const aLast =
-                        liveActivity.get(a.token.address.toLowerCase())?.lastSwapAt ??
-                        snapshotMap.get(a.token.address.toLowerCase())?.lastSwapAt ??
-                        0
-                    const bLast =
-                        liveActivity.get(b.token.address.toLowerCase())?.lastSwapAt ??
-                        snapshotMap.get(b.token.address.toLowerCase())?.lastSwapAt ??
-                        0
-                    if (bLast !== aLast) return bLast - aLast
+                case 'last-trade':
+                    if (b.lastSwapAt !== a.lastSwapAt) return b.lastSwapAt - a.lastSwapAt
                     return b.token.createdTime - a.token.createdTime
-                }
                 case 'market-cap': {
                     const aMc = parseFloat(a.marketCap ?? '0')
                     const bMc = parseFloat(b.marketCap ?? '0')
@@ -96,7 +99,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                     return a.token.createdTime - b.token.createdTime
             }
         })
-    }, [filtered, sortKey, snapshotMap, liveActivity])
+    }, [filtered, sortKey])
 
     if (isLoading) {
         return <TokenListSkeleton />
@@ -128,16 +131,18 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                 <SortTabs value={sortKey} onChange={setSortKey} />
                 <PlatformFilter value={platformFilter} onChange={setPlatformFilter} />
             </div>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {sorted.map(
                     ({
                         token,
                         tokenName,
                         tokenSymbol,
                         isGraduated,
+                        lastSwapAt,
                         marketCap,
                         athMarketCap,
                         priceChange1dPct,
+                        sparklinePath,
                     }) => {
                         return (
                             <TokenCard
@@ -148,7 +153,9 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                                 marketCap={marketCap}
                                 athMarketCap={athMarketCap}
                                 isGraduated={isGraduated}
+                                lastSwapAt={lastSwapAt}
                                 priceChange1dPct={priceChange1dPct}
+                                sparklinePath={sparklinePath}
                             />
                         )
                     }
@@ -168,19 +175,16 @@ function TokenListSkeleton() {
                     ))}
                 </div>
             </div>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                    <Card key={i}>
-                        <CardContent className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
-                            <div className="h-24 w-24 shrink-0 animate-pulse rounded-xl bg-muted lg:h-[120px] lg:w-[120px]" />
-                            <div className="flex min-w-0 flex-1 flex-col self-stretch py-1">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {Array.from({ length: 12 }, (_, i) => i).map((i) => (
+                    <Card key={i} className="overflow-hidden">
+                        <CardContent className="p-0">
+                            <div className="aspect-square w-full animate-pulse bg-muted" />
+                            <div className="space-y-1.5 p-3">
                                 <div className="h-4 w-16 animate-pulse rounded bg-muted" />
-                                <div className="mt-1.5 h-3 w-32 animate-pulse rounded bg-muted" />
-                                <div className="mt-auto space-y-1.5 pt-3">
-                                    <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-                                    <div className="h-5 w-24 animate-pulse rounded bg-muted" />
-                                    <div className="h-1 w-full animate-pulse rounded-full bg-muted" />
-                                </div>
+                                <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+                                <div className="h-5 w-20 animate-pulse rounded bg-muted" />
+                                <div className="h-1 w-full animate-pulse rounded-full bg-muted" />
                             </div>
                         </CardContent>
                     </Card>

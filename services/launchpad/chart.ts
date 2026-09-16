@@ -500,6 +500,73 @@ export function computeAthMarketCap(
     return ath
 }
 
+/** Downsamples a chronological price series into `bucketCount` buckets, keeping each bucket's
+ *  min and max (in original order) plus the first and last price -- so spikes and dips survive
+ *  and the line still ends on the current price. Returns at most bucketCount * 2 + 2 points. */
+export function downsamplePrices(prices: number[], bucketCount = 24): number[] {
+    if (prices.length <= bucketCount * 2) return prices
+    const size = prices.length / bucketCount
+    const keep = new Set([0, prices.length - 1])
+    for (let b = 0; b < bucketCount; b++) {
+        const start = Math.floor(b * size)
+        const end = Math.floor((b + 1) * size)
+        let lo = start
+        let hi = start
+        for (let i = start + 1; i < end; i++) {
+            if (prices[i]! < prices[lo]!) lo = i
+            if (prices[i]! > prices[hi]!) hi = i
+        }
+        keep.add(lo).add(hi)
+    }
+    return [...keep].sort((a, b) => a - b).map((i) => prices[i]!)
+}
+
+/** Real-data equivalent of the fixed decorative path in TokenCard's ChartOverlay -- an SVG path
+ *  string over a 0-112 viewBox tracing actual price samples (normalized to the min/max of the
+ *  series, since only the trend shape matters here, not absolute values). */
+export function buildSparklinePath(prices: number[]): string | null {
+    if (prices.length < 2) return null
+
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    const range = max - min
+
+    const points = prices.map((price, i) => {
+        const x = (i / (prices.length - 1)) * 96 + 4
+        // Flat series (range === 0) draws a straight line across the middle rather than div-by-0.
+        const y = range > 0 ? 100 - ((price - min) / range) * 88 : 56
+        return `${x},${y}`
+    })
+
+    return `M${points.join(' L')}`
+}
+
+export const SPARKLINE_HOURS = 24 * 7
+
+/** Token-card sparkline from sparse hourly candles: last 7 days on a gap-filled time axis (quiet
+ *  stretches read flat instead of being squeezed out), downsampled so spikes survive. */
+export function buildHourlySparkline(hourly: CandlestickData[]): string | null {
+    const closes = buildContinuousSeries(hourly, '1h', SPARKLINE_HOURS).map((c) => c.close)
+    return buildSparklinePath(downsamplePrices(closes))
+}
+
+/** Splits an "Mx,y Lx,y ..." sparkline path into runs of rising/falling segments so each run can
+ *  be colored like a candle. SVG y grows downward, so a smaller y means the price went up. Flat
+ *  segments join the run before them. */
+export function splitSparklineByDirection(path: string): { d: string; isUp: boolean }[] {
+    const points = path.slice(1).split(' L')
+    const runs: { d: string; isUp: boolean }[] = []
+    for (let i = 1; i < points.length; i++) {
+        const prevY = parseFloat(points[i - 1]!.split(',')[1]!)
+        const y = parseFloat(points[i]!.split(',')[1]!)
+        const last = runs.at(-1)
+        const isUp = y === prevY ? (last?.isUp ?? true) : y < prevY
+        if (last?.isUp === isUp) last.d += ` L${points[i]}`
+        else runs.push({ d: `M${points[i - 1]} L${points[i]}`, isUp })
+    }
+    return runs
+}
+
 export function computeDailyMetrics(
     candles: CandlestickData[],
     usdPrice: number | null
