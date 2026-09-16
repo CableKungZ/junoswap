@@ -74,3 +74,13 @@ export function fullErrorLog(error: unknown): string {
     if (err.details && !parts[0]?.includes(err.details)) parts.push(`Details: ${err.details}`)
     return parts.filter(Boolean).join('\n\n')
 }
+
+/**
+ * Eased progress of a count-up, kept pure so the hook around it stays a thin
+ * requestAnimationFrame wrapper with nothing to test.
+ */
+export function countValue(to: number, elapsed: number, duration: number): number {
+    if (duration <= 0 || !Number.isFinite(to)) return to
+    const t = Math.min(1, Math.max(0, elapsed / duration))
+    return to * (1 - Math.pow(1 - t, 3))
+}

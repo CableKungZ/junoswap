@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { txPhase, parseRevertReason, isUserRejection } from '@/lib/tx-flow'
+import { txPhase, parseRevertReason, isUserRejection, countValue } from '@/lib/tx-flow'
 
 const HASH = '0x7f3a000000000000000000000000000000000000000000000000000000000c21' as const
 
@@ -64,5 +64,24 @@ describe('isUserRejection', () => {
 
     it('does not treat a revert as a rejection', () => {
         expect(isUserRejection(new Error('Error: Too little received'))).toBe(false)
+    })
+})
+
+describe('countValue', () => {
+    it('starts at zero and finishes exactly on the target', () => {
+        expect(countValue(318.42, 0, 1200)).toBe(0)
+        expect(countValue(318.42, 1200, 1200)).toBeCloseTo(318.42, 10)
+    })
+
+    it('clamps past the end instead of overshooting', () => {
+        expect(countValue(100, 5000, 1200)).toBe(100)
+    })
+
+    it('eases out, so it is already past halfway at the midpoint', () => {
+        expect(countValue(100, 600, 1200)).toBeGreaterThan(50)
+    })
+
+    it('returns the target when there is no duration to animate over', () => {
+        expect(countValue(42, 0, 0)).toBe(42)
     })
 })
