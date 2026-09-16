@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Check, Loader2, X, ExternalLink, Volume2, VolumeX } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { toast, useSonner } from 'sonner'
+import { Check, Loader2, X, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getExplorerTxUrl } from '@/lib/explorer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { toastSuccess } from '@/lib/toast'
 import { TxStageFlow } from '@/components/ui/tx-stage'
 import { parseRevertReason, fullErrorLog, txPhase, type TxPhase, type TxFlags } from '@/lib/tx-flow'
-import { playTxSound, isTxSoundEnabled, setTxSoundEnabled } from '@/lib/tx-sfx'
 import type { Address } from 'viem'
+
+const COPY_TOAST_ID = 'tx-flow-copy'
 
 export interface TxStep {
     label: string
@@ -28,7 +29,7 @@ export interface TxStep {
  * lives here rather than being retyped at each call site.
  */
 export function approvalStep(input: {
-    token: { symbol: string; logoURI?: string | null }
+    token: { symbol: string; logo?: string | null }
     spenderLabel: string
     spender?: Address
     chainId: number
@@ -150,7 +151,7 @@ function TxErrorPanel({ error }: { error: unknown }) {
                     type="button"
                     onClick={() => {
                         navigator.clipboard.writeText(log)
-                        toastSuccess('Error copied to clipboard')
+                        toast.success('Error copied to clipboard', { id: COPY_TOAST_ID })
                     }}
                     className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
                 >
@@ -182,23 +183,21 @@ export function TxFlowDialog({
     const live = steps[liveIndex]
     const phase = live?.phase ?? 'idle'
 
-    const [soundOn, setSoundOn] = useState(true)
-    // Read after mount: localStorage during render would not match the server's HTML.
-    useEffect(() => setSoundOn(isTxSoundEnabled()), [])
-
-    const lastPhase = useRef<TxPhase>('idle')
-    useEffect(() => {
-        if (!open || phase === lastPhase.current) return
-        lastPhase.current = phase
-        if (phase === 'pending') playTxSound('submit')
-        // A step landing mid-flow is a tick; the last one landing is the reward.
-        else if (phase === 'success') playTxSound(allDone ? 'success' : 'step')
-        else if (phase === 'error' || phase === 'sim-error') playTxSound('error')
-    }, [open, phase, allDone])
-
-    useEffect(() => {
-        if (!open) lastPhase.current = 'idle'
-    }, [open])
+    // Call sites still toast their results for flows without this dialog; while it is open
+    // it already shows each result (with the full log), so those toasts only repeat it.
+    // Layout effect so they are gone before paint. Toasts from before it opened are left.
+    const { toasts } = useSonner()
+    const toastsBeforeOpen = useRef<Set<string | number> | null>(null)
+    useLayoutEffect(() => {
+        if (!open) {
+            toastsBeforeOpen.current = null
+            return
+        }
+        toastsBeforeOpen.current ??= new Set(toasts.map((t) => t.id))
+        for (const t of toasts) {
+            if (t.id !== COPY_TOAST_ID && !toastsBeforeOpen.current.has(t.id)) toast.dismiss(t.id)
+        }
+    }, [open, toasts])
 
     if (!live) return null
 
@@ -232,40 +231,31 @@ export function TxFlowDialog({
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
                 className={cn(
-                    'max-w-sm gap-0 p-0',
+                    'max-w-lg gap-0 overflow-hidden rounded-[1.65rem] border-white/10 bg-background/95 p-0 shadow-2xl shadow-black/30 backdrop-blur-xl',
                     phase === 'error' && 'animate-tx-shake',
                     isBusyNow && '[&>button]:hidden'
                 )}
                 onInteractOutside={(e) => isBusyNow && e.preventDefault()}
                 onEscapeKeyDown={(e) => isBusyNow && e.preventDefault()}
             >
-                <DialogHeader className="px-5 pt-4">
-                    <div className="flex items-center justify-between gap-3 pr-6">
-                        <DialogTitle className="text-base">{title}</DialogTitle>
-                        <button
-                            type="button"
-                            aria-label={
-                                soundOn ? 'Mute transaction sounds' : 'Unmute transaction sounds'
-                            }
-                            aria-pressed={soundOn}
-                            onClick={() => {
-                                const next = !soundOn
-                                setTxSoundEnabled(next)
-                                setSoundOn(next)
-                                if (next) playTxSound('step')
-                            }}
-                            className="text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                            {soundOn ? (
-                                <Volume2 className="h-4 w-4" />
-                            ) : (
-                                <VolumeX className="h-4 w-4" />
-                            )}
-                        </button>
+                <DialogHeader className="relative overflow-hidden border-b border-border/60 px-6 pb-5 pt-6">
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute -right-16 -top-24 h-48 w-48 rounded-full bg-primary/15 blur-3xl"
+                    />
+                    <div className="relative">
+                        <div className="grid gap-2">
+                            <DialogTitle className="text-xl font-semibold tracking-tight">
+                                {title}
+                            </DialogTitle>
+                            <p className="text-xs text-muted-foreground">
+                                Review the details below while your transaction completes.
+                            </p>
+                        </div>
                     </div>
                 </DialogHeader>
 
-                <div className="grid gap-3.5 px-5 pb-5 pt-4">
+                <div className="grid gap-4 px-6 pb-6 pt-5">
                     {phase === 'sim-error' ? (
                         <div className="grid min-h-[148px] content-center gap-3.5 rounded-[calc(var(--radius)-1px)] border border-border bg-secondary/40 px-[18px] py-4">
                             <TxErrorPanel error={live.error} />
@@ -278,13 +268,24 @@ export function TxFlowDialog({
                         {steps.map((step, i) => (
                             <div key={step.label}>
                                 {i > 0 && (
-                                    <div className="relative mx-auto h-5 w-[1.5px] overflow-hidden bg-border">
+                                    <div className="relative mx-auto h-5 w-[2px] overflow-hidden rounded-full bg-border/70">
                                         {steps[i - 1]!.phase === 'success' && (
                                             <span className="absolute inset-0 scale-y-0 bg-positive animate-tx-srail" />
                                         )}
                                     </div>
                                 )}
-                                <div className="grid grid-cols-[26px_1fr_auto] items-center gap-3">
+                                <div
+                                    className={cn(
+                                        'grid grid-cols-[30px_1fr_auto] items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors',
+                                        step.phase === 'success' &&
+                                            'border-positive/20 bg-positive/[0.045]',
+                                        step.phase === 'pending' &&
+                                            'border-primary/25 bg-primary/[0.06]',
+                                        (step.phase === 'error' || step.phase === 'sim-error') &&
+                                            'border-negative/25 bg-negative/[0.06]',
+                                        step.phase === 'idle' && 'border-border/60 bg-muted/20'
+                                    )}
+                                >
                                     <span
                                         className={cn(
                                             'grid h-[26px] w-[26px] place-items-center rounded-full border-[1.5px] bg-background',
@@ -356,10 +357,10 @@ export function TxFlowDialog({
                                 href={getExplorerTxUrl(chainId, live.hash)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1.5 rounded-[calc(var(--radius)-2px)] border border-border py-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-muted/20 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.05] hover:text-foreground"
                             >
                                 View on explorer
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <ArrowUpRight className="h-3.5 w-3.5" />
                             </a>
                         )}
                     </div>
