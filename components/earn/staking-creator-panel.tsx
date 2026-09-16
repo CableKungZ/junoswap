@@ -26,6 +26,9 @@ import { formatBalance, parseTokenAmount } from '@/lib/tokens'
 import { formatDateTime, formatDuration } from '@/lib/duration'
 import { formatExactAmount, formatRateAmount } from '@/lib/format'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { txPhase } from '@/lib/tx-flow'
+import { TxFlowDialog, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow, TxStageRecord } from '@/components/ui/tx-stage'
 import type { StakingPool } from '@/types/staking'
 
 const SECONDS_PER_DAY = 86_400
@@ -57,6 +60,14 @@ export function StakingCreatorPanel({
     const [startAt, setStartAt] = useState('')
     const [capValue, setCapValue] = useState('')
     const lastAction = useRef<'approve' | 'epoch' | null>(null)
+    const [txOpen, setTxOpen] = useState(false)
+    // useStartEpoch writes approve and startEpoch through one hook, so these say which
+    // step owns its flags and carry a landed step past the point where they move on.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
+    const [approveDone, setApproveDone] = useState(false)
+    const [epochDone, setEpochDone] = useState(false)
+    const [poolActionOpen, setPoolActionOpen] = useState(false)
+    const [poolActionLabel, setPoolActionLabel] = useState('Pool update')
 
     const epoch = useStartEpoch()
     const actions = useStakingPoolActions(pool.address, pool.view.stakingToken)
@@ -100,9 +111,11 @@ export function StakingCreatorPanel({
 
     useOnTxSuccess(true, epoch.isSuccess, epoch.hash, () => {
         if (lastAction.current === 'approve') {
+            setApproveDone(true)
             submitEpoch()
             return
         }
+        setEpochDone(true)
         toastSuccess('Next epoch funded')
         queryClient.invalidateQueries()
         setRewardAmount('')
@@ -138,8 +151,108 @@ export function StakingCreatorPanel({
         return null
     })()
 
+    const epochFlags = {
+        isPending: epoch.isPending,
+        isConfirming: epoch.isConfirming,
+        isError: !!epoch.error,
+        error: epoch.error,
+        hash: epoch.hash,
+    }
+    const runApprove = () => {
+        lastAction.current = 'approve'
+        epoch.approveReward(pool.view.rewardsToken)
+    }
+    const epochSteps: TxStep[] = []
+    if (flowNeedsApproval) {
+        epochSteps.push({
+            label: `Approve ${pool.rewardTokenInfo.symbol}`,
+            phase: approveDone ? 'success' : txPhase(epochFlags),
+            hash: approveDone ? undefined : epoch.hash,
+            error: epoch.error,
+            run: runApprove,
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    from={{ kind: 'token', token: pool.rewardTokenInfo, amount: 'Wallet' }}
+                    to={{
+                        kind: 'contract',
+                        label: 'Pool factory',
+                        address: epoch.factory,
+                        amount: 'Unlimited',
+                    }}
+                />
+            ),
+        })
+    }
+    epochSteps.push({
+        label: 'Fund next epoch',
+        phase: epochDone
+            ? 'success'
+            : flowNeedsApproval && !approveDone
+              ? 'idle'
+              : txPhase(epochFlags),
+        hash: epoch.hash,
+        error: epoch.error,
+        run: submitEpoch,
+        renderStage: (phase) => (
+            <TxStageRecord
+                phase={phase}
+                chainId={chainId}
+                hash={epoch.hash}
+                rows={[
+                    ['Pool', `${pool.stakingTokenInfo.symbol} pool`],
+                    ['Reward', `${rewardAmount || '0'} ${pool.rewardTokenInfo.symbol}`],
+                    ['Duration', `${durationValue || '0'} ${durationUnit}`],
+                    ['Lock', lock > 0 ? `${lockValue} ${lockUnit}` : 'None'],
+                ]}
+            />
+        ),
+    })
+
+    // close() and recoverUnallocatedRewards() share one hook, so the label says which ran.
+    const poolActionSteps = [
+        actionStep({
+            label: poolActionLabel,
+            flags: {
+                isPending: actions.isPending,
+                isConfirming: actions.isConfirming,
+                isSuccess: actions.isSuccess,
+                isError: !!actions.error,
+                error: actions.error,
+                hash: actions.hash,
+            },
+            run: () => {},
+            renderStage: (phase) => (
+                <TxStageRecord
+                    phase={phase}
+                    chainId={chainId}
+                    hash={actions.hash}
+                    rows={[
+                        ['Pool', `${pool.stakingTokenInfo.symbol} pool`],
+                        ['Action', poolActionLabel],
+                    ]}
+                />
+            ),
+        }),
+    ]
+
     return (
         <div className="space-y-5">
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Fund next epoch"
+                steps={epochSteps}
+                chainId={chainId}
+            />
+            <TxFlowDialog
+                open={poolActionOpen}
+                onOpenChange={setPoolActionOpen}
+                title={poolActionLabel}
+                steps={poolActionSteps}
+                chainId={chainId}
+            />
             <div className="rounded-2xl border border-border/50 bg-muted/20 p-3 text-xs">
                 <div className="flex items-baseline justify-between">
                     <span className="text-muted-foreground">Running epoch</span>
@@ -277,6 +390,10 @@ export function StakingCreatorPanel({
                         isLoading={isBusy}
                         onClick={() => {
                             if (epochBlocker) return
+                            setTxOpen(true)
+                            setFlowNeedsApproval(needsApproval)
+                            setApproveDone(false)
+                            setEpochDone(false)
                             if (needsApproval) {
                                 lastAction.current = 'approve'
                                 epoch.approveReward(pool.view.rewardsToken)
@@ -300,7 +417,11 @@ export function StakingCreatorPanel({
                     size="lg"
                     disabled={actions.isPending || actions.isConfirming}
                     isLoading={actions.isPending || actions.isConfirming}
-                    onClick={() => actions.recoverUnallocated()}
+                    onClick={() => {
+                        setPoolActionLabel('Recover unallocated rewards')
+                        setPoolActionOpen(true)
+                        actions.recoverUnallocated()
+                    }}
                 >
                     Recover{' '}
                     {formatBalance(pool.view.unallocatedRewards, pool.rewardTokenInfo.decimals)}{' '}
@@ -317,7 +438,11 @@ export function StakingCreatorPanel({
                             size="sm"
                             className="border-destructive/40 text-destructive hover:bg-destructive/10"
                             disabled={!isBetweenEpochs || actions.isPending || actions.isConfirming}
-                            onClick={() => actions.close()}
+                            onClick={() => {
+                                setPoolActionLabel('Retire pool')
+                                setPoolActionOpen(true)
+                                actions.close()
+                            }}
                         >
                             Retire
                         </Button>
