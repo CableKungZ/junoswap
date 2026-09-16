@@ -339,7 +339,13 @@ export function TokenTradeCard({
         deadlineMinutes: settings.deadlineMinutes,
         fee: poolFee ?? 10000,
         dexId: launchpadDex,
-        forceUnwrapNative: true,
+        // Junoswap's own V3 router needs an explicit unwrap step on this chain (the SDK
+        // defaults to skipping it). Third-party routers (e.g. Kublerx) must NOT be forced
+        // through this: Kublerx's unwrapWETH9 reverts for any wallet without exchange KYC
+        // ("only kyc address registered with phone number can withdraw"), which made every
+        // sell of a graduated Kublerx token fail. Those sells fall back to the SDK's default
+        // (skip unwrap) and the user receives wrapped native instead of a native KUB payout.
+        forceUnwrapNative: launchpadDex === 'junoswap',
         skipSimulation: !v3BuyEnabled || needsSellApproval,
     })
 
