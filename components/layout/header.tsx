@@ -74,14 +74,10 @@ const socialLinks = [
     },
 ]
 
-const NAV_ICON_GRADIENT = 'nav-icon-gradient'
-// Inline, not a Tailwind arbitrary class: the class name would be built from a template literal
-// and the JIT scanner only matches literals, so the rule would never be generated.
-const NAV_ICON_STROKE = { stroke: `url(#${NAV_ICON_GRADIENT})` }
 const NAV_ICON_CLASS =
-    'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] transition-[filter,transform] duration-300 ' +
-    'group-hover:-translate-y-0.5 group-hover:[filter:drop-shadow(0_0_7px_rgba(255,122,61,0.75))] ' +
-    'group-active:[filter:drop-shadow(0_0_10px_rgba(245,72,75,0.85))]'
+    'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] text-[#FF3131] transition-[filter,transform] duration-300 ' +
+    'group-hover:-translate-y-0.5 group-hover:[filter:drop-shadow(0_0_7px_rgba(255,49,49,0.75))] ' +
+    'group-active:[filter:drop-shadow(0_0_10px_rgba(255,49,49,0.9))]'
 
 export function Header() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -217,17 +213,6 @@ export function Header() {
             </header>
 
             <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-border/60 bg-background/95 pt-[min(2vw,8px)] pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                {/* A paint server the icons below reference by id — lucide strokes with
-                    currentColor, which cannot hold a gradient on its own. */}
-                <svg aria-hidden className="pointer-events-none absolute h-0 w-0">
-                    <defs>
-                        <linearGradient id={NAV_ICON_GRADIENT} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#FFB347" />
-                            <stop offset="55%" stopColor="#FF7A3D" />
-                            <stop offset="100%" stopColor="#F5484B" />
-                        </linearGradient>
-                    </defs>
-                </svg>
                 {primaryNav.map((link) => {
                     const isActive = pathname === link.href
                     const Icon = link.icon
@@ -239,7 +224,7 @@ export function Header() {
                                 isActive ? 'text-foreground' : 'text-muted-foreground'
                             }`}
                         >
-                            <Icon className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
+                            <Icon className={NAV_ICON_CLASS} />
                             <span className="max-w-full truncate">{link.label}</span>
                         </Link>
                     )
@@ -252,7 +237,7 @@ export function Header() {
                                 : 'text-muted-foreground'
                         }`}
                     >
-                        <LayoutGrid className={NAV_ICON_CLASS} style={NAV_ICON_STROKE} />
+                        <LayoutGrid className={NAV_ICON_CLASS} />
                         <span className="max-w-full truncate">More</span>
                     </SheetTrigger>
                     <SheetContent
@@ -273,7 +258,7 @@ export function Header() {
                                             isActive ? 'text-foreground' : 'text-muted-foreground'
                                         }`}
                                     >
-                                        <Icon className="h-5 w-5" style={NAV_ICON_STROKE} />
+                                        <Icon className="h-5 w-5 text-[#FF3131]" />
                                         {link.label}
                                     </Link>
                                 )

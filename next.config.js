@@ -8,6 +8,7 @@ const nextConfig = {
             { protocol: 'https', hostname: 'coin-images.coingecko.com' },
             { protocol: 'https', hostname: 'raw.githubusercontent.com' },
             { protocol: 'https', hostname: 'dd.dexscreener.com' },
+            { protocol: 'https', hostname: '*.r2.dev' }, // Durianfun token logos (Cloudflare R2)
         ],
         minimumCacheTTL: 2592000,
         dangerouslyAllowSVG: true,

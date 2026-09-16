@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { tokenHue } from '@/lib/token-color'
 
-type TokenIconSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+type TokenIconSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 
 const SIZE_MAP: Record<TokenIconSize, { container: string; text: string; sizes: string }> = {
     xs: { container: 'h-5 w-5', text: 'text-[9px]', sizes: '20px' },
@@ -13,6 +13,7 @@ const SIZE_MAP: Record<TokenIconSize, { container: string; text: string; sizes: 
     md: { container: 'h-9 w-9', text: 'text-[11px]', sizes: '36px' },
     lg: { container: 'h-12 w-12', text: 'text-sm', sizes: '48px' },
     xl: { container: 'h-20 w-20', text: 'text-xl', sizes: '120px' },
+    '2xl': { container: 'h-40 w-40', text: 'text-4xl', sizes: '(min-width: 640px) 20vw, 50vw' },
 }
 
 function getInitials(symbol: string | null | undefined): string {

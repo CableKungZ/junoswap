@@ -47,7 +47,7 @@ export async function getCurveState(
     const deployment = getBondingCurveDeployment(params.chainId)
     if (!deployment) return null
 
-    const abi = getAbi('bondingCurve') as Abi
+    const abi = getAbi('bondingCurveV1') as Abi
     const contracts: CurveCall[] = CURVE_GLOBALS.map((functionName) => ({
         address: deployment.address,
         abi,

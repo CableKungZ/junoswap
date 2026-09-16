@@ -1,5 +1,7 @@
 import type { Address } from 'viem'
 
+export type LaunchpadPlatform = 'junoswap' | 'durianfun'
+
 export interface LaunchToken {
     address: Address
     name: string
@@ -15,9 +17,18 @@ export interface LaunchToken {
     chainId: number
     graduatedAt?: number | null
     isGraduated?: boolean
+    /** Which launchpad minted this token. Absent means 'junoswap' (the original source). */
+    platform?: LaunchpadPlatform
+    /** Third-party bonding-curve market contract for this token, pre-graduation. */
+    market?: Address
+    /** Graduated pool address, indexed for any platform — read this instead of guessing a
+     *  fee tier to find the pool. */
+    ammPool?: Address
+    graduationTarget?: number | null
 }
 
 export type LaunchpadSortKey = 'last-trade' | 'market-cap' | 'new' | 'oldest'
+export type LaunchpadPlatformFilter = 'all' | 'junoswap' | 'third-party'
 
 export interface CreateTokenForm {
     name: string

@@ -13,6 +13,14 @@ export interface LaunchTokenEntity {
     isGraduated: number | null
     graduatedAt: number | null
     createdAtBlock: number
+    /** Which launchpad minted this token — 'junoswap' or a third party (e.g. 'durianfun'). */
+    launchpadId: string | null
+    /** Third-party bonding-curve market contract, pre-graduation (durianfun and future third parties). */
+    market: string | null
+    /** Graduated pool address, any platform — resolves the fee-tier-guessing that broke for
+     *  third-party dexes whose default fee tier doesn't match Junoswap's own. */
+    ammPool: string | null
+    graduationTarget: number | null
 }
 
 export const LAUNCH_TOKEN_DETAIL_FIELDS = [
@@ -28,6 +36,10 @@ export const LAUNCH_TOKEN_DETAIL_FIELDS = [
     'createdTime',
     'isGraduated',
     'graduatedAt',
+    'launchpadId',
+    'market',
+    'ammPool',
+    'graduationTarget',
 ] as const satisfies readonly (keyof LaunchTokenEntity)[]
 
 export const LAUNCH_TOKEN_META_FIELDS = [

@@ -25,7 +25,7 @@ function makeLog(address: Address, data: `0x${string}`, topics: `0x${string}`[])
 
 function creationLog(address: Address, tokenAddr: Address): Log {
     const topics = encodeEventTopics({
-        abi: getAbi('bondingCurve'),
+        abi: getAbi('bondingCurveV1'),
         eventName: 'Creation',
         args: { creator: CREATOR },
     })
@@ -45,7 +45,7 @@ function creationLog(address: Address, tokenAddr: Address): Log {
 }
 
 const CREATION = {
-    abi: getAbi('bondingCurve'),
+    abi: getAbi('bondingCurveV1'),
     eventName: 'Creation',
 } as const
 
@@ -93,7 +93,7 @@ describe('findEventArgs', () => {
         expect(findEventArgs([], { ...CREATION, address: CURVE })).toBeNull()
         expect(
             findEventArgs([creationLog(CURVE, TOKEN)], {
-                abi: getAbi('bondingCurve'),
+                abi: getAbi('bondingCurveV1'),
                 eventName: 'Swap',
                 address: CURVE,
             })

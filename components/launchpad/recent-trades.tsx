@@ -7,6 +7,8 @@ import { useAccount } from 'wagmi'
 
 import { useTokenSwapEvents } from '@/hooks/useTokenSwapEvents'
 import { useDebounce } from '@/hooks/useDebounce'
+import { isThirdPartyDataUnavailable } from '@/services/launchpad/platform-adapter'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 import { formatKub, formatTokenAmount, formatCompact } from '@/services/launchpad/launchpad'
 import { cn, formatTimeAgo, formatFullDate } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -68,6 +70,8 @@ interface RecentTradesProps {
     isGraduated?: boolean
     creatorAddress?: Address
     className?: string
+    market?: Address
+    platform?: LaunchpadPlatform
 }
 
 function TradeRow({
@@ -149,7 +153,7 @@ function TradeRow({
 function LoadingState() {
     return (
         <TableBody>
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
                 <TableRow key={i}>
                     <TableCell>
                         <div className="h-5 w-12 animate-pulse rounded bg-muted" />
@@ -182,6 +186,8 @@ export function RecentTrades({
     isGraduated,
     creatorAddress,
     className,
+    market,
+    platform,
 }: RecentTradesProps) {
     const [page, setPage] = useState(1)
     const [typeFilter, setTypeFilter] = useState('all')
@@ -212,6 +218,8 @@ export function RecentTrades({
         setPage(1)
     }, [filterKey])
 
+    const serviceUnavailable = isThirdPartyDataUnavailable(platform, isGraduated, market)
+
     const { data: result, isLoading } = useTokenSwapEvents(
         tokenAddr,
         page,
@@ -221,7 +229,9 @@ export function RecentTrades({
         {
             isBuy: hookIsBuyFilter,
             sender: hookSenderFilter,
-        }
+        },
+        market,
+        platform
     )
 
     const filteredTrades = useMemo(() => {
@@ -396,7 +406,10 @@ export function RecentTrades({
                 </div>
             </div>
 
-            <CardContent className="p-0">
+            {/* min-height covers a full 10-row table (440px) plus the pagination footer (53px) --
+                without the footer's share, the card shrinks during the loading flash (no footer
+                rendered yet) and grows once data + pagination land, producing a visible jump. */}
+            <CardContent className="min-h-[493px] p-0">
                 {isLoading ? (
                     <div className="px-2">
                         <Table>
@@ -408,6 +421,11 @@ export function RecentTrades({
                     <EmptyState
                         title="No matching trades"
                         description="Try adjusting your filters"
+                    />
+                ) : filteredTrades.length === 0 && serviceUnavailable ? (
+                    <EmptyState
+                        title="No service available"
+                        description="Trade history isn't supported for this platform yet"
                     />
                 ) : filteredTrades.length === 0 ? (
                     <EmptyState
