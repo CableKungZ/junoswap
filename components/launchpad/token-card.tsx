@@ -34,7 +34,7 @@ function ChartOverlay({ isUp, path }: { isUp: boolean; path?: string | null }) {
             viewBox="4 12 96 88"
             preserveAspectRatio="none"
             overflow="visible"
-            className="pointer-events-none absolute bottom-2 right-2 h-[30%] w-[44%]"
+            className="pointer-events-none absolute bottom-2 right-2 h-[30%] w-[44%] transition-all duration-300 group-hover:h-[46%] group-hover:w-[68%]"
             aria-hidden="true"
         >
             <path
@@ -76,6 +76,7 @@ interface TokenCardProps {
     lastSwapAt?: number
     priceChange1dPct?: number | null
     sparklinePath?: string | null
+    showGraphOverlay?: boolean
 }
 
 export function TokenCard({
@@ -88,6 +89,7 @@ export function TokenCard({
     lastSwapAt = 0,
     priceChange1dPct,
     sparklinePath,
+    showGraphOverlay = true,
 }: TokenCardProps) {
     // Play the push-in animation when a background refetch brings a newer trade. Graduated tokens
     // first render the indexer snapshot's (often stale) lastSwapAt before live activity loads, so a
@@ -134,7 +136,7 @@ export function TokenCard({
                             variant="square"
                             className="h-full w-full rounded-b-none"
                         />
-                        {(sparklinePath || priceChange1dPct != null) && (
+                        {showGraphOverlay && (sparklinePath || priceChange1dPct != null) && (
                             <ChartOverlay
                                 isUp={(priceChange1dPct ?? 0) >= 0}
                                 path={sparklinePath}
@@ -194,19 +196,17 @@ export function TokenCard({
                                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                                         Mcap
                                     </p>
-                                    <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight">
-                                        <span className="whitespace-nowrap">
-                                            {marketCap ? formatMarketCap(marketCap) : '—'}
-                                        </span>
-                                        {isDurianfun && marketCap && (
-                                            <DurianfunMcap
-                                                marketCap={parseFloat(marketCap)}
-                                                athMarketCap={athNum}
-                                                label={false}
-                                                className="ml-1.5 inline-block text-[11px] font-normal tracking-normal"
-                                            />
-                                        )}
+                                    <p className="mt-0.5 truncate text-lg font-semibold tabular-nums tracking-tight">
+                                        {marketCap ? formatMarketCap(marketCap) : '—'}
                                     </p>
+                                    {isDurianfun && marketCap && (
+                                        <DurianfunMcap
+                                            marketCap={parseFloat(marketCap)}
+                                            athMarketCap={athNum}
+                                            label={false}
+                                            className="block text-[11px] font-normal tracking-normal"
+                                        />
+                                    )}
                                 </div>
                                 {hasAth && (
                                     <div className="flex shrink-0 flex-col items-end text-[11px] tabular-nums text-muted-foreground">

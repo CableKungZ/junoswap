@@ -20,6 +20,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
     const { tokens, snapshotMap, isLoading } = useTokenList()
     const [sortKey, setSortKey] = useState<LaunchpadSortKey>('last-trade')
     const [platforms, setPlatforms] = useState<LaunchpadPlatform[]>(ALL_PLATFORMS)
+    const [graphOverlay, setGraphOverlay] = useState(true)
     const chainId = useLaunchpadChainId()
 
     const graduatedTokens = useMemo(
@@ -132,7 +133,12 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
 
     const toolbar = (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-            <PlatformFilter value={platforms} onChange={setPlatforms} />
+            <PlatformFilter
+                value={platforms}
+                onChange={setPlatforms}
+                graphOverlay={graphOverlay}
+                onGraphOverlayChange={setGraphOverlay}
+            />
             <SortTabs value={sortKey} onChange={setSortKey} />
         </div>
     )
@@ -178,6 +184,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                                 lastSwapAt={lastSwapAt}
                                 priceChange1dPct={priceChange1dPct}
                                 sparklinePath={sparklinePath}
+                                showGraphOverlay={graphOverlay}
                             />
                         )
                     }
