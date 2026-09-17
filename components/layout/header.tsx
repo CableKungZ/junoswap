@@ -30,6 +30,7 @@ import {
     Sparkles,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 const socialLinks = [
     {
@@ -74,10 +75,16 @@ const socialLinks = [
     },
 ]
 
-const NAV_ICON_CLASS =
-    'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] text-[#FF3131] transition-[filter,transform] duration-300 ' +
-    'group-hover:-translate-y-0.5 group-hover:[filter:drop-shadow(0_0_7px_rgba(255,49,49,0.75))] ' +
-    'group-active:[filter:drop-shadow(0_0_10px_rgba(255,49,49,0.9))]'
+// Gray at rest; the active tab grows and picks up the brand red + glow.
+const navIconClass = (isActive: boolean) =>
+    cn(
+        'transition-[filter,transform,color] duration-300 group-hover:-translate-y-0.5',
+        isActive
+            ? 'h-[min(6.4vw,25px)] w-[min(6.4vw,25px)] text-[#FF3131] [filter:drop-shadow(0_0_7px_rgba(255,49,49,0.75))]'
+            : 'h-[min(5.4vw,21px)] w-[min(5.4vw,21px)] text-muted-foreground ' +
+                  'group-hover:text-[#FF3131] group-hover:[filter:drop-shadow(0_0_7px_rgba(255,49,49,0.75))]',
+        'group-active:[filter:drop-shadow(0_0_10px_rgba(255,49,49,0.9))]'
+    )
 
 export function Header() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -224,7 +231,7 @@ export function Header() {
                                 isActive ? 'text-foreground' : 'text-muted-foreground'
                             }`}
                         >
-                            <Icon className={NAV_ICON_CLASS} />
+                            <Icon className={navIconClass(isActive)} />
                             <span className="max-w-full truncate">{link.label}</span>
                         </Link>
                     )
@@ -237,7 +244,7 @@ export function Header() {
                                 : 'text-muted-foreground'
                         }`}
                     >
-                        <LayoutGrid className={NAV_ICON_CLASS} />
+                        <LayoutGrid className={navIconClass(moreActive || isMobileMenuOpen)} />
                         <span className="max-w-full truncate">More</span>
                     </SheetTrigger>
                     <SheetContent
