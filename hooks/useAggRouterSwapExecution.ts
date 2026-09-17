@@ -117,7 +117,11 @@ export function useAggRouterSwapExecution({
             return
         }
         if (!simulationData?.request) {
-            toastError('Swap simulation failed. Please try again.')
+            toastError(
+                (simulationError as Error) ??
+                    new Error('Swap simulation failed. Please try again.'),
+                'Swap simulation failed'
+            )
             return
         }
         sendTransaction({
