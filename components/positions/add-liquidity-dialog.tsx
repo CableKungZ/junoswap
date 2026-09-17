@@ -332,6 +332,14 @@ export function AddLiquidityDialog({
         isApproving1 ||
         isConfirming0 ||
         isConfirming1
+    const exceeds = (balance: bigint, amount: string, decimals = 18) =>
+        !!amount && parseTokenAmount(amount, decimals) > balance
+    const insufficientSymbol = [
+        exceeds(balance0, amount0, token0?.decimals) && token0?.symbol,
+        exceeds(balance1, amount1, token1?.decimals) && token1?.symbol,
+    ]
+        .filter(Boolean)
+        .join(' & ')
     const handleSubmit = () => {
         if (needsApproval0) {
             approve0()
@@ -347,6 +355,7 @@ export function AddLiquidityDialog({
         if (isConfirming0) return `Confirming ${token0?.symbol} approval...`
         if (isApproving1) return `Approving ${token1?.symbol}...`
         if (isConfirming1) return `Confirming ${token1?.symbol} approval...`
+        if (insufficientSymbol) return `Insufficient ${insufficientSymbol} balance`
         if (needsApproval0) return `Approve ${token0?.symbol}`
         if (needsApproval1) return `Approve ${token1?.symbol}`
         if (isPreparing) return 'Preparing...'
@@ -378,6 +387,7 @@ export function AddLiquidityDialog({
         if (isLoading) return true
         if (!token0 || !token1) return true
         if (!amount0 && !amount1) return true
+        if (insufficientSymbol) return true
         if (rangeConfig.tickLower >= rangeConfig.tickUpper) return true
         if (!pool && !initialSqrtPriceX96) return true
         return false

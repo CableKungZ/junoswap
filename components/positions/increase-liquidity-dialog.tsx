@@ -200,11 +200,18 @@ export function IncreaseLiquidityDialog({
             increase()
         }
     }
+    const insufficientSymbol = [
+        amount0Parsed > balance0 && selectedPosition?.token0Info.symbol,
+        amount1Parsed > balance1 && selectedPosition?.token1Info.symbol,
+    ]
+        .filter(Boolean)
+        .join(' & ')
     const getButtonText = () => {
         if (isApproving0) return `Approving ${selectedPosition?.token0Info.symbol}...`
         if (isConfirming0) return `Confirming ${selectedPosition?.token0Info.symbol} approval...`
         if (isApproving1) return `Approving ${selectedPosition?.token1Info.symbol}...`
         if (isConfirming1) return `Confirming ${selectedPosition?.token1Info.symbol} approval...`
+        if (insufficientSymbol) return `Insufficient ${insufficientSymbol} balance`
         if (needsApproval0) return `Approve ${selectedPosition?.token0Info.symbol}`
         if (needsApproval1) return `Approve ${selectedPosition?.token1Info.symbol}`
         if (isPreparing) return 'Preparing...'
@@ -216,6 +223,7 @@ export function IncreaseLiquidityDialog({
         if (isLoading) return true
         if (!selectedPosition) return true
         if (!amount0 && !amount1) return true
+        if (insufficientSymbol) return true
         if (!pool) return true
         return false
     }
