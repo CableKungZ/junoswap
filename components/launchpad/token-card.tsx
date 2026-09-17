@@ -199,14 +199,18 @@ export function TokenCard({
                                     <p className="mt-0.5 truncate text-lg font-semibold tabular-nums tracking-tight">
                                         {marketCap ? formatMarketCap(marketCap) : '—'}
                                     </p>
-                                    {isDurianfun && marketCap && (
-                                        <DurianfunMcap
-                                            marketCap={parseFloat(marketCap)}
-                                            athMarketCap={athNum}
-                                            label={false}
-                                            className="block text-[11px] font-normal tracking-normal"
-                                        />
-                                    )}
+                                    {/* Reserves the DurianFun sub-value's line height on every card, so the
+                                        Mcap number sits at the same height whether or not it's shown. */}
+                                    <div className="min-h-[15px]">
+                                        {isDurianfun && marketCap && (
+                                            <DurianfunMcap
+                                                marketCap={parseFloat(marketCap)}
+                                                athMarketCap={athNum}
+                                                label={false}
+                                                className="block text-[11px] font-normal leading-[15px] tracking-normal"
+                                            />
+                                        )}
+                                    </div>
                                 </div>
                                 {hasAth && (
                                     <div className="flex shrink-0 flex-col items-end text-[11px] tabular-nums text-muted-foreground">
