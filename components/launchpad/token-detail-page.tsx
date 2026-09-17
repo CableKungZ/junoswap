@@ -9,8 +9,11 @@ import { useGraduatedPoolPrice } from '@/hooks/useGraduatedPoolPrice'
 import type { DailyMetrics } from '@/services/launchpad/chart'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedPoolAddress } from '@/hooks/useGraduatedPoolAddress'
-import { GRADUATED_POOL_FEE } from '@/services/launchpad/launchpad'
-import { KUBLERX_POOL_FEE } from '@/services/launchpad/durianfun'
+import {
+    getGraduatedPoolConfig,
+    usesThirdPartyCurveUI,
+    hasOwnGraduationUI,
+} from '@/services/launchpad/platform-config'
 import { formatAddress, formatTimeAgo, formatFullDate } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { TokenIcon } from '@/components/ui/token-icon'
@@ -43,7 +46,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
     const isDurianfun = tokenInfo?.platform === 'durianfun'
     // Not-yet-graduated Durianfun tokens trade on their own per-token market contract, not
     // Junoswap's shared bonding curve — Junoswap's reserve/graduation reads don't apply to them.
-    const isThirdPartyCurve = isDurianfun && !isGraduated
+    const isThirdPartyCurve = usesThirdPartyCurveUI(tokenInfo?.platform, isGraduated)
 
     const {
         nativeReserve,
@@ -387,20 +390,18 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                                 poolAddress={poolAddress}
                                 poolFee={
                                     isGraduated
-                                        ? tokenInfo?.platform === 'durianfun'
-                                            ? KUBLERX_POOL_FEE
-                                            : GRADUATED_POOL_FEE
+                                        ? getGraduatedPoolConfig(tokenInfo?.platform).poolFee
                                         : undefined
                                 }
                                 isPoolLoading={isPoolLoading}
                                 dexId={
-                                    isGraduated && tokenInfo?.platform === 'durianfun'
-                                        ? 'kublerx'
+                                    isGraduated
+                                        ? getGraduatedPoolConfig(tokenInfo?.platform).dexId
                                         : undefined
                                 }
                             />
                         )}
-                        {!isDurianfun &&
+                        {!hasOwnGraduationUI(tokenInfo?.platform) &&
                             nativeReserve !== undefined &&
                             graduationAmount !== undefined && (
                                 <Card>
@@ -418,7 +419,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                                     </CardContent>
                                 </Card>
                             )}
-                        {isDurianfun && tokenInfo?.market && (
+                        {hasOwnGraduationUI(tokenInfo?.platform) && tokenInfo?.market && (
                             <DurianfunGraduationProgress
                                 marketAddr={tokenInfo.market}
                                 chainId={chainId}
