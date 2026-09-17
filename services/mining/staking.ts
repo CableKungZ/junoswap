@@ -71,11 +71,10 @@ function encodeClaimReward(rewardToken: Address, to: Address, amountRequested: b
 }
 
 /**
- * Unstakes several positions from one farm in a single transaction. Each `unstakeToken` credits the
- * depositor's reward balance, so one `claimReward` after the batch collects all of them; the
- * withdrawals follow because a staked token cannot be moved.
+ * Unstakes positions from one farm and collects their rewards. Each `unstakeToken` credits the
+ * depositor's reward balance, so one `claimReward` after the batch pays out all of them.
  */
-export function buildUnstakeManyAndWithdrawMulticall(
+export function buildUnstakeAndClaimMulticall(
     tokenIds: readonly bigint[],
     incentiveKey: IncentiveKey,
     recipient: Address
@@ -84,25 +83,10 @@ export function buildUnstakeManyAndWithdrawMulticall(
     return [
         ...tokenIds.map((tokenId) => encodeUnstakeToken({ tokenId, incentiveKey })),
         encodeClaimReward(incentiveKey.rewardToken, recipient, 0n), // 0n = claim all
-        ...tokenIds.map((tokenId) => encodeWithdrawToken(tokenId, recipient)),
     ]
 }
 
-export function buildUnstakeAndWithdrawMulticall(
-    tokenId: bigint,
-    incentiveKey: IncentiveKey,
-    recipient: Address
-): Hex[] {
-    return buildUnstakeManyAndWithdrawMulticall([tokenId], incentiveKey, recipient)
-}
-
-export function buildUnstakeAndClaimMulticall(
-    tokenId: bigint,
-    incentiveKey: IncentiveKey,
-    recipient: Address
-): Hex[] {
-    return [
-        encodeUnstakeToken({ tokenId, incentiveKey }),
-        encodeClaimReward(incentiveKey.rewardToken, recipient, 0n),
-    ]
+/** Returns the NFTs. A staked token cannot move, so this only succeeds after the unstake lands. */
+export function buildWithdrawMulticall(tokenIds: readonly bigint[], recipient: Address): Hex[] {
+    return tokenIds.map((tokenId) => encodeWithdrawToken(tokenId, recipient))
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedTokenActivity } from '@/hooks/useGraduatedTokenActivity'
 import { useCurveTokenSparklines } from '@/hooks/useCurveTokenSparklines'
@@ -29,12 +29,30 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
                 .map((t) => ({ address: t.address, graduatedAt: t.graduatedAt ?? null })),
         [tokens]
     )
-    const liveActivity = useGraduatedTokenActivity(graduatedTokens, chainId)
+    const { activity: liveActivity, isPending: activityPending } = useGraduatedTokenActivity(
+        graduatedTokens,
+        chainId
+    )
     const curveTokenAddrs = useMemo(
         () => tokens.filter((t) => !t.isGraduated).map((t) => t.address),
         [tokens]
     )
-    const curveSparklines = useCurveTokenSparklines(curveTokenAddrs, chainId)
+    const { sparklines: curveSparklines, isPending: sparklinesPending } = useCurveTokenSparklines(
+        curveTokenAddrs,
+        chainId
+    )
+
+    // Hold the skeleton until every per-token query settles once per chain, so cards don't
+    // reshuffle as live values replace snapshot ones. Later refetches/new tokens don't re-block.
+    // Gives up after 10s so one slow token can't hold the whole page.
+    const [loadedChainId, setLoadedChainId] = useState<number | null>(null)
+    if (loadedChainId !== chainId && !isLoading && !activityPending && !sparklinesPending) {
+        setLoadedChainId(chainId)
+    }
+    useEffect(() => {
+        const id = setTimeout(() => setLoadedChainId(chainId), 10_000)
+        return () => clearTimeout(id)
+    }, [chainId])
 
     const enrichedTokens = useMemo(() => {
         return tokens.map((token) => {
@@ -99,7 +117,7 @@ export function TokenList({ searchQuery = '' }: TokenListProps) {
         })
     }, [filtered, sortKey])
 
-    if (isLoading) {
+    if (isLoading || loadedChainId !== chainId) {
         return <TokenListSkeleton />
     }
 

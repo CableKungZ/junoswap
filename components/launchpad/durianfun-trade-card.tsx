@@ -14,11 +14,18 @@ import { useDurianfunSwapExecution } from '@/hooks/useDurianfunSwapExecution'
 import { isValidNumberInput } from '@/lib/utils'
 import { formatKub, formatTokenAmount } from '@/services/launchpad/launchpad'
 import { toastSuccess, toastError } from '@/lib/toast'
+import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
+import { TxFlowDialog, actionStep, approvalStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow } from '@/components/ui/tx-stage'
+import { getDefaultPairTokens } from '@/lib/tokens'
 import { getChainMetadata } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { SettingsMenu } from '@/components/swap/settings-menu'
 import { useSwapStore } from '@/store/swap-store'
+import { CURVE_FEE_BPS } from '@/services/launchpad/chart'
 import { PercentButtons, AmountButtons } from './token-trade-card'
+
+const DURIANFUN_FEE = `${(CURVE_FEE_BPS.durianfun / 100).toFixed(2)}% (KUB)`
 
 // Junoswap's own address, passed as `referrer` on every Durianfun curve swap — Durianfun
 // pays a referral fee share on volume routed through it (see launchpad-aggregator/reference/RECON.md).
@@ -27,6 +34,7 @@ const JUNOSWAP_REFERRER: Address = zeroAddress
 interface DurianfunTradeCardProps {
     tokenAddr: Address
     tokenSymbol?: string
+    tokenLogo?: string
     marketAddr: Address
     chainId: number
 }
@@ -34,6 +42,7 @@ interface DurianfunTradeCardProps {
 export function DurianfunTradeCard({
     tokenAddr,
     tokenSymbol = 'TOKEN',
+    tokenLogo,
     marketAddr,
     chainId,
 }: DurianfunTradeCardProps) {
@@ -101,35 +110,31 @@ export function DurianfunTradeCard({
         enabled: activeTab === 'sell',
     })
 
-    useEffect(() => {
-        if (!buyTx.isSuccess || !buyTx.hash) return
+    // Keyed on the hash; the amounts are cleared from the dialog's Done so its success frame
+    // still shows what was traded.
+    useOnTxSuccess(true, buyTx.isSuccess, buyTx.hash, (hash) => {
         const metadata = getChainMetadata(chainId)
         toastSuccess('Buy successful!', {
             action: {
                 label: 'View Transaction',
-                onClick: () => window.open(`${metadata.explorer}/tx/${buyTx.hash}`, '_blank'),
+                onClick: () => window.open(`${metadata.explorer}/tx/${hash}`, '_blank'),
             },
         })
-        setBuyAmount('')
         refetchNative()
         refetchTokens()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [buyTx.isSuccess, buyTx.hash, chainId])
+    })
 
-    useEffect(() => {
-        if (!sellTx.isSuccess || !sellTx.hash) return
+    useOnTxSuccess(true, sellTx.isSuccess, sellTx.hash, (hash) => {
         const metadata = getChainMetadata(chainId)
         toastSuccess('Sell successful!', {
             action: {
                 label: 'View Transaction',
-                onClick: () => window.open(`${metadata.explorer}/tx/${sellTx.hash}`, '_blank'),
+                onClick: () => window.open(`${metadata.explorer}/tx/${hash}`, '_blank'),
             },
         })
-        setSellAmount('')
         refetchNative()
         refetchTokens()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sellTx.isSuccess, sellTx.hash, chainId])
+    })
 
     useEffect(() => {
         if (buyTx.isError && buyTx.error) toastError(buyTx.error, 'Buy failed')
@@ -153,18 +158,89 @@ export function DurianfunTradeCard({
         setSellAmount(formatEther((balance * BigInt(pct)) / 100n))
     }
 
+    const [txOpen, setTxOpen] = useState(false)
+    const [txKind, setTxKind] = useState<'buy' | 'sell'>('buy')
+    // Snapshotted: the approval flips needsApproval off, which would delete the watched step.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
+
     const handleBuy = () => {
         if (!isConnected) return setIsConnectModalOpen(true)
         if (wrongChain) return switchChain({ chainId })
+        setTxKind('buy')
+        setFlowNeedsApproval(false)
+        setTxOpen(true)
         buyTx.execute()
     }
 
     const handleSell = () => {
         if (!isConnected) return setIsConnectModalOpen(true)
         if (wrongChain) return switchChain({ chainId })
+        setTxKind('sell')
+        setFlowNeedsApproval(sellTx.needsApproval)
+        setTxOpen(true)
         if (sellTx.needsApproval) return sellTx.approve()
         sellTx.execute()
     }
+
+    const nativeToken = getDefaultPairTokens(chainId).nativeTokens[0] ?? { symbol: 'KUB' }
+    const launchToken = { symbol: tokenSymbol, logo: tokenLogo }
+    const isSell = txKind === 'sell'
+    const trade = isSell ? sellTx : buyTx
+    const nativeSide = {
+        kind: 'token' as const,
+        token: nativeToken,
+        amount: isSell ? formatEther(sellTx.expectedOut) : buyAmount || '0',
+    }
+    const tokenSide = {
+        kind: 'token' as const,
+        token: launchToken,
+        amount: isSell ? sellAmount || '0' : formatEther(buyTx.expectedOut),
+    }
+    const txSteps: TxStep[] = []
+    if (isSell && flowNeedsApproval) {
+        txSteps.push(
+            approvalStep({
+                token: launchToken,
+                spenderLabel: 'Durianfun market',
+                spender: marketAddr,
+                chainId,
+                run: sellTx.approve,
+                flags: {
+                    isPending: sellTx.isApproving,
+                    isConfirming: sellTx.isApproveConfirming,
+                    isSuccess: sellTx.isApproveSuccess || !sellTx.needsApproval,
+                    isError: !!sellTx.approveError,
+                    error: sellTx.approveError,
+                    hash: sellTx.approveHash,
+                },
+            })
+        )
+    }
+    txSteps.push(
+        actionStep({
+            label: isSell ? `Sell ${tokenSymbol}` : `Buy ${tokenSymbol}`,
+            flags: {
+                isPending: trade.isExecuting,
+                isConfirming: trade.isConfirming,
+                isSuccess: trade.isSuccess,
+                isError: trade.isError,
+                error: trade.error,
+                hash: trade.hash,
+            },
+            run: trade.execute,
+            // Follows the approval once the allowance has landed and the sell can be sent.
+            autoRun: isSell && !sellTx.needsApproval && sellTx.canExecute,
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={trade.hash}
+                    from={isSell ? tokenSide : nativeSide}
+                    to={isSell ? nativeSide : tokenSide}
+                />
+            ),
+        })
+    )
 
     return (
         <>
@@ -245,6 +321,12 @@ export function DurianfunTradeCard({
                                             <span className="font-medium text-right min-w-0">
                                                 {formatTokenAmount(buyTx.minOut)} {tokenSymbol}
                                             </span>
+                                        </div>
+                                        <div className="flex justify-between gap-2">
+                                            <span className="text-muted-foreground shrink-0">
+                                                Fee
+                                            </span>
+                                            <span className="font-medium">{DURIANFUN_FEE}</span>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -331,6 +413,12 @@ export function DurianfunTradeCard({
                                                 {formatKub(sellTx.minOut)} KUB
                                             </span>
                                         </div>
+                                        <div className="flex justify-between gap-2">
+                                            <span className="text-muted-foreground shrink-0">
+                                                Fee
+                                            </span>
+                                            <span className="font-medium">{DURIANFUN_FEE}</span>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             )}
@@ -383,6 +471,14 @@ export function DurianfunTradeCard({
             </Card>
 
             <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title={isSell ? `Sell ${tokenSymbol}` : `Buy ${tokenSymbol}`}
+                steps={txSteps}
+                chainId={chainId}
+                onDone={() => (isSell ? setSellAmount('') : setBuyAmount(''))}
+            />
         </>
     )
 }

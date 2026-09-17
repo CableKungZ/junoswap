@@ -1,7 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
+    useAccount,
+    usePublicClient,
     useWriteContract,
     useWaitForTransactionReceipt,
     useSimulateContract,
@@ -29,7 +31,33 @@ import {
 } from '@/services/liquidity/fee-collection'
 import { getWrappedNativeAddress } from '@/lib/tokens'
 
-export function useAddLiquidity(params: AddLiquidityParams | null, skipSimulation?: boolean) {
+type WriteArgs = Parameters<ReturnType<typeof useWriteContract>['writeContract']>[0]
+
+/** Simulates on submit, not on every input change: a half-typed amount or a pending approval
+ * would otherwise revert in the background and surface as an error the user never asked for. */
+function useSimulateOnSubmit() {
+    const { writeContract, data: hash, isPending, error: writeError } = useWriteContract()
+    const publicClient = usePublicClient()
+    const { address: account } = useAccount()
+    const [isSimulating, setIsSimulating] = useState(false)
+    const [simulationError, setSimulationError] = useState<Error | null>(null)
+    const write = useCallback(
+        (params: WriteArgs) => {
+            if (!publicClient || !account) return
+            setSimulationError(null)
+            setIsSimulating(true)
+            publicClient
+                .simulateContract({ ...params, account } as never)
+                .then(({ request }) => writeContract(request as WriteArgs))
+                .catch((cause) => setSimulationError(cause as Error))
+                .finally(() => setIsSimulating(false))
+        },
+        [publicClient, account, writeContract]
+    )
+    return { write, hash, isSimulating, isPending, writeError, simulationError }
+}
+
+export function useAddLiquidity(params: AddLiquidityParams | null) {
     const chainId = useChainId()
     const dexConfig = getDexes(chainId, 'v3')[0]
     const positionManager = dexConfig?.positionManager
@@ -72,24 +100,13 @@ export function useAddLiquidity(params: AddLiquidityParams | null, skipSimulatio
         }
     }, [params, chainId])
     const {
-        data: simulationData,
-        isLoading: isSimulating,
-        error: simulationError,
-    } = useSimulateContract({
-        address: positionManager,
-        abi: getAbi('positionManager'),
-        ...callData,
-        value,
-        query: {
-            enabled: isEnabled && !!callData && !skipSimulation,
-        },
-    })
-    const {
-        writeContract,
-        data: hash,
+        write,
+        hash,
+        isSimulating,
         isPending: isExecuting,
-        error: writeError,
-    } = useWriteContract()
+        writeError,
+        simulationError,
+    } = useSimulateOnSubmit()
     const {
         isLoading: isConfirming,
         isSuccess,
@@ -98,11 +115,18 @@ export function useAddLiquidity(params: AddLiquidityParams | null, skipSimulatio
         hash,
     })
     const mint = () => {
-        if (!simulationData?.request) return
-        writeContract(simulationData.request)
+        if (!isEnabled || !callData) return
+        write({
+            address: positionManager,
+            abi: getAbi('positionManager'),
+            ...callData,
+            value,
+            chainId,
+        } as unknown as WriteArgs)
     }
     return {
         mint,
+        canMint: isEnabled && !!callData,
         isPreparing: isSimulating,
         isExecuting,
         isConfirming,
@@ -120,8 +144,7 @@ export function useIncreaseLiquidity(
     amount1Desired: bigint,
     position: PositionWithTokens | null,
     slippageBps: number = 50,
-    deadlineMinutes: number = 20,
-    skipSimulation?: boolean
+    deadlineMinutes: number = 20
 ) {
     const chainId = useChainId()
     const dexConfig = getDexes(chainId, 'v3')[0]
@@ -185,24 +208,13 @@ export function useIncreaseLiquidity(
         nativeAmount,
     ])
     const {
-        data: simulationData,
-        isLoading: isSimulating,
-        error: simulationError,
-    } = useSimulateContract({
-        address: positionManager,
-        abi: getAbi('positionManager'),
-        ...callData,
-        value,
-        query: {
-            enabled: isEnabled && !!callData && !skipSimulation,
-        },
-    })
-    const {
-        writeContract,
-        data: hash,
+        write,
+        hash,
+        isSimulating,
         isPending: isExecuting,
-        error: writeError,
-    } = useWriteContract()
+        writeError,
+        simulationError,
+    } = useSimulateOnSubmit()
     const {
         isLoading: isConfirming,
         isSuccess,
@@ -211,11 +223,18 @@ export function useIncreaseLiquidity(
         hash,
     })
     const increase = () => {
-        if (!simulationData?.request) return
-        writeContract(simulationData.request)
+        if (!isEnabled || !callData) return
+        write({
+            address: positionManager,
+            abi: getAbi('positionManager'),
+            ...callData,
+            value,
+            chainId,
+        } as unknown as WriteArgs)
     }
     return {
         increase,
+        canIncrease: isEnabled && !!callData,
         isPreparing: isSimulating,
         isExecuting,
         isConfirming,

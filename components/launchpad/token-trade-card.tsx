@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useAccount, useBalance, useChainId, useReadContract, useSwitchChain } from 'wagmi'
-import { parseUnits, formatEther, parseEther, zeroAddress } from 'viem'
+import { parseUnits, formatEther, formatUnits, parseEther, zeroAddress } from 'viem'
 import type { Address } from 'viem'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,8 @@ import { useGraduate } from '@/hooks/useGraduate'
 import { useTokenApproval } from '@/hooks/useTokenApproval'
 import { useKkubUnwrap } from '@/hooks/useKkubUnwrap'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
+import { TxFlowDialog, actionStep, approvalStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow } from '@/components/ui/tx-stage'
 import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
 import { getBondingCurveDeployment } from '@/lib/deployments'
 import type { Token } from '@/types/token'
@@ -34,6 +36,7 @@ import { getDefaultPairTokens } from '@/lib/tokens'
 interface TokenTradeCardProps {
     tokenAddr: Address
     tokenSymbol?: string
+    tokenLogo?: string
     tokenDecimals?: number
     isGraduated: boolean
     poolAddress?: Address
@@ -84,6 +87,7 @@ export function AmountButtons({ onSelect }: { onSelect: (amount: string) => void
 export function TokenTradeCard({
     tokenAddr,
     tokenSymbol = 'TOKEN',
+    tokenLogo,
     tokenDecimals = 18,
     isGraduated: _initialIsGraduated,
     poolAddress,
@@ -94,6 +98,11 @@ export function TokenTradeCard({
     const { address, isConnected } = useAccount()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
     const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy')
+    const [txOpen, setTxOpen] = useState(false)
+    const [txKind, setTxKind] = useState<'buy' | 'sell' | 'graduate'>('buy')
+    // Frozen when the flow opens: the allowance lands mid-flow and rebuilding from
+    // needsSellApproval would delete the step being watched.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
     const [buyAmount, setBuyAmount] = useState('')
     const [sellAmount, setSellAmount] = useState('')
     const { settings, setSlippage, setDeadlineMinutes } = useSwapStore()
@@ -307,7 +316,12 @@ export function TokenTradeCard({
         needsApproval: needsSellApproval,
         isApproving: isApprovingSell,
         isConfirming: isConfirmingApproval,
+        isSuccess: isSellApproved,
+        isError: isSellApproveError,
+        error: sellApproveError,
+        hash: sellApproveHash,
         approve: approveSell,
+        reset: resetSellApproval,
     } = useTokenApproval({
         token: {
             address: tokenAddr,
@@ -392,8 +406,8 @@ export function TokenTradeCard({
     const sellError = isGraduated ? sellErrorV3 : sellErrorBC
     const sellHash = isGraduated ? sellHashV3 : sellHashBC
 
-    useEffect(() => {
-        if (!isBuySuccess || !buyHash) return
+    // Keyed on the hash: a finished trade stays isSuccess, and refetch identities change.
+    useOnTxSuccess(true, isBuySuccess, buyHash, () => {
         const metadata = getChainMetadata(chainId)
         toastSuccess('Buy successful!', {
             action: {
@@ -401,14 +415,12 @@ export function TokenTradeCard({
                 onClick: () => window.open(`${metadata.explorer}/tx/${buyHash}`, '_blank'),
             },
         })
-        setBuyAmount('')
         refetchReserves()
         refetchNative()
         refetchTokens()
-    }, [isBuySuccess, buyHash, chainId, refetchReserves, refetchNative, refetchTokens])
+    })
 
-    useEffect(() => {
-        if (!isSellSuccess || !sellHash) return
+    useOnTxSuccess(true, isSellSuccess, sellHash, () => {
         const metadata = getChainMetadata(chainId)
         toastSuccess('Sell successful!', {
             action: {
@@ -416,14 +428,12 @@ export function TokenTradeCard({
                 onClick: () => window.open(`${metadata.explorer}/tx/${sellHash}`, '_blank'),
             },
         })
-        setSellAmount('')
         refetchReserves()
         refetchNative()
         refetchTokens()
-    }, [isSellSuccess, sellHash, chainId, refetchReserves, refetchNative, refetchTokens])
+    })
 
-    useEffect(() => {
-        if (!isGraduateSuccess || !graduateHash) return
+    useOnTxSuccess(true, isGraduateSuccess, graduateHash, () => {
         const metadata = getChainMetadata(chainId)
         toastSuccess('Token graduated!', {
             action: {
@@ -432,7 +442,7 @@ export function TokenTradeCard({
             },
         })
         refetchReserves()
-    }, [isGraduateSuccess, graduateHash, chainId, refetchReserves])
+    })
 
     useEffect(() => {
         if (isBuyError && buyError) toastError(buyError, 'Buy failed')
@@ -461,6 +471,9 @@ export function TokenTradeCard({
         setSellAmount(formatEther(amount))
     }
 
+    const runBuy = () => (isGraduated ? v3Buy() : bcBuy())
+    const runSell = () => (isGraduated ? v3Sell() : bcSell())
+
     const handleBuy = () => {
         if (!isConnected) {
             setIsConnectModalOpen(true)
@@ -470,11 +483,10 @@ export function TokenTradeCard({
             switchChain({ chainId })
             return
         }
-        if (isGraduated) {
-            v3Buy()
-        } else {
-            bcBuy()
-        }
+        setTxKind('buy')
+        setFlowNeedsApproval(false)
+        setTxOpen(true)
+        runBuy()
     }
 
     const handleSell = () => {
@@ -486,6 +498,10 @@ export function TokenTradeCard({
             switchChain({ chainId })
             return
         }
+        setTxKind('sell')
+        setFlowNeedsApproval(needsSellApproval)
+        resetSellApproval()
+        setTxOpen(true)
         if (needsSellApproval) {
             approveSell()
             return
@@ -498,6 +514,7 @@ export function TokenTradeCard({
         } else {
             bcSell()
         }
+        runSell()
     }
 
     useOnTxSuccess(true, isSellSuccessV3, sellHashV3, () => {
@@ -524,7 +541,111 @@ export function TokenTradeCard({
             switchChain({ chainId })
             return
         }
+        setTxKind('graduate')
+        setFlowNeedsApproval(false)
+        setTxOpen(true)
         graduate()
+    }
+
+    /**
+     * The card holds three independent flows and swaps between a bonding-curve and a v3
+     * hook once the token graduates, so the steps are built from whichever is live.
+     */
+    const launchToken = { symbol: tokenSymbol, logo: tokenLogo }
+    const isSell = txKind === 'sell'
+    const tradeFlags = isSell
+        ? {
+              isPending: isSellPreparing || isSellExecuting,
+              isConfirming: isSellConfirming,
+              isSuccess: isSellSuccess,
+              isError: isSellError,
+              error: sellError,
+              hash: sellHash,
+          }
+        : {
+              isPending: isBuyPreparing || isBuyExecuting,
+              isConfirming: isBuyConfirming,
+              isSuccess: isBuySuccess,
+              isError: isBuyError,
+              error: buyError,
+              hash: buyHash,
+          }
+    const txSteps: TxStep[] = []
+    if (txKind === 'graduate') {
+        txSteps.push(
+            actionStep({
+                label: `Graduate ${tokenSymbol}`,
+                flags: {
+                    isPending: isGraduateExecuting,
+                    isSuccess: isGraduateSuccess,
+                    isError: isGraduateError,
+                    error: graduateError,
+                    hash: graduateHash,
+                },
+                run: graduate,
+                renderStage: (phase) => (
+                    <TxStageFlow
+                        phase={phase}
+                        chainId={chainId}
+                        hash={graduateHash}
+                        from={{ kind: 'token', token: launchToken, amount: 'Bonding curve' }}
+                        to={{
+                            kind: 'contract',
+                            label: 'V3 pool',
+                            address: poolAddress,
+                            amount: 'Graduated',
+                        }}
+                    />
+                ),
+            })
+        )
+    } else {
+        if (flowNeedsApproval) {
+            txSteps.push(
+                approvalStep({
+                    token: launchToken,
+                    spenderLabel: isGraduated ? 'Swap router' : 'Bonding curve',
+                    spender: sellSpender,
+                    chainId,
+                    run: approveSell,
+                    flags: {
+                        isPending: isApprovingSell,
+                        isConfirming: isConfirmingApproval,
+                        isSuccess: isSellApproved || !needsSellApproval,
+                        isError: isSellApproveError,
+                        error: sellApproveError,
+                        hash: sellApproveHash,
+                    },
+                })
+            )
+        }
+        const nativeSide = {
+            kind: 'token' as const,
+            token: nativeToken,
+            amount: isSell ? formatEther(sellExpectedOut ?? 0n) : buyAmount || '0',
+        }
+        const tokenSide = {
+            kind: 'token' as const,
+            token: launchToken,
+            amount: isSell ? sellAmount || '0' : formatUnits(buyExpectedOut ?? 0n, tokenDecimals),
+        }
+        txSteps.push(
+            actionStep({
+                label: isSell ? `Sell ${tokenSymbol}` : `Buy ${tokenSymbol}`,
+                flags: tradeFlags,
+                run: isSell ? runSell : runBuy,
+                autoRun: isSell && canSell && !needsSellApproval,
+                renderStage: (phase) => (
+                    <TxStageFlow
+                        phase={phase}
+                        chainId={chainId}
+                        hash={tradeFlags.hash}
+                        from={isSell ? tokenSide : nativeSide}
+                        to={isSell ? nativeSide : tokenSide}
+                    />
+                ),
+            })
+        )
     }
 
     const nearThreshold =
@@ -532,6 +653,27 @@ export function TokenTradeCard({
         !readyToGraduate &&
         graduationAmount > 0n &&
         nativeReserve >= (graduation.target * 90n) / 100n
+
+    const txDialog = (
+        <TxFlowDialog
+            open={txOpen}
+            onOpenChange={setTxOpen}
+            title={
+                txKind === 'graduate'
+                    ? 'Graduate token'
+                    : txKind === 'sell'
+                      ? `Sell ${tokenSymbol}`
+                      : `Buy ${tokenSymbol}`
+            }
+            steps={txSteps}
+            chainId={chainId}
+            onDone={() => {
+                resetSellApproval()
+                if (txKind === 'buy') setBuyAmount('')
+                if (txKind === 'sell') setSellAmount('')
+            }}
+        />
+    )
 
     if (readyToGraduate) {
         return (
@@ -587,6 +729,7 @@ export function TokenTradeCard({
                     </CardContent>
                 </Card>
                 <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+                {txDialog}
             </>
         )
     }
@@ -868,6 +1011,8 @@ export function TokenTradeCard({
             </Card>
 
             <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+
+            {txDialog}
         </>
     )
 }

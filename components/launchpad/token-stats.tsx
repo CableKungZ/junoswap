@@ -6,10 +6,13 @@ import type { FeeBreakdown } from '@/services/launchpad/chart'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 import { AthProgressBar } from './ath-progress-bar'
+import { DurianfunMcap } from './durianfun-mcap'
+import type { LaunchpadPlatform } from '@/types/launchpad'
 
 interface TokenStatsProps {
     marketCap: string
     symbol?: string
+    platform?: LaunchpadPlatform
     isGraduated?: boolean
     athMarketCap?: string
     priceChange1dPct?: number | null
@@ -20,6 +23,7 @@ interface TokenStatsProps {
 export function TokenStats({
     marketCap,
     symbol,
+    platform,
     athMarketCap,
     priceChange1dPct,
     feeBreakdown,
@@ -49,6 +53,9 @@ export function TokenStats({
                             {priceChange1dPct >= 0 ? '+' : ''}
                             {priceChange1dPct.toFixed(2)}%
                         </span>
+                    )}
+                    {platform === 'durianfun' && (
+                        <DurianfunMcap marketCap={mcapNum} athMarketCap={athNum} />
                     )}
                 </div>
                 <div className="text-xs text-muted-foreground uppercase">

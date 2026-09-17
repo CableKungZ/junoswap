@@ -22,6 +22,10 @@ import { formatBalance } from '@/lib/tokens'
 import { formatTimeRemaining, incentiveToPoolData } from '@/services/mining/incentives'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { markStaked } from '@/lib/optimistic-deposits'
+import { getStakerAddress } from '@/lib/earn-programs'
+import { txPhase } from '@/lib/tx-flow'
+import { TxFlowDialog, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow } from '@/components/ui/tx-stage'
 import type { PositionWithTokens, Incentive, V3PoolData } from '@/types/earn'
 
 interface StakeDialogProps {
@@ -46,6 +50,11 @@ export function StakeDialog({
     type TxType = 'approval' | 'stake' | null
     const [pendingTxType, setPendingTxType] = useState<TxType>(null)
     const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
+    const [stakeCompleted, setStakeCompleted] = useState(false)
+    const [txOpen, setTxOpen] = useState(false)
+    // Frozen when the flow opens: getApproved flips the moment the approval lands, and
+    // rebuilding the steps from it would delete the step being watched.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
     const { positions, isLoading: isLoadingPositions } = useUserPositions(address, chainId)
     const eligiblePositions = useMemo(() => {
         if (!selectedIncentive) return []
@@ -80,6 +89,7 @@ export function StakeDialog({
             setApprovalCompleted(false)
             setPendingTxType(null)
             setProcessedTxHash(null)
+            setStakeCompleted(false)
         }
     }, [open])
     useEffect(() => {
@@ -90,10 +100,11 @@ export function StakeDialog({
                 }
                 toastSuccess('Position staked successfully!')
                 setProcessedTxHash(hash)
+                setStakeCompleted(true)
+                // The tx dialog owns the success frame and closes both from its Done button.
                 onSuccess?.()
-                onClose()
             } else if (pendingTxType === 'approval') {
-                toastSuccess('Approval successful! Please click again to stake.')
+                toastSuccess('Approval successful!')
                 setApprovalCompleted(true)
                 setProcessedTxHash(hash)
             }
@@ -104,7 +115,6 @@ export function StakeDialog({
         hash,
         pendingTxType,
         processedTxHash,
-        onClose,
         onSuccess,
         address,
         chainId,
@@ -127,90 +137,184 @@ export function StakeDialog({
         if (needsApproval && !approvalCompleted) return 'Approve Position'
         return 'Stake Position'
     }
+    const runApprove = () => {
+        setPendingTxType('approval')
+        approveAndStake()
+    }
+    const runStake = () => {
+        setPendingTxType('stake')
+        stake()
+    }
     const handleStake = () => {
-        if (needsApproval && !approvalCompleted) {
-            setPendingTxType('approval')
-            approveAndStake()
-        } else {
-            setPendingTxType('stake')
-            stake()
+        const needs = needsApproval && !approvalCompleted
+        setFlowNeedsApproval(needs)
+        setTxOpen(true)
+        if (needs) runApprove()
+        else runStake()
+    }
+
+    /**
+     * useStakePosition writes approval and stake through one wagmi hook, so its flags
+     * describe whichever call is in flight. pendingTxType says which step owns them, and
+     * the completed flags carry a landed step past the point where the flags move on.
+     */
+    const stakerAddress = getStakerAddress(chainId, selectedIncentive.program ?? 'v3')
+    const sharedFlags = {
+        isPending: isPreparing || isExecuting,
+        isConfirming,
+        isError: !!error,
+        error,
+        hash,
+    }
+    const positionSide = selectedPosition
+        ? {
+              kind: 'position' as const,
+              tokenId: selectedPosition.tokenId,
+              feeTier: selectedPosition.fee,
+              inRange: selectedPosition.inRange,
+              token0: selectedPosition.token0Info,
+              token1: selectedPosition.token1Info,
+          }
+        : null
+    const txSteps: TxStep[] = []
+    if (positionSide && selectedPosition) {
+        const stakerSide = (amount: string) => ({
+            kind: 'contract' as const,
+            label: 'Farm staker',
+            address: stakerAddress,
+            amount,
+        })
+        if (flowNeedsApproval) {
+            txSteps.push({
+                label: `Approve position #${selectedPosition.tokenId.toString()}`,
+                phase: approvalCompleted
+                    ? 'success'
+                    : pendingTxType === 'approval'
+                      ? txPhase(sharedFlags)
+                      : 'idle',
+                hash: pendingTxType === 'approval' ? hash : undefined,
+                error,
+                run: runApprove,
+                renderStage: (phase) => (
+                    <TxStageFlow
+                        phase={phase}
+                        chainId={chainId}
+                        from={positionSide}
+                        to={stakerSide('Approved')}
+                    />
+                ),
+            })
         }
+        txSteps.push({
+            label: `Stake position #${selectedPosition.tokenId.toString()}`,
+            phase: stakeCompleted
+                ? 'success'
+                : pendingTxType === 'stake'
+                  ? txPhase(sharedFlags)
+                  : 'idle',
+            hash: pendingTxType === 'stake' || stakeCompleted ? hash : undefined,
+            error,
+            run: runStake,
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    from={positionSide}
+                    to={stakerSide('Staked')}
+                />
+            ),
+        })
     }
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Stake LP Position</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-6">
-                    <div className="bg-muted rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium">
-                                {selectedIncentive.poolToken0.symbol} /{' '}
-                                {selectedIncentive.poolToken1.symbol}
-                            </span>
-                            <Badge
-                                variant="outline"
-                                className="bg-positive/10 text-positive border-positive/20"
-                            >
-                                {selectedIncentive.isActive ? 'Active' : 'Inactive'}
-                            </Badge>
+        <>
+            <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Stake LP Position</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                        <div className="bg-muted rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium">
+                                    {selectedIncentive.poolToken0.symbol} /{' '}
+                                    {selectedIncentive.poolToken1.symbol}
+                                </span>
+                                <Badge
+                                    variant="outline"
+                                    className="bg-positive/10 text-positive border-positive/20"
+                                >
+                                    {selectedIncentive.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                Reward: {selectedIncentive.rewardTokenInfo.symbol} &middot;{' '}
+                                {formatTimeRemaining(selectedIncentive.endTime)}
+                            </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                            Reward: {selectedIncentive.rewardTokenInfo.symbol} &middot;{' '}
-                            {formatTimeRemaining(selectedIncentive.endTime)}
+                        <div className="space-y-3">
+                            <Label>Select Position to Stake</Label>
+                            {isLoadingPositions ? (
+                                <EmptyState title="Loading positions..." />
+                            ) : eligiblePositions.length === 0 ? (
+                                <EmptyState
+                                    title="No eligible positions"
+                                    description="Create an LP position for this pool first."
+                                    action={
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                                onClose()
+                                                onAddLiquidity(
+                                                    incentiveToPoolData(selectedIncentive)
+                                                )
+                                            }}
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            Add Liquidity
+                                        </Button>
+                                    }
+                                    className="border rounded-lg p-4"
+                                />
+                            ) : (
+                                <RadioGroup
+                                    value={selectedPositionId ?? ''}
+                                    onValueChange={setSelectedPositionId}
+                                >
+                                    <div className="space-y-2">
+                                        {eligiblePositions.map((position) => (
+                                            <PositionOption
+                                                key={position.tokenId.toString()}
+                                                position={position}
+                                                isSelected={
+                                                    selectedPositionId ===
+                                                    position.tokenId.toString()
+                                                }
+                                            />
+                                        ))}
+                                    </div>
+                                </RadioGroup>
+                            )}
                         </div>
                     </div>
-                    <div className="space-y-3">
-                        <Label>Select Position to Stake</Label>
-                        {isLoadingPositions ? (
-                            <EmptyState title="Loading positions..." />
-                        ) : eligiblePositions.length === 0 ? (
-                            <EmptyState
-                                title="No eligible positions"
-                                description="Create an LP position for this pool first."
-                                action={
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                            onClose()
-                                            onAddLiquidity(incentiveToPoolData(selectedIncentive))
-                                        }}
-                                    >
-                                        <Plus className="h-3.5 w-3.5" />
-                                        Add Liquidity
-                                    </Button>
-                                }
-                                className="border rounded-lg p-4"
-                            />
-                        ) : (
-                            <RadioGroup
-                                value={selectedPositionId ?? ''}
-                                onValueChange={setSelectedPositionId}
-                            >
-                                <div className="space-y-2">
-                                    {eligiblePositions.map((position) => (
-                                        <PositionOption
-                                            key={position.tokenId.toString()}
-                                            position={position}
-                                            isSelected={
-                                                selectedPositionId === position.tokenId.toString()
-                                            }
-                                        />
-                                    ))}
-                                </div>
-                            </RadioGroup>
-                        )}
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button size="lg" onClick={handleStake} disabled={!canStake}>
-                        {getButtonText()}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <Button size="lg" onClick={handleStake} disabled={!canStake}>
+                            {getButtonText()}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Stake LP position"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={onClose}
+            />
+        </>
     )
 }
 

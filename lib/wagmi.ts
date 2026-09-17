@@ -30,6 +30,9 @@ const rpcUrls = {
     [worldchain.id]: 'https://worldchain-mainnet.g.alchemy.com/public',
 }
 
+/** WalletConnect explorer id of KUB Wallet */
+export const KUB_WALLET_ID = '014d1c4aaa277b04791ac27433485d1440a6aabbcb6b8228719ed1574eac4472'
+
 export const wagmiConfig = createConfig({
     chains: supportedChains,
     connectors: [
@@ -37,6 +40,15 @@ export const wagmiConfig = createConfig({
         walletConnect({
             projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
             showQrModal: true,
+            qrModalOptions: {
+                // WalletConnect explorer ids pinned to the modal's first screen, in order
+                explorerRecommendedWalletIds: [
+                    KUB_WALLET_ID,
+                    'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+                    '971e689d0a5be527bac79629b4ee9b925e82208e5168b733496a09c0faed0709', // OKX Wallet
+                    '18388be9ac2d02726dbac9777c96efaac06d744b2f6d580fccdd4127a6d01fd1', // Rabby
+                ],
+            },
         }),
     ],
     transports: {
@@ -46,6 +58,14 @@ export const wagmiConfig = createConfig({
         [jbc.id]: http(rpcUrls[jbc.id], { batch: true }),
         [base.id]: http(rpcUrls[base.id], { batch: true }),
         [worldchain.id]: http(rpcUrls[worldchain.id], { batch: true }),
+    },
+    // viem polls at half the chain's blockTime, capped at 4s, and caches the block number
+    // for as long. KUB and JBC ship without a blockTime, so it assumed 12s blocks: a receipt
+    // took ~10s to show for a tx that landed in 3s. Chains that declare one keep viem's default.
+    pollingInterval: {
+        [bitkub.id]: 1_000,
+        [kubTestnet.id]: 1_000,
+        [jbc.id]: 2_000,
     },
     ssr: true,
     storage: createStorage({

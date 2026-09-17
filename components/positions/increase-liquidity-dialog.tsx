@@ -17,6 +17,8 @@ import { getChainMetadata } from '@/lib/wagmi'
 import { parseTokenAmount, formatBalance, formatTokenAmount } from '@/lib/tokens'
 import { toastError } from '@/lib/toast'
 import { toast } from 'sonner'
+import { TxFlowDialog, actionStep, approvalStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 import type { PositionWithTokens } from '@/types/earn'
 
 interface IncreaseLiquidityDialogProps {
@@ -39,6 +41,10 @@ export function IncreaseLiquidityDialog({
     const [amount1, setAmount1] = useState('')
     const [activeInput, setActiveInput] = useState<'token0' | 'token1' | null>(null)
     const handledHashRef = useRef<string | null>(null)
+    const [txOpen, setTxOpen] = useState(false)
+    // Frozen when the flow opens: an approval landing mid-flow flips needsApproval to
+    // false, and rebuilding from that would delete the step the user is looking at.
+    const [flowApprovals, setFlowApprovals] = useState({ token0: false, token1: false })
     const { pool } = usePool(
         selectedPosition?.token0Info ?? null,
         selectedPosition?.token1Info ?? null,
@@ -66,6 +72,11 @@ export function IncreaseLiquidityDialog({
         approve: approve0,
         isApproving: isApproving0,
         isConfirming: isConfirming0,
+        isSuccess: isApproved0,
+        isError: isApproveError0,
+        error: approveError0,
+        hash: approveHash0,
+        reset: resetApproval0,
     } = useTokenApproval({
         token: selectedPosition?.token0Info ?? null,
         owner: address,
@@ -77,15 +88,20 @@ export function IncreaseLiquidityDialog({
         approve: approve1,
         isApproving: isApproving1,
         isConfirming: isConfirming1,
+        isSuccess: isApproved1,
+        isError: isApproveError1,
+        error: approveError1,
+        hash: approveHash1,
+        reset: resetApproval1,
     } = useTokenApproval({
         token: selectedPosition?.token1Info ?? null,
         owner: address,
         spender: dexConfig?.positionManager,
         amountToApprove: amount1Parsed,
     })
-    const needsApprovalCheck = needsApproval0 || needsApproval1
     const {
         increase,
+        canIncrease,
         isPreparing,
         isExecuting,
         isConfirming,
@@ -99,8 +115,7 @@ export function IncreaseLiquidityDialog({
         amount1Parsed,
         selectedPosition ?? null,
         50, // 0.5% slippage
-        20, // 20 minutes deadline
-        needsApprovalCheck // skip simulation during approval
+        20 // 20 minutes deadline
     )
     useEffect(() => {
         if (!pool || !selectedPosition) return
@@ -168,13 +183,10 @@ export function IncreaseLiquidityDialog({
                     onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
                 },
             })
+            // The tx dialog owns the success frame and closes both from its Done button.
             onSuccess?.()
-            onClose()
-            setAmount0('')
-            setAmount1('')
-            setActiveInput(null)
         }
-    }, [isSuccess, hash, chainId, onClose, onSuccess])
+    }, [isSuccess, hash, chainId, onSuccess])
     useEffect(() => {
         if (error) {
             toastError(error)
@@ -193,20 +205,100 @@ export function IncreaseLiquidityDialog({
         isApproving1 ||
         isConfirming0 ||
         isConfirming1
-    const handleSubmit = () => {
-        if (needsApproval0) {
-            approve0()
-        } else if (needsApproval1) {
-            approve1()
-        } else {
-            increase()
+    const txSteps: TxStep[] = []
+    if (selectedPosition) {
+        if (flowApprovals.token0) {
+            txSteps.push(
+                approvalStep({
+                    token: selectedPosition.token0Info,
+                    spenderLabel: 'Position Manager',
+                    spender: dexConfig?.positionManager,
+                    chainId,
+                    run: approve0,
+                    flags: {
+                        isPending: isApproving0,
+                        isConfirming: isConfirming0,
+                        isSuccess: isApproved0,
+                        isError: isApproveError0,
+                        error: approveError0,
+                        hash: approveHash0,
+                    },
+                })
+            )
         }
+        if (flowApprovals.token1) {
+            txSteps.push(
+                approvalStep({
+                    token: selectedPosition.token1Info,
+                    spenderLabel: 'Position Manager',
+                    spender: dexConfig?.positionManager,
+                    chainId,
+                    run: approve1,
+                    autoRun: true,
+                    flags: {
+                        isPending: isApproving1,
+                        isConfirming: isConfirming1,
+                        isSuccess: isApproved1,
+                        isError: isApproveError1,
+                        error: approveError1,
+                        hash: approveHash1,
+                    },
+                })
+            )
+        }
+        const sym0 = selectedPosition.token0Info.symbol
+        const sym1 = selectedPosition.token1Info.symbol
+        txSteps.push(
+            actionStep({
+                label: 'Add liquidity',
+                flags: {
+                    isPending: isPreparing || isExecuting,
+                    isConfirming,
+                    isSuccess,
+                    isError: !!error,
+                    error,
+                    simulationError,
+                    hash,
+                },
+                run: increase,
+                autoRun: canIncrease,
+                renderStage: (phase) => (
+                    <TxStageRecord
+                        phase={phase}
+                        chainId={chainId}
+                        hash={hash}
+                        rows={[
+                            ['Position', `#${selectedPosition.tokenId.toString()}`],
+                            ['Pair', `${sym0} / ${sym1}`],
+                            ['Deposit', `${amount0 || '0'} ${sym0} + ${amount1 || '0'} ${sym1}`],
+                        ]}
+                    />
+                ),
+            })
+        )
     }
+
+    const handleSubmit = () => {
+        resetApproval0()
+        resetApproval1()
+        setFlowApprovals({ token0: needsApproval0, token1: needsApproval1 })
+        setTxOpen(true)
+        if (needsApproval0) approve0()
+        else if (needsApproval1) approve1()
+        else increase()
+    }
+    const insufficientSymbol = [
+        amount0Parsed > balance0 && selectedPosition?.token0Info.symbol,
+        amount1Parsed > balance1 && selectedPosition?.token1Info.symbol,
+    ]
+        .filter(Boolean)
+        .join(' & ')
     const getButtonText = () => {
         if (isApproving0) return `Approving ${selectedPosition?.token0Info.symbol}...`
         if (isConfirming0) return `Confirming ${selectedPosition?.token0Info.symbol} approval...`
         if (isApproving1) return `Approving ${selectedPosition?.token1Info.symbol}...`
         if (isConfirming1) return `Confirming ${selectedPosition?.token1Info.symbol} approval...`
+        if (insufficientSymbol) return `Insufficient ${insufficientSymbol} balance`
         if (needsApproval0) return `Approve ${selectedPosition?.token0Info.symbol}`
         if (needsApproval1) return `Approve ${selectedPosition?.token1Info.symbol}`
         if (isPreparing) return 'Preparing...'
@@ -218,6 +310,7 @@ export function IncreaseLiquidityDialog({
         if (isLoading) return true
         if (!selectedPosition) return true
         if (!amount0 && !amount1) return true
+        if (insufficientSymbol) return true
         if (!pool) return true
         return false
     }
@@ -226,86 +319,105 @@ export function IncreaseLiquidityDialog({
         ? isInRange(pool.tick, selectedPosition.tickLower, selectedPosition.tickUpper)
         : false
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Add Liquidity</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-6">
-                    <div className="text-center">
-                        <div className="text-lg font-medium">
-                            {selectedPosition.token0Info.symbol} /{' '}
-                            {selectedPosition.token1Info.symbol}
-                        </div>
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                            <span>Position #{selectedPosition.tokenId.toString()}</span>
-                            {inRange ? (
-                                <span className="text-positive">• In Range</span>
-                            ) : (
-                                <span>• Out of Range</span>
-                            )}
-                        </div>
-                    </div>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <div className="flex justify-between">
-                                <Label>{selectedPosition.token0Info.symbol}</Label>
-                                <span className="text-sm text-muted-foreground">
-                                    Balance:{' '}
-                                    {balance0
-                                        ? formatBalance(
-                                              balance0,
-                                              selectedPosition.token0Info.decimals
-                                          )
-                                        : '0'}
-                                </span>
+        <>
+            <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Add Liquidity</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                        <div className="text-center">
+                            <div className="text-lg font-medium">
+                                {selectedPosition.token0Info.symbol} /{' '}
+                                {selectedPosition.token1Info.symbol}
                             </div>
-                            <Input
-                                type="number"
-                                step="any"
-                                value={amount0}
-                                onChange={(e) => {
-                                    setActiveInput('token0')
-                                    setAmount0(e.target.value)
-                                }}
-                                placeholder="0.0"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex justify-between">
-                                <Label>{selectedPosition.token1Info.symbol}</Label>
-                                <span className="text-sm text-muted-foreground">
-                                    Balance:{' '}
-                                    {balance1
-                                        ? formatBalance(
-                                              balance1,
-                                              selectedPosition.token1Info.decimals
-                                          )
-                                        : '0'}
-                                </span>
+                            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <span>Position #{selectedPosition.tokenId.toString()}</span>
+                                {inRange ? (
+                                    <span className="text-positive">• In Range</span>
+                                ) : (
+                                    <span>• Out of Range</span>
+                                )}
                             </div>
-                            <Input
-                                type="number"
-                                step="any"
-                                value={amount1}
-                                onChange={(e) => {
-                                    setActiveInput('token1')
-                                    setAmount1(e.target.value)
-                                }}
-                                placeholder="0.0"
-                            />
                         </div>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <Label>{selectedPosition.token0Info.symbol}</Label>
+                                    <span className="text-sm text-muted-foreground">
+                                        Balance:{' '}
+                                        {balance0
+                                            ? formatBalance(
+                                                  balance0,
+                                                  selectedPosition.token0Info.decimals
+                                              )
+                                            : '0'}
+                                    </span>
+                                </div>
+                                <Input
+                                    type="number"
+                                    step="any"
+                                    value={amount0}
+                                    onChange={(e) => {
+                                        setActiveInput('token0')
+                                        setAmount0(e.target.value)
+                                    }}
+                                    placeholder="0.0"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <Label>{selectedPosition.token1Info.symbol}</Label>
+                                    <span className="text-sm text-muted-foreground">
+                                        Balance:{' '}
+                                        {balance1
+                                            ? formatBalance(
+                                                  balance1,
+                                                  selectedPosition.token1Info.decimals
+                                              )
+                                            : '0'}
+                                    </span>
+                                </div>
+                                <Input
+                                    type="number"
+                                    step="any"
+                                    value={amount1}
+                                    onChange={(e) => {
+                                        setActiveInput('token1')
+                                        setAmount1(e.target.value)
+                                    }}
+                                    placeholder="0.0"
+                                />
+                            </div>
+                        </div>
+                        <Button
+                            className="w-full"
+                            size="lg"
+                            onClick={handleSubmit}
+                            disabled={isButtonDisabled()}
+                        >
+                            {getButtonText()}
+                        </Button>
                     </div>
-                    <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={handleSubmit}
-                        disabled={isButtonDisabled()}
-                    >
-                        {getButtonText()}
-                    </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+                </DialogContent>
+            </Dialog>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Add liquidity"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={() => {
+                    resetApproval0()
+                    resetApproval1()
+                    setAmount0('')
+                    setAmount1('')
+                    setActiveInput(null)
+                    onClose()
+                }}
+            />
+        </>
     )
 }

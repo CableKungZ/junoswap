@@ -30,6 +30,9 @@ import { isNativeToken } from '@/lib/wagmi'
 import { formatDateTime, formatDuration } from '@/lib/duration'
 import { formatExactAmount } from '@/lib/format'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { txPhase } from '@/lib/tx-flow'
+import { TxFlowDialog, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow, TxStageRecord } from '@/components/ui/tx-stage'
 import type { Token } from '@/types/token'
 
 const SECONDS_PER_DAY = 86_400
@@ -64,6 +67,12 @@ export function CreateStakingPoolDialog({
     // What the shared write hook is currently carrying — the allowance read lags a confirmed
     // approval by a block or two, so it cannot be used to tell the two transactions apart.
     const lastAction = useRef<'approve-fee' | 'approve' | 'create' | null>(null)
+    const [txOpen, setTxOpen] = useState(false)
+    // useCreateStakingPool drives all three writes through one hook, so its flags describe
+    // whichever is in flight. These freeze what the flow needs and carry each landed step
+    // past the point where the shared flags move on.
+    const [flowSteps, setFlowSteps] = useState({ fee: false, reward: false })
+    const [done, setDone] = useState({ fee: false, reward: false, create: false })
 
     useEffect(() => {
         if (!open) return
@@ -184,6 +193,7 @@ export function CreateStakingPoolDialog({
     // One click: approve whatever the factory still has to pull, then create.
     useOnTxSuccess(open, create.isSuccess, create.hash, () => {
         if (lastAction.current === 'approve-fee') {
+            setDone((d) => ({ ...d, fee: true }))
             if (needsApproval && rewardsToken) {
                 lastAction.current = 'approve'
                 create.approveReward(rewardsToken.address as Address)
@@ -193,13 +203,15 @@ export function CreateStakingPoolDialog({
             return
         }
         if (lastAction.current === 'approve') {
+            setDone((d) => ({ ...d, reward: true }))
             submitCreate()
             return
         }
+        setDone((d) => ({ ...d, create: true }))
         toastSuccess('Staking pool created!')
         queryClient.invalidateQueries()
+        // The tx dialog owns the success frame and closes both from its Done button.
         onSuccess?.()
-        onClose()
     })
 
     useEffect(() => {
@@ -218,8 +230,105 @@ export function CreateStakingPoolDialog({
         return 'Create pool'
     }
 
+    const sharedFlags = {
+        isPending: create.isPending,
+        isConfirming: create.isConfirming,
+        isError: !!create.error,
+        error: create.error,
+        hash: create.hash,
+    }
+    const factorySide = (amount: string) => ({
+        kind: 'contract' as const,
+        label: 'Pool factory',
+        address: create.factory,
+        amount,
+    })
+    const txSteps: TxStep[] = []
+    if (flowSteps.fee && create.fee) {
+        txSteps.push({
+            label: 'Approve creation fee',
+            phase: done.fee ? 'success' : txPhase(sharedFlags),
+            hash: done.fee ? undefined : create.hash,
+            error: create.error,
+            run: () => {
+                lastAction.current = 'approve-fee'
+                create.approveReward(create.fee!.token)
+            },
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    from={{
+                        kind: 'token',
+                        token: chainTokens.find(
+                            (t) => t.address.toLowerCase() === create.fee?.token.toLowerCase()
+                        ) ?? { symbol: 'Fee' },
+                        amount: 'Wallet',
+                    }}
+                    to={factorySide('Unlimited')}
+                />
+            ),
+        })
+    }
+    if (flowSteps.reward && rewardsToken) {
+        txSteps.push({
+            label: `Approve ${rewardsToken.symbol}`,
+            phase: done.reward
+                ? 'success'
+                : flowSteps.fee && !done.fee
+                  ? 'idle'
+                  : txPhase(sharedFlags),
+            hash: done.reward ? undefined : create.hash,
+            error: create.error,
+            run: () => {
+                lastAction.current = 'approve'
+                create.approveReward(rewardsToken.address as Address)
+            },
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    from={{ kind: 'token', token: rewardsToken, amount: 'Wallet' }}
+                    to={factorySide('Unlimited')}
+                />
+            ),
+        })
+    }
+    txSteps.push({
+        label: 'Create pool',
+        phase: done.create
+            ? 'success'
+            : (flowSteps.fee && !done.fee) || (flowSteps.reward && !done.reward)
+              ? 'idle'
+              : txPhase(sharedFlags),
+        hash: create.hash,
+        error: create.error,
+        run: submitCreate,
+        renderStage: (phase) => (
+            <TxStageRecord
+                phase={phase}
+                chainId={chainId}
+                hash={create.hash}
+                rows={[
+                    ['Stake token', stakingToken?.symbol ?? '—'],
+                    ['Reward token', rewardsToken?.symbol ?? '—'],
+                    ['Reward', `${rewardAmount || '0'} ${rewardsToken?.symbol ?? ''}`],
+                    ['Duration', formatDuration(duration)],
+                ]}
+            />
+        ),
+    })
+
     return (
         <>
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Create staking pool"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={onClose}
+            />
             <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
                 <DialogContent className="sm:max-w-lg max-h-[90vh] bg-card/95 backdrop-blur-md border-border/50">
                     <DialogHeader>
@@ -395,6 +504,9 @@ export function CreateStakingPoolDialog({
                                     return
                                 }
                                 if (blocker || !stakingToken || !rewardsToken) return
+                                setFlowSteps({ fee: needsFeeApproval, reward: needsApproval })
+                                setDone({ fee: false, reward: false, create: false })
+                                setTxOpen(true)
                                 submitNext()
                             }}
                         >

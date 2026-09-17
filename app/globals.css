@@ -28,8 +28,7 @@
         --input: 0 0% 94%;
         --ring: 0 0% 3.9%;
         --radius: 0.5rem;
-        }
-
+    }
 
     .dark {
         --background: 230 15% 3.5%;
@@ -103,7 +102,6 @@
             transform: translateY(0);
         }
     }
-
 }
 
 @layer utilities {
@@ -751,7 +749,8 @@
     }
 
     @keyframes hero-bob {
-        0%, 100% {
+        0%,
+        100% {
             transform: translateY(0);
             opacity: 0.6;
         }
@@ -817,6 +816,211 @@
     .animate-ath-spark,
     .animate-ath-shimmer,
     .animate-ath-ignite {
+        animation: none !important;
+        opacity: 0 !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Transaction dialog motion. Four moves reused across every action: a pulse
+   travelling the rail while in flight, a shimmer where a value is not known
+   yet, a value landing, and one sheen on commit. Everything is token-coloured
+   so both themes come for free.
+   --------------------------------------------------------------------------- */
+@layer components {
+    @keyframes tx-lamp {
+        0%,
+        100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.35;
+        }
+    }
+
+    .animate-tx-lamp {
+        animation: tx-lamp 1.4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+    }
+
+    /* The in-flight rail: fills left to right, then empties the same way it came. */
+    @keyframes tx-rail-run {
+        0% {
+            transform: scaleX(0);
+            transform-origin: left;
+        }
+        46% {
+            transform: scaleX(1);
+            transform-origin: left;
+        }
+        54% {
+            transform: scaleX(1);
+            transform-origin: right;
+        }
+        100% {
+            transform: scaleX(0);
+            transform-origin: right;
+        }
+    }
+
+    .animate-tx-rail-run {
+        transform-origin: left;
+        animation: tx-rail-run 1.9s cubic-bezier(0.45, 0.05, 0.4, 1) infinite;
+    }
+
+    @keyframes tx-rail-fill {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    .animate-tx-rail-fill {
+        transform-origin: left;
+        animation: tx-rail-fill 0.46s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+    }
+
+    /* Overshoot then settle — the whole success celebration, 520ms of it. */
+    @keyframes tx-land {
+        0% {
+            transform: scale(1);
+        }
+        34% {
+            transform: scale(1.14);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .animate-tx-land {
+        animation: tx-land 0.52s cubic-bezier(0.2, 1.5, 0.4, 1);
+    }
+
+    @keyframes tx-sheen {
+        0% {
+            opacity: 0;
+            transform: translateX(-70%);
+        }
+        22% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+            transform: translateX(70%);
+        }
+    }
+
+    .animate-tx-sheen {
+        animation: tx-sheen 0.9s cubic-bezier(0.22, 0.85, 0.3, 1) forwards;
+    }
+
+    @keyframes tx-row-in {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .animate-tx-row-in {
+        animation: tx-row-in 0.46s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
+    }
+
+    /* The vertical connector between two steps, filling once the first lands. */
+    @keyframes tx-srail {
+        to {
+            transform: scaleY(1);
+        }
+    }
+
+    .animate-tx-srail {
+        transform-origin: top;
+        animation: tx-srail 0.42s cubic-bezier(0.3, 0.9, 0.3, 1) forwards;
+    }
+
+    @keyframes tx-draw {
+        to {
+            stroke-dashoffset: 0;
+        }
+    }
+
+    .animate-tx-draw {
+        stroke-dasharray: 40;
+        stroke-dashoffset: 40;
+        animation: tx-draw 0.44s cubic-bezier(0.16, 0.9, 0.3, 1.2) forwards;
+    }
+
+    @keyframes tx-shake {
+        10%,
+        90% {
+            transform: translateX(-1px);
+        }
+        20%,
+        80% {
+            transform: translateX(2px);
+        }
+        30%,
+        50%,
+        70% {
+            transform: translateX(-4px);
+        }
+        40%,
+        60% {
+            transform: translateX(4px);
+        }
+    }
+
+    .animate-tx-shake {
+        animation: tx-shake 0.44s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+    }
+
+    /* A multicall over several v3 positions reads as a stack that fans while it runs. */
+    @keyframes tx-fan {
+        0%,
+        100% {
+            transform: translate(var(--fan-x), 4px) scale(0.88);
+        }
+        50% {
+            transform: translate(calc(var(--fan-x) * 1.55), 6px) scale(0.86)
+                rotate(var(--fan-rotate));
+        }
+    }
+
+    .animate-tx-fan {
+        animation: tx-fan 1.9s cubic-bezier(0.4, 0.05, 0.4, 1) infinite;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-tx-lamp,
+    .animate-tx-rail-run,
+    .animate-tx-rail-fill,
+    .animate-tx-land,
+    .animate-tx-row-in,
+    .animate-tx-srail,
+    .animate-tx-draw,
+    .animate-tx-shake,
+    .animate-tx-fan {
+        animation: none !important;
+    }
+
+    /* Frozen resting states, so a stalled rail still reads as progress. */
+    .animate-tx-rail-run,
+    .animate-tx-rail-fill,
+    .animate-tx-srail {
+        transform: none !important;
+    }
+
+    .animate-tx-draw {
+        stroke-dashoffset: 0;
+    }
+
+    .animate-tx-sheen {
         animation: none !important;
         opacity: 0 !important;
     }

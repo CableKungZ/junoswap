@@ -7,7 +7,6 @@ import {
     fetchBondingCurvePricesSince,
     fetchV3History,
     fetchTokenV3Swaps,
-    computeCurve,
 } from '@coshi190/juno-moneta-sdk'
 import { computePoolPrice } from '@/lib/tick-math'
 import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
@@ -67,10 +66,7 @@ async function fetchTokenActivity(
                 if (e.timestamp >= graduatedAt) continue
                 points.push({
                     timestamp: e.timestamp,
-                    price: computeCurve({
-                        nativeReserve: e.isBuy === 1 ? BigInt(e.reserveIn) : BigInt(e.reserveOut),
-                        tokenReserve: e.isBuy === 1 ? BigInt(e.reserveOut) : BigInt(e.reserveIn),
-                    }).price,
+                    price: Number(e.priceNative),
                 })
             }
             points.sort((a, b) => a.timestamp - b.timestamp)
@@ -130,7 +126,7 @@ async function fetchTokenActivity(
 export function useGraduatedTokenActivity(
     tokens: GraduatedTokenInput[],
     chainId: number
-): Map<string, GraduatedTokenActivity> {
+): { activity: Map<string, GraduatedTokenActivity>; isPending: boolean } {
     const since = useMemo(() => Math.floor(Date.now() / 60_000) * 60 - DAY_SECONDS, [])
 
     const queries = useQueries({
@@ -143,7 +139,7 @@ export function useGraduatedTokenActivity(
         })),
     })
 
-    return useMemo(() => {
+    const activity = useMemo(() => {
         const map = new Map<string, GraduatedTokenActivity>()
         tokens.forEach((t, i) => {
             const data = queries[i]?.data
@@ -151,4 +147,5 @@ export function useGraduatedTokenActivity(
         })
         return map
     }, [tokens, queries])
+    return { activity, isPending: queries.some((q) => q.isPending) }
 }

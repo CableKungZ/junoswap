@@ -18,12 +18,14 @@ import { useIncentives } from '@/hooks/useIncentives'
 import { useStakerDeposits } from '@/hooks/useStakerDeposits'
 import { useFarmStakes, toStakedPosition } from '@/hooks/useFarmStakes'
 import { usePendingRewardsMultiple } from '@/hooks/useRewards'
-import { useUnstakePositions } from '@/hooks/useStaking'
+import { useUnstakeAndWithdraw } from '@/hooks/useStaking'
 import { formatRewardAmount } from '@/lib/format'
 import { formatBalance, getDisplayToken } from '@/lib/tokens'
 import { useOnTxSuccess } from '@/hooks/useOnTxSuccess'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow, type TxSide } from '@/components/ui/tx-stage'
 import { cn } from '@/lib/utils'
 import type { Incentive } from '@/types/earn'
 
@@ -58,6 +60,7 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
     const chainId = useChainId()
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [hasTouchedSelection, setHasTouchedSelection] = useState(false)
+    const [txOpen, setTxOpen] = useState(false)
 
     const { incentives } = useIncentives()
     const { deposits } = useStakerDeposits()
@@ -85,7 +88,12 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
     // Everything is selected until the user narrows it down, so the common case is one click.
     useEffect(() => {
         if (hasTouchedSelection || myStakes.length === 0) return
-        setSelectedIds(myStakes.map((stake) => stake.position.tokenId.toString()))
+        const ids = myStakes.map((stake) => stake.position.tokenId.toString())
+        // Upstream reads hand back a fresh array on refetch; a new but equal list must not
+        // re-render, or the effect loops.
+        setSelectedIds((prev) =>
+            prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids
+        )
     }, [myStakes, hasTouchedSelection])
 
     const selectedTokenIds = useMemo(() => {
@@ -95,23 +103,36 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
             .map((stake) => stake.position.tokenId)
     }, [myStakes, selectedIds])
 
-    const { unstake, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
-        useUnstakePositions(selectedTokenIds, incentive, address, incentive?.program ?? 'v3')
+    // Frozen at click: unstaked positions drop out of `myStakes` once the stake list refetches,
+    // and the withdraw that follows still has to name them.
+    const [flow, setFlow] = useState<{
+        ids: bigint[]
+        reward: string
+        lead: (typeof myStakes)[number]['position']
+    } | null>(null)
+    const flowIds = flow?.ids ?? selectedTokenIds
+    const { unstake, withdraw } = useUnstakeAndWithdraw(
+        flowIds,
+        incentive,
+        address,
+        incentive?.program ?? 'v3'
+    )
 
-    useOnTxSuccess(open, isSuccess, hash, () => {
+    useOnTxSuccess(open, withdraw.isSuccess, withdraw.hash, () => {
         if (address) {
-            for (const tokenId of selectedTokenIds) markUnstaked(chainId, address, tokenId)
+            for (const tokenId of flowIds) markUnstaked(chainId, address, tokenId)
         }
-        const count = selectedTokenIds.length
+        const count = flowIds.length
         toastSuccess(
             count === 1
-                ? 'Position unstaked and rewards claimed'
-                : `${count} positions unstaked and rewards claimed`
+                ? 'Position unstaked and withdrawn'
+                : `${count} positions unstaked and withdrawn`
         )
+        // The tx dialog owns the success frame and closes both from its Done button.
         onSuccess?.()
-        onClose()
     })
 
+    const error = unstake.error ?? withdraw.error
     useEffect(() => {
         if (error) toastError(error)
     }, [error])
@@ -127,154 +148,258 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
 
     const allSelected = myStakes.length > 0 && selectedTokenIds.length === myStakes.length
     const rewardToken = getDisplayToken(incentive.rewardTokenInfo)
-    const isBusy = isPreparing || isExecuting || isConfirming
+    const isBusy = unstake.isPreparing || unstake.isExecuting || unstake.isConfirming
     const buttonLabel =
         selectedTokenIds.length === 0
             ? 'Select a position'
-            : isExecuting
+            : unstake.isExecuting
               ? 'Confirm in wallet...'
-              : isConfirming
+              : unstake.isConfirming
                 ? 'Unstaking...'
                 : selectedTokenIds.length === 1
                   ? 'Unstake & Claim'
                   : `Unstake ${selectedTokenIds.length} & Claim`
 
-    return (
-        <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-            <DialogContent className="max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Unstake from Farm</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                    <div className="rounded-lg bg-muted p-4">
-                        <div className="font-medium">
-                            {getDisplayToken(incentive.poolToken0).symbol} /{' '}
-                            {getDisplayToken(incentive.poolToken1).symbol}
-                        </div>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                            Selected positions leave in one transaction, rewards included.
-                        </div>
-                    </div>
+    const selectedStakes = myStakes.filter((stake) =>
+        selectedIds.includes(stake.position.tokenId.toString())
+    )
+    // The multicall claims every selected position's reward at once, so the stage shows
+    // the sum rather than one of them.
+    const totalReward = selectedStakes.reduce(
+        (sum, stake) =>
+            sum + (rewards.get(`${stake.position.tokenId}-${incentive.incentiveId}`) ?? 0n),
+        0n
+    )
+    const formattedTotal = formatRewardAmount(totalReward, incentive.rewardTokenInfo.decimals)
+    const leadPosition = flow?.lead
+    const handleUnstake = () => {
+        const lead = selectedStakes[0]?.position
+        if (!lead) return
+        // Nothing is frozen yet, so the simulation run() sends is already for this selection.
+        setFlow({ ids: selectedTokenIds, reward: formattedTotal, lead })
+        setTxOpen(true)
+        unstake.run()
+    }
+    const count = flowIds.length
+    const positionSide: TxSide | null = leadPosition
+        ? {
+              kind: 'position',
+              tokenId: leadPosition.tokenId,
+              count,
+              feeTier: leadPosition.fee,
+              inRange: leadPosition.inRange,
+              token0: leadPosition.token0Info,
+              token1: leadPosition.token1Info,
+          }
+        : null
+    const txSteps = positionSide
+        ? [
+              actionStep({
+                  label: 'Unstake & claim rewards',
+                  flags: {
+                      isPending: unstake.isPreparing || unstake.isExecuting,
+                      isConfirming: unstake.isConfirming,
+                      isSuccess: unstake.isSuccess,
+                      isError: !!unstake.error,
+                      error: unstake.error,
+                      simulationError: unstake.simulationError,
+                      hash: unstake.hash,
+                  },
+                  run: unstake.run,
+                  renderStage: (phase) => (
+                      <TxStageFlow
+                          phase={phase}
+                          chainId={chainId}
+                          hash={unstake.hash}
+                          from={positionSide}
+                          to={{
+                              kind: 'token',
+                              token: rewardToken,
+                              amount: flow?.reward ?? formattedTotal,
+                          }}
+                      />
+                  ),
+              }),
+              actionStep({
+                  label: count === 1 ? 'Withdraw position' : `Withdraw ${count} positions`,
+                  flags: {
+                      isPending: withdraw.isPreparing || withdraw.isExecuting,
+                      isConfirming: withdraw.isConfirming,
+                      isSuccess: withdraw.isSuccess,
+                      isError: !!withdraw.error,
+                      error: withdraw.error,
+                      simulationError: withdraw.simulationError,
+                      hash: withdraw.hash,
+                  },
+                  run: withdraw.run,
+                  autoRun: withdraw.canRun,
+                  renderStage: (phase) => (
+                      <TxStageFlow
+                          phase={phase}
+                          chainId={chainId}
+                          hash={withdraw.hash}
+                          from={{ kind: 'contract', label: 'Farm staker', amount: 'Unstaked' }}
+                          to={positionSide}
+                      />
+                  ),
+              }),
+          ]
+        : []
 
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <Label>Your staked positions</Label>
-                            {myStakes.length > 1 && (
-                                <button
-                                    type="button"
-                                    className="text-xs font-medium text-primary hover:opacity-80"
-                                    onClick={() => {
-                                        setHasTouchedSelection(true)
-                                        setSelectedIds(
-                                            allSelected
-                                                ? []
-                                                : myStakes.map((stake) =>
-                                                      stake.position.tokenId.toString()
-                                                  )
+    return (
+        <>
+            <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Unstake from Farm</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="rounded-lg bg-muted p-4">
+                            <div className="font-medium">
+                                {getDisplayToken(incentive.poolToken0).symbol} /{' '}
+                                {getDisplayToken(incentive.poolToken1).symbol}
+                            </div>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                                Rewards are claimed first, then the selected positions are withdrawn
+                                — two signatures.
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Label>Your staked positions</Label>
+                                {myStakes.length > 1 && (
+                                    <button
+                                        type="button"
+                                        className="text-xs font-medium text-primary hover:opacity-80"
+                                        onClick={() => {
+                                            setHasTouchedSelection(true)
+                                            setSelectedIds(
+                                                allSelected
+                                                    ? []
+                                                    : myStakes.map((stake) =>
+                                                          stake.position.tokenId.toString()
+                                                      )
+                                            )
+                                        }}
+                                    >
+                                        {allSelected ? 'Clear' : 'Select all'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {isLoading ? (
+                                <EmptyState title="Loading positions..." />
+                            ) : myStakes.length === 0 ? (
+                                <EmptyState
+                                    title="Nothing staked here"
+                                    description="You have no positions staked in this farm."
+                                    className="rounded-lg border p-4"
+                                />
+                            ) : (
+                                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                                    {myStakes.map((stake) => {
+                                        const tokenId = stake.position.tokenId.toString()
+                                        const isSelected = selectedIds.includes(tokenId)
+                                        const reward =
+                                            rewards.get(`${tokenId}-${incentive.incentiveId}`) ?? 0n
+                                        return (
+                                            <button
+                                                key={tokenId}
+                                                type="button"
+                                                aria-pressed={isSelected}
+                                                onClick={() => toggle(tokenId)}
+                                                className={cn(
+                                                    'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                                                    isSelected
+                                                        ? 'border-primary bg-primary/5'
+                                                        : 'hover:border-primary/50'
+                                                )}
+                                            >
+                                                <CheckBox checked={isSelected} />
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">
+                                                            Position #{tokenId}
+                                                        </span>
+                                                        {stake.position.inRange ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="border-positive/20 bg-positive/10 text-positive"
+                                                            >
+                                                                In Range
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="text-muted-foreground"
+                                                            >
+                                                                Out of Range
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="truncate text-sm text-muted-foreground">
+                                                        {formatBalance(
+                                                            stake.position.amount0,
+                                                            stake.position.token0Info.decimals
+                                                        )}{' '}
+                                                        {
+                                                            getDisplayToken(
+                                                                stake.position.token0Info
+                                                            ).symbol
+                                                        }{' '}
+                                                        +{' '}
+                                                        {formatBalance(
+                                                            stake.position.amount1,
+                                                            stake.position.token1Info.decimals
+                                                        )}{' '}
+                                                        {
+                                                            getDisplayToken(
+                                                                stake.position.token1Info
+                                                            ).symbol
+                                                        }
+                                                    </div>
+                                                    <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                                                        {formatRewardAmount(
+                                                            reward,
+                                                            incentive.rewardTokenInfo.decimals
+                                                        )}{' '}
+                                                        {rewardToken.symbol} unclaimed
+                                                    </div>
+                                                </div>
+                                            </button>
                                         )
-                                    }}
-                                >
-                                    {allSelected ? 'Clear' : 'Select all'}
-                                </button>
+                                    })}
+                                </div>
                             )}
                         </div>
-
-                        {isLoading ? (
-                            <EmptyState title="Loading positions..." />
-                        ) : myStakes.length === 0 ? (
-                            <EmptyState
-                                title="Nothing staked here"
-                                description="You have no positions staked in this farm."
-                                className="rounded-lg border p-4"
-                            />
-                        ) : (
-                            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                                {myStakes.map((stake) => {
-                                    const tokenId = stake.position.tokenId.toString()
-                                    const isSelected = selectedIds.includes(tokenId)
-                                    const reward =
-                                        rewards.get(`${tokenId}-${incentive.incentiveId}`) ?? 0n
-                                    return (
-                                        <button
-                                            key={tokenId}
-                                            type="button"
-                                            aria-pressed={isSelected}
-                                            onClick={() => toggle(tokenId)}
-                                            className={cn(
-                                                'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-                                                isSelected
-                                                    ? 'border-primary bg-primary/5'
-                                                    : 'hover:border-primary/50'
-                                            )}
-                                        >
-                                            <CheckBox checked={isSelected} />
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">
-                                                        Position #{tokenId}
-                                                    </span>
-                                                    {stake.position.inRange ? (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="border-positive/20 bg-positive/10 text-positive"
-                                                        >
-                                                            In Range
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="text-muted-foreground"
-                                                        >
-                                                            Out of Range
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                                <div className="truncate text-sm text-muted-foreground">
-                                                    {formatBalance(
-                                                        stake.position.amount0,
-                                                        stake.position.token0Info.decimals
-                                                    )}{' '}
-                                                    {
-                                                        getDisplayToken(stake.position.token0Info)
-                                                            .symbol
-                                                    }{' '}
-                                                    +{' '}
-                                                    {formatBalance(
-                                                        stake.position.amount1,
-                                                        stake.position.token1Info.decimals
-                                                    )}{' '}
-                                                    {
-                                                        getDisplayToken(stake.position.token1Info)
-                                                            .symbol
-                                                    }
-                                                </div>
-                                                <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                                                    {formatRewardAmount(
-                                                        reward,
-                                                        incentive.rewardTokenInfo.decimals
-                                                    )}{' '}
-                                                    {rewardToken.symbol} unclaimed
-                                                </div>
-                                            </div>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        )}
                     </div>
-                </div>
-                <DialogFooter>
-                    <Button
-                        size="lg"
-                        onClick={unstake}
-                        disabled={selectedTokenIds.length === 0 || isBusy}
-                        isLoading={isBusy}
-                        loadingText={buttonLabel}
-                    >
-                        {buttonLabel}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <Button
+                            size="lg"
+                            onClick={handleUnstake}
+                            disabled={selectedTokenIds.length === 0 || isBusy}
+                            isLoading={isBusy}
+                            loadingText={buttonLabel}
+                        >
+                            {buttonLabel}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={(next) => {
+                    setTxOpen(next)
+                    if (!next) setFlow(null)
+                }}
+                title="Unstake & claim"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={onClose}
+            />
+        </>
     )
 }

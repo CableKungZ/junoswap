@@ -31,6 +31,8 @@ import { useTheme } from 'next-themes'
 import { useState, useEffect } from 'react'
 import { toastSuccess } from '@/lib/toast'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { useUiPrefsStore } from '@/store/ui-prefs-store'
 
 export function AccountDropdown({ children }: { children: React.ReactNode }) {
     const { disconnect } = useDisconnect()
@@ -41,6 +43,7 @@ export function AccountDropdown({ children }: { children: React.ReactNode }) {
     const [isSendOpen, setIsSendOpen] = useState(false)
     const [isReferralOpen, setIsReferralOpen] = useState(false)
     const [copied, setCopied] = useState(false)
+    const { txDialogs, setTxDialogs } = useUiPrefsStore()
     useEffect(() => {
         setMounted(true)
     }, [])
@@ -214,6 +217,12 @@ export function AccountDropdown({ children }: { children: React.ReactNode }) {
                                     </span>
                                 </button>
                             </div>
+                        )}
+                        {mounted && (
+                            <label className="flex cursor-pointer items-center justify-between px-2 py-1.5">
+                                <span className="text-sm">Transaction steps</span>
+                                <Switch checked={txDialogs} onCheckedChange={setTxDialogs} />
+                            </label>
                         )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

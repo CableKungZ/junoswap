@@ -41,6 +41,9 @@ import {
 import { cn } from '@/lib/utils'
 import { formatBalance, formatTokenAmount, parseTokenAmount } from '@/lib/tokens'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { txPhase } from '@/lib/tx-flow'
+import { TxFlowDialog, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow, TxStageRecord } from '@/components/ui/tx-stage'
 import type { StakingPool, StakingPoolFilter, StakingPoolStatus } from '@/types/staking'
 
 const SECONDS_PER_DAY = 86_400
@@ -146,11 +149,13 @@ function PoolCard({
     onConnect: () => void
 }) {
     const { address: account, isConnected } = useAccount()
+    const chainId = useChainId()
     const isCreator = !!account && account.toLowerCase() === pool.view.creator.toLowerCase()
     const status = getStakingStatus(pool.view, now)
     // Every creator action is only legal between epochs, so the gear stays hidden until then.
     const canManagePool = status === 'ended' || status === 'closed'
     const claim = useStakingPoolActions(pool.address, pool.view.stakingToken)
+    const [claimOpen, setClaimOpen] = useState(false)
     const queryClient = useQueryClient()
     useOnTxSuccess(true, claim.isSuccess, claim.hash, () => {
         toastSuccess('Rewards claimed')
@@ -177,8 +182,48 @@ function PoolCard({
               ? `Starts ${formatRelativeTime(Number(pool.view.startTime), now)}`
               : STATUS_LABEL[status]
 
+    const claimSteps = [
+        actionStep({
+            label: 'Claim rewards',
+            flags: {
+                isPending: claim.isPending,
+                isConfirming: claim.isConfirming,
+                isSuccess: claim.isSuccess,
+                isError: !!claim.error,
+                error: claim.error,
+                hash: claim.hash,
+            },
+            run: () => claim.claim(),
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={claim.hash}
+                    from={{
+                        kind: 'contract',
+                        label: `${pool.stakingTokenInfo.symbol} pool`,
+                        address: pool.address,
+                        amount: 'Earned',
+                    }}
+                    to={{
+                        kind: 'token',
+                        token: pool.rewardTokenInfo,
+                        amount: formatTokenAmount(pool.user.earned, pool.rewardTokenInfo.decimals),
+                    }}
+                />
+            ),
+        }),
+    ]
+
     return (
         <Card className="position-card-hover flex flex-col overflow-hidden">
+            <TxFlowDialog
+                open={claimOpen}
+                onOpenChange={setClaimOpen}
+                title="Claim rewards"
+                steps={claimSteps}
+                chainId={chainId}
+            />
             <CardContent className="flex flex-1 flex-col p-5">
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-3">
@@ -280,7 +325,10 @@ function PoolCard({
                             variant="outline"
                             disabled={claim.isPending || claim.isConfirming}
                             isLoading={claim.isPending || claim.isConfirming}
-                            onClick={() => claim.claim()}
+                            onClick={() => {
+                                setClaimOpen(true)
+                                claim.claim()
+                            }}
                         >
                             Claim
                         </Button>
@@ -323,9 +371,27 @@ function ManagePoolDialog({
     onSuccess: () => void
 }) {
     const now = useNowSeconds()
+    const chainId = useChainId()
     const [mode, setMode] = useState<'stake' | 'withdraw'>('stake')
     const [amount, setAmount] = useState('')
     const actions = useStakingPoolActions(pool?.address, pool?.view.stakingToken)
+    const [txOpen, setTxOpen] = useState(false)
+    // useStakingPoolActions writes approve, stake and withdraw through one hook, so its
+    // flags describe whichever call is in flight. These say which step owns them, and
+    // carry a landed step past the point where the shared flags move on.
+    const [flowKind, setFlowKind] = useState<'stake' | 'withdraw' | 'exit' | 'withdraw-lot'>(
+        'stake'
+    )
+    // What the flow moves, fixed at click time: the input may be cleared, and exit and lot
+    // withdrawals never read it.
+    const [flowAmount, setFlowAmount] = useState(0n)
+    const flowLot = useRef(0n)
+    // The step before the main call, if any: an approval ahead of a stake, or a reward claim
+    // ahead of a withdrawal so earnings land before the stake leaves.
+    const [flowPrep, setFlowPrep] = useState<'approve' | 'claim' | null>(null)
+    const [prepDone, setPrepDone] = useState(false)
+    const [flowReward, setFlowReward] = useState(0n)
+    const [mainDone, setMainDone] = useState(false)
     const { lots } = useStakingLots(pool?.address, open)
     const [lotPage, setLotPage] = useState(1)
     const lotPages = getTotalPages(lots.length, LOTS_PER_PAGE)
@@ -337,22 +403,26 @@ function ManagePoolDialog({
         setMode('stake')
         setAmount('')
         setLotPage(1)
-        queuedStake.current = null
+        queuedMain.current = null
+        setPrepDone(false)
+        setMainDone(false)
     }, [open, pool?.address])
 
-    // One click: the approval carries the stake it was for, so the wallet asks twice but the
+    // One click: the prep step carries the call it was for, so the wallet asks twice but the
     // user never has to come back and press the button again.
-    const queuedStake = useRef<bigint | null>(null)
+    const queuedMain = useRef<(() => void) | null>(null)
 
     useOnTxSuccess(open, actions.isSuccess, actions.hash, () => {
-        const queued = queuedStake.current
-        queuedStake.current = null
-        if (queued !== null) {
-            actions.stake(queued)
+        const queued = queuedMain.current
+        queuedMain.current = null
+        if (queued) {
+            setPrepDone(true)
+            queued()
             return
         }
-        setAmount('')
+        setMainDone(true)
         toastSuccess('Transaction confirmed')
+        // The tx dialog owns the success frame and closes from its Done button.
         onSuccess()
     })
 
@@ -388,175 +458,287 @@ function ManagePoolDialog({
                 : 'Insufficient balance'
         }
         if (needsApproval) return `Approve & Stake`
-        return activeMode === 'stake' ? 'Stake' : 'Withdraw'
+        if (activeMode === 'stake') return 'Stake'
+        return pool.user.earned > 0n ? 'Claim & Withdraw' : 'Withdraw'
     }
 
+    const sharedFlags = {
+        isPending: actions.isPending,
+        isConfirming: actions.isConfirming,
+        isError: !!actions.error,
+        error: actions.error,
+        hash: actions.hash,
+    }
+    const poolSide = {
+        kind: 'contract' as const,
+        label: `${pool.stakingTokenInfo.symbol} pool`,
+        address: pool.address,
+        amount: 'Staked',
+    }
+    const tokenSide = {
+        kind: 'token' as const,
+        token: pool.stakingTokenInfo,
+        amount: formatTokenAmount(flowAmount, decimals),
+    }
+    const runMain = (kind: typeof flowKind, value: bigint) => {
+        if (kind === 'stake') actions.stake(value)
+        else if (kind === 'withdraw') actions.withdraw(value)
+        else if (kind === 'exit') actions.exit()
+        else actions.withdrawFrom(flowLot.current, value)
+    }
+    const runPrep = (prep: 'approve' | 'claim', kind: typeof flowKind, value: bigint) => {
+        queuedMain.current = () => runMain(kind, value)
+        if (prep === 'approve') actions.approve()
+        else actions.claim()
+    }
+    const startFlow = (kind: typeof flowKind, value: bigint, approve = false) => {
+        // exit() already pays out rewards, so only the plain withdrawals get a claim first.
+        const prep = approve
+            ? 'approve'
+            : kind !== 'stake' && kind !== 'exit' && pool.user.earned > 0n
+              ? 'claim'
+              : null
+        setFlowKind(kind)
+        setFlowAmount(value)
+        setFlowReward(pool.user.earned)
+        setFlowPrep(prep)
+        setPrepDone(false)
+        setMainDone(false)
+        setTxOpen(true)
+        if (prep) runPrep(prep, kind, value)
+        else runMain(kind, value)
+    }
+    const MAIN_LABEL: Record<typeof flowKind, string> = {
+        stake: 'Stake',
+        withdraw: 'Withdraw',
+        exit: pool.user.earned > 0n ? 'Withdraw all & claim' : 'Withdraw all',
+        'withdraw-lot': 'Withdraw deposit',
+    }
+    const txSteps: TxStep[] = []
+    if (flowPrep === 'approve') {
+        txSteps.push({
+            label: `Approve ${pool.stakingTokenInfo.symbol}`,
+            phase: prepDone ? 'success' : txPhase(sharedFlags),
+            hash: prepDone ? undefined : actions.hash,
+            error: actions.error,
+            run: () => runPrep('approve', flowKind, flowAmount),
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    from={{ kind: 'token', token: pool.stakingTokenInfo, amount: 'Wallet' }}
+                    to={{ ...poolSide, amount: 'Unlimited' }}
+                />
+            ),
+        })
+    }
+    if (flowPrep === 'claim') {
+        txSteps.push({
+            label: `Claim ${pool.rewardTokenInfo.symbol} rewards`,
+            phase: prepDone ? 'success' : txPhase(sharedFlags),
+            hash: prepDone ? undefined : actions.hash,
+            error: actions.error,
+            run: () => runPrep('claim', flowKind, flowAmount),
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={prepDone ? undefined : actions.hash}
+                    from={{ ...poolSide, amount: 'Earned' }}
+                    to={{
+                        kind: 'token',
+                        token: pool.rewardTokenInfo,
+                        amount: formatTokenAmount(flowReward, pool.rewardTokenInfo.decimals),
+                    }}
+                />
+            ),
+        })
+    }
+    txSteps.push({
+        label: MAIN_LABEL[flowKind],
+        phase: mainDone ? 'success' : flowPrep && !prepDone ? 'idle' : txPhase(sharedFlags),
+        hash: flowPrep && !prepDone ? undefined : actions.hash,
+        error: actions.error,
+        run: () => runMain(flowKind, flowAmount),
+        renderStage: (phase) => (
+            <TxStageFlow
+                phase={phase}
+                chainId={chainId}
+                hash={actions.hash}
+                from={flowKind === 'stake' ? tokenSide : poolSide}
+                to={flowKind === 'stake' ? poolSide : tokenSide}
+            />
+        ),
+    })
+
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-md border-border/50">
-                <DialogHeader>
-                    <DialogTitle className="text-lg">
-                        {pool.stakingTokenInfo.symbol} pool
-                    </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                    {canWithdraw && (
-                        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/30 p-1">
-                            {(['stake', 'withdraw'] as const).map((m) => (
-                                <button
-                                    key={m}
-                                    type="button"
-                                    onClick={() => {
-                                        setMode(m)
-                                        setAmount('')
-                                        setLotPage(1)
-                                    }}
-                                    className={`rounded-lg py-1.5 text-sm font-medium capitalize transition-colors ${
-                                        mode === m
-                                            ? 'bg-background text-foreground'
-                                            : 'text-muted-foreground'
-                                    }`}
-                                >
-                                    {m}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+        <>
+            <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+                <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-md border-border/50">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg">
+                            {pool.stakingTokenInfo.symbol} pool
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        {canWithdraw && (
+                            <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/30 p-1">
+                                {(['stake', 'withdraw'] as const).map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => {
+                                            setMode(m)
+                                            setAmount('')
+                                            setLotPage(1)
+                                        }}
+                                        className={`rounded-lg py-1.5 text-sm font-medium capitalize transition-colors ${
+                                            mode === m
+                                                ? 'bg-background text-foreground'
+                                                : 'text-muted-foreground'
+                                        }`}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
-                    <div className="space-y-2">
-                        <div className="flex items-baseline justify-between">
-                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                                Amount
-                            </Label>
-                            <button
-                                type="button"
-                                className="text-xs text-muted-foreground hover:text-foreground"
-                                onClick={() => setAmount(formatTokenAmount(max, decimals))}
-                            >
-                                {activeMode === 'stake'
-                                    ? capped &&
-                                      pool.view.remainingStakingPower < pool.user.stakingBalance
-                                        ? 'Cap room'
-                                        : 'Balance'
-                                    : 'Unlocked'}
-                                : {formatBalance(max, decimals)}
-                            </button>
-                        </div>
-                        <Input
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            placeholder="0.0"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                        />
-                    </div>
-
-                    {activeMode === 'withdraw' && pool.user.withdrawable > 0n && (
-                        <Button
-                            variant="outline"
-                            className="w-full"
-                            disabled={isBusy}
-                            onClick={() => actions.exit()}
-                        >
-                            Withdraw all
-                            {pool.user.earned > 0n ? ' & claim' : ''} (
-                            {formatBalance(pool.user.withdrawable, decimals)}{' '}
-                            {pool.stakingTokenInfo.symbol})
-                        </Button>
-                    )}
-
-                    {activeMode === 'withdraw' && locked > 0n && (
-                        <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-                            {formatBalance(locked, decimals)} {pool.stakingTokenInfo.symbol} is
-                            still locked
-                            {pool.user.nextUnlockAt > 0n
-                                ? `, unlocking ${formatRelativeTime(Number(pool.user.nextUnlockAt), now)}`
-                                : ''}
-                            . Claiming rewards is never locked.
-                        </p>
-                    )}
-
-                    <Button
-                        className="w-full"
-                        size="lg"
-                        disabled={isBusy || parsed <= 0n || parsed > max}
-                        isLoading={isBusy}
-                        onClick={() => {
-                            if (needsApproval) {
-                                queuedStake.current = parsed
-                                actions.approve()
-                                return
-                            }
-                            if (activeMode === 'stake') actions.stake(parsed)
-                            else actions.withdraw(parsed)
-                        }}
-                    >
-                        {label()}
-                    </Button>
-
-                    {activeMode === 'withdraw' && lots.length > 0 && (
                         <div className="space-y-2">
                             <div className="flex items-baseline justify-between">
                                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                                    Your deposits
+                                    Amount
                                 </Label>
-                                <span
-                                    className="text-[11px] text-muted-foreground"
-                                    title="Every stake is its own lot with its own unlock time, so a later deposit never re-locks an earlier one."
+                                <button
+                                    type="button"
+                                    className="text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => setAmount(formatTokenAmount(max, decimals))}
                                 >
-                                    {lots.length} lot{lots.length === 1 ? '' : 's'}
-                                </span>
+                                    {activeMode === 'stake'
+                                        ? capped &&
+                                          pool.view.remainingStakingPower < pool.user.stakingBalance
+                                            ? 'Cap room'
+                                            : 'Balance'
+                                        : 'Unlocked'}
+                                    : {formatBalance(max, decimals)}
+                                </button>
                             </div>
-                            <div className="space-y-1">
-                                {pagedLots.map((lot) => {
-                                    const unlocked = lot.unlockAt <= now
-                                    return (
-                                        <div
-                                            key={lot.index}
-                                            className="flex items-center justify-between gap-2 rounded-xl bg-muted/20 px-3 py-2 text-xs"
-                                        >
-                                            <div className="min-w-0">
-                                                <div className="font-medium tabular-nums">
-                                                    {formatBalance(lot.amount, decimals)}{' '}
-                                                    {pool.stakingTokenInfo.symbol}
-                                                </div>
-                                                <div className="text-[11px] text-muted-foreground">
-                                                    {unlocked
-                                                        ? 'unlocked'
-                                                        : `unlocks ${formatRelativeTime(lot.unlockAt, now)}`}
-                                                </div>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={!unlocked || isBusy}
-                                                onClick={() =>
-                                                    actions.withdrawFrom(
-                                                        BigInt(lot.index),
-                                                        lot.amount
-                                                    )
-                                                }
-                                            >
-                                                Withdraw
-                                            </Button>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                            {lotPages > 1 && (
-                                <PaginationControls
-                                    currentPage={safeLotPage}
-                                    totalPages={lotPages}
-                                    onPageChange={setLotPage}
-                                />
-                            )}
+                            <Input
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                step="any"
+                                placeholder="0.0"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                            />
                         </div>
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
+
+                        {activeMode === 'withdraw' && pool.user.withdrawable > 0n && (
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                disabled={isBusy}
+                                onClick={() => startFlow('exit', pool.user.withdrawable)}
+                            >
+                                Withdraw all
+                                {pool.user.earned > 0n ? ' & claim' : ''} (
+                                {formatBalance(pool.user.withdrawable, decimals)}{' '}
+                                {pool.stakingTokenInfo.symbol})
+                            </Button>
+                        )}
+
+                        {activeMode === 'withdraw' && locked > 0n && (
+                            <p className="rounded-xl bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                                {formatBalance(locked, decimals)} {pool.stakingTokenInfo.symbol} is
+                                still locked
+                                {pool.user.nextUnlockAt > 0n
+                                    ? `, unlocking ${formatRelativeTime(Number(pool.user.nextUnlockAt), now)}`
+                                    : ''}
+                                . Claiming rewards is never locked.
+                            </p>
+                        )}
+
+                        <Button
+                            className="w-full"
+                            size="lg"
+                            disabled={isBusy || parsed <= 0n || parsed > max}
+                            isLoading={isBusy}
+                            onClick={() => startFlow(activeMode, parsed, needsApproval)}
+                        >
+                            {label()}
+                        </Button>
+
+                        {activeMode === 'withdraw' && lots.length > 0 && (
+                            <div className="space-y-2">
+                                <div className="flex items-baseline justify-between">
+                                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                                        Your deposits
+                                    </Label>
+                                    <span
+                                        className="text-[11px] text-muted-foreground"
+                                        title="Every stake is its own lot with its own unlock time, so a later deposit never re-locks an earlier one."
+                                    >
+                                        {lots.length} lot{lots.length === 1 ? '' : 's'}
+                                    </span>
+                                </div>
+                                <div className="space-y-1">
+                                    {pagedLots.map((lot) => {
+                                        const unlocked = lot.unlockAt <= now
+                                        return (
+                                            <div
+                                                key={lot.index}
+                                                className="flex items-center justify-between gap-2 rounded-xl bg-muted/20 px-3 py-2 text-xs"
+                                            >
+                                                <div className="min-w-0">
+                                                    <div className="font-medium tabular-nums">
+                                                        {formatBalance(lot.amount, decimals)}{' '}
+                                                        {pool.stakingTokenInfo.symbol}
+                                                    </div>
+                                                    <div className="text-[11px] text-muted-foreground">
+                                                        {unlocked
+                                                            ? 'unlocked'
+                                                            : `unlocks ${formatRelativeTime(lot.unlockAt, now)}`}
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={!unlocked || isBusy}
+                                                    onClick={() => {
+                                                        flowLot.current = BigInt(lot.index)
+                                                        startFlow('withdraw-lot', lot.amount)
+                                                    }}
+                                                >
+                                                    Withdraw
+                                                </Button>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                                {lotPages > 1 && (
+                                    <PaginationControls
+                                        currentPage={safeLotPage}
+                                        totalPages={lotPages}
+                                        onPageChange={setLotPage}
+                                    />
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title={`${pool.stakingTokenInfo.symbol} pool`}
+                steps={txSteps}
+                chainId={chainId}
+                onDone={onClose}
+            />
+        </>
     )
 }
 
@@ -605,6 +787,38 @@ export function StakingPools({ onCreate }: { onCreate: () => void }) {
     // One transaction for every pool that owes the viewer something.
     const claimable = useMemo(() => pools.filter((p) => p.user.earned > 0n), [pools])
     const batch = useClaimAllStaking()
+    // Frozen at click: the claimed pools drop out of `claimable` once balances refetch.
+    const [claimAllPools, setClaimAllPools] = useState<StakingPool[] | null>(null)
+    const claimAllSteps: TxStep[] = claimAllPools
+        ? [
+              actionStep({
+                  label: `Claim from ${claimAllPools.length} pools`,
+                  flags: {
+                      isPending: batch.isPending,
+                      isConfirming: batch.isConfirming,
+                      isSuccess: batch.isSuccess,
+                      isError: !!batch.error,
+                      error: batch.error,
+                      hash: batch.hash,
+                  },
+                  run: () => batch.claimAll(claimAllPools.map((p) => p.address)),
+                  renderStage: (phase) => (
+                      <TxStageRecord
+                          phase={phase}
+                          chainId={chainId}
+                          hash={batch.hash}
+                          rows={claimAllPools.map(
+                              (p) =>
+                                  [
+                                      `${p.stakingTokenInfo.symbol} pool`,
+                                      `${formatTokenAmount(p.user.earned, p.rewardTokenInfo.decimals)} ${p.rewardTokenInfo.symbol}`,
+                                  ] as const
+                          )}
+                      />
+                  ),
+              }),
+          ]
+        : []
     useOnTxSuccess(true, batch.isSuccess, batch.hash, () => {
         toastSuccess('Rewards claimed')
         queryClient.invalidateQueries()
@@ -645,11 +859,21 @@ export function StakingPools({ onCreate }: { onCreate: () => void }) {
                         disabled={batch.isPending || batch.isConfirming}
                         isLoading={batch.isPending || batch.isConfirming}
                         loadingText="Claiming..."
-                        onClick={() => batch.claimAll(claimable.map((p) => p.address))}
+                        onClick={() => {
+                            setClaimAllPools(claimable)
+                            batch.claimAll(claimable.map((p) => p.address))
+                        }}
                     >
                         Claim all ({claimable.length})
                     </Button>
                 )}
+                <TxFlowDialog
+                    open={claimAllPools !== null}
+                    onOpenChange={(o) => !o && setClaimAllPools(null)}
+                    title="Claim all rewards"
+                    steps={claimAllSteps}
+                    chainId={chainId}
+                />
                 <Button variant="outline" onClick={onCreate}>
                     <Plus />
                     Create Program

@@ -32,6 +32,8 @@ import type { AddLiquidityParams, RangeConfig, V3PoolData } from '@/types/earn'
 import { DEFAULT_RANGE_CONFIG } from '@/types/earn'
 import { toastError } from '@/lib/toast'
 import { toast } from 'sonner'
+import { TxFlowDialog, actionStep, approvalStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 
 const FEE_COPY: Record<number, string> = {
     100: 'Best for stable pairs',
@@ -83,6 +85,10 @@ export function AddLiquidityDialog({
     const [amount1, setAmount1] = useState('')
     const [activeInput, setActiveInput] = useState<'token0' | 'token1' | null>(null)
     const [initialPrice, setInitialPrice] = useState('')
+    const [txOpen, setTxOpen] = useState(false)
+    // Frozen when the flow opens: an approval that lands mid-flow flips needsApproval to
+    // false, and rebuilding from that would delete the step the user is looking at.
+    const [flowApprovals, setFlowApprovals] = useState({ token0: false, token1: false })
 
     const wasOpenRef = useRef(false)
     useEffect(() => {
@@ -170,6 +176,11 @@ export function AddLiquidityDialog({
         approve: approve0,
         isApproving: isApproving0,
         isConfirming: isConfirming0,
+        isSuccess: isApproved0,
+        isError: isApproveError0,
+        error: approveError0,
+        hash: approveHash0,
+        reset: resetApproval0,
     } = useTokenApproval({
         token: token0,
         owner: address,
@@ -181,17 +192,20 @@ export function AddLiquidityDialog({
         approve: approve1,
         isApproving: isApproving1,
         isConfirming: isConfirming1,
+        isSuccess: isApproved1,
+        isError: isApproveError1,
+        error: approveError1,
+        hash: approveHash1,
+        reset: resetApproval1,
     } = useTokenApproval({
         token: token1,
         owner: address,
         spender: dexConfig?.positionManager,
         amountToApprove: amount1 ? parseTokenAmount(amount1, token1?.decimals ?? 18) : 0n,
     })
-    const needsApprovalCheck = useMemo(() => {
-        return needsApproval0 || needsApproval1
-    }, [needsApproval0, needsApproval1])
     const {
         mint,
+        canMint,
         isPreparing,
         isExecuting,
         isConfirming,
@@ -199,7 +213,7 @@ export function AddLiquidityDialog({
         error,
         simulationError,
         hash,
-    } = useAddLiquidity(mintParams, needsApprovalCheck)
+    } = useAddLiquidity(mintParams)
     useEffect(() => {
         if (!pool) return
         const tickSpacing = pool.tickSpacing
@@ -309,14 +323,11 @@ export function AddLiquidityDialog({
                     onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
                 },
             })
+            // Refetch now, but leave both dialogs open: the tx dialog owns the success
+            // frame and closes everything from its Done button.
             onSuccess?.()
-            onClose()
-            setAmount0('')
-            setAmount1('')
-            setActiveInput(null)
-            setInitialPrice('')
         }
-    }, [isSuccess, hash, chainId, onClose, onSuccess])
+    }, [isSuccess, hash, chainId, onSuccess])
     useEffect(() => {
         if (error) {
             toastError(error)
@@ -335,14 +346,149 @@ export function AddLiquidityDialog({
         isApproving1 ||
         isConfirming0 ||
         isConfirming1
-    const handleSubmit = () => {
-        if (needsApproval0) {
-            approve0()
-        } else if (needsApproval1) {
-            approve1()
-        } else {
-            mint()
+    const exceeds = (balance: bigint, amount: string, decimals = 18) =>
+        !!amount && parseTokenAmount(amount, decimals) > balance
+    const insufficientSymbol = [
+        exceeds(balance0, amount0, token0?.decimals) && token0?.symbol,
+        exceeds(balance1, amount1, token1?.decimals) && token1?.symbol,
+    ]
+        .filter(Boolean)
+        .join(' & ')
+    /**
+     * One entry per signature this add actually needs. An allowance that is already
+     * granted is left out rather than shown pre-ticked — the stepper describes what the
+     * user has to do, not what the chain already knows.
+     */
+    const txSteps = useMemo<TxStep[]>(() => {
+        if (!token0 || !token1) return []
+        const spender = dexConfig?.positionManager
+        const steps: TxStep[] = []
+
+        if (flowApprovals.token0) {
+            steps.push(
+                approvalStep({
+                    token: token0,
+                    spenderLabel: 'Position Manager',
+                    spender,
+                    chainId,
+                    run: approve0,
+                    flags: {
+                        isPending: isApproving0,
+                        isConfirming: isConfirming0,
+                        isSuccess: isApproved0,
+                        isError: isApproveError0,
+                        error: approveError0,
+                        hash: approveHash0,
+                    },
+                })
+            )
         }
+        if (flowApprovals.token1) {
+            steps.push(
+                approvalStep({
+                    token: token1,
+                    spenderLabel: 'Position Manager',
+                    spender,
+                    chainId,
+                    run: approve1,
+                    autoRun: true,
+                    flags: {
+                        isPending: isApproving1,
+                        isConfirming: isConfirming1,
+                        isSuccess: isApproved1,
+                        isError: isApproveError1,
+                        error: approveError1,
+                        hash: approveHash1,
+                    },
+                })
+            )
+        }
+
+        const rows: [string, string][] = [
+            ['Pair', `${token0.symbol} / ${token1.symbol}`],
+            ['Fee tier', formatFeeTier(fee)],
+            ['Deposit', `${amount0 || '0'} ${token0.symbol} + ${amount1 || '0'} ${token1.symbol}`],
+            [
+                'Range',
+                rangeConfig.priceLower && rangeConfig.priceUpper
+                    ? `${rangeConfig.priceLower} – ${rangeConfig.priceUpper}`
+                    : 'Full range',
+            ],
+        ]
+
+        steps.push(
+            actionStep({
+                label: pool ? 'Add liquidity' : 'Create pool & add liquidity',
+                flags: {
+                    isPending: isPreparing || isExecuting,
+                    isConfirming,
+                    isSuccess,
+                    isError: !!error,
+                    error,
+                    simulationError,
+                    hash,
+                },
+                run: mint,
+                autoRun: canMint,
+                renderStage: (phase) => (
+                    <TxStageRecord phase={phase} chainId={chainId} hash={hash} rows={rows} />
+                ),
+            })
+        )
+        return steps
+    }, [
+        token0,
+        token1,
+        dexConfig?.positionManager,
+        chainId,
+        flowApprovals.token0,
+        flowApprovals.token1,
+        approve0,
+        approve1,
+        isApproving0,
+        isApproving1,
+        isConfirming0,
+        isConfirming1,
+        isApproved0,
+        isApproved1,
+        isApproveError0,
+        isApproveError1,
+        approveError0,
+        approveError1,
+        approveHash0,
+        approveHash1,
+        fee,
+        amount0,
+        amount1,
+        rangeConfig.priceLower,
+        rangeConfig.priceUpper,
+        pool,
+        isPreparing,
+        isExecuting,
+        isConfirming,
+        isSuccess,
+        error,
+        simulationError,
+        hash,
+        mint,
+        canMint,
+    ])
+
+    const handleSubmit = () => {
+        resetApproval0()
+        resetApproval1()
+        setFlowApprovals({ token0: needsApproval0, token1: needsApproval1 })
+        setTxOpen(true)
+        if (needsApproval0) approve0()
+        else if (needsApproval1) approve1()
+        else mint()
+    }
+
+    const resetForm = () => {
+        setAmount0('')
+        setAmount1('')
+        setActiveInput(null)
+        setInitialPrice('')
     }
     const getButtonText = () => {
         if (!address) return 'Connect Wallet'
@@ -350,6 +496,7 @@ export function AddLiquidityDialog({
         if (isConfirming0) return `Confirming ${token0?.symbol} approval...`
         if (isApproving1) return `Approving ${token1?.symbol}...`
         if (isConfirming1) return `Confirming ${token1?.symbol} approval...`
+        if (insufficientSymbol) return `Insufficient ${insufficientSymbol} balance`
         if (needsApproval0) return `Approve ${token0?.symbol}`
         if (needsApproval1) return `Approve ${token1?.symbol}`
         if (isPreparing) return 'Preparing...'
@@ -381,6 +528,7 @@ export function AddLiquidityDialog({
         if (isLoading) return true
         if (!token0 || !token1) return true
         if (!amount0 && !amount1) return true
+        if (insufficientSymbol) return true
         if (rangeConfig.tickLower >= rangeConfig.tickUpper) return true
         if (!pool && !initialSqrtPriceX96) return true
         return false
@@ -399,260 +547,289 @@ export function AddLiquidityDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] bg-card/95 backdrop-blur-md border-border/50 card-glow">
-                <DialogHeader>
-                    <DialogTitle className="text-lg">Add Liquidity</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)] pr-1">
-                    <div className="rounded-2xl bg-muted/20 border border-border/30 p-4 space-y-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1">
-                                <TokenSelect
-                                    token={token0}
-                                    tokens={allTokens}
-                                    disabledToken={token1}
-                                    onSelect={setToken0}
-                                    className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
-                                />
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleSwapTokens}
-                                className="shrink-0 h-11 w-11 flex items-center justify-center rounded-xl bg-background/60 border border-border/30 hover:bg-background/80 hover:border-border/50 transition-all duration-150"
-                            >
-                                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                            </button>
-                            <div className="flex-1">
-                                <TokenSelect
-                                    token={token1}
-                                    tokens={allTokens}
-                                    disabledToken={token0}
-                                    onSelect={setToken1}
-                                    className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-2">
-                            {feeOptions.map((option) => (
+        <>
+            <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+                <DialogContent className="sm:max-w-lg max-h-[90vh] bg-card/95 backdrop-blur-md border-border/50 card-glow">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg">Add Liquidity</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)] pr-1">
+                        <div className="rounded-2xl bg-muted/20 border border-border/30 p-4 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                    <TokenSelect
+                                        token={token0}
+                                        tokens={allTokens}
+                                        disabledToken={token1}
+                                        onSelect={setToken0}
+                                        className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
+                                    />
+                                </div>
                                 <button
-                                    key={option.value}
                                     type="button"
-                                    onClick={() => setFee(option.value)}
-                                    className={`flex flex-col items-center gap-0.5 py-2.5 px-1 rounded-xl text-center transition-all duration-150 ${
-                                        fee === option.value
-                                            ? 'bg-foreground/8 ring-1 ring-foreground/15'
-                                            : 'bg-background/40 hover:bg-background/60'
-                                    }`}
+                                    onClick={handleSwapTokens}
+                                    className="shrink-0 h-11 w-11 flex items-center justify-center rounded-xl bg-background/60 border border-border/30 hover:bg-background/80 hover:border-border/50 transition-all duration-150"
                                 >
-                                    <span
-                                        className={`text-xs font-semibold ${
+                                    <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                                <div className="flex-1">
+                                    <TokenSelect
+                                        token={token1}
+                                        tokens={allTokens}
+                                        disabledToken={token0}
+                                        onSelect={setToken1}
+                                        className="w-full h-11 rounded-xl bg-muted/40 border-border/40 hover:bg-muted/60 justify-between pr-3"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-2">
+                                {feeOptions.map((option) => (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => setFee(option.value)}
+                                        className={`flex flex-col items-center gap-0.5 py-2.5 px-1 rounded-xl text-center transition-all duration-150 ${
                                             fee === option.value
-                                                ? 'text-foreground'
-                                                : 'text-muted-foreground'
+                                                ? 'bg-foreground/8 ring-1 ring-foreground/15'
+                                                : 'bg-background/40 hover:bg-background/60'
                                         }`}
                                     >
-                                        {option.label}
-                                    </span>
-                                    <span className="text-[9px] leading-tight text-muted-foreground/60">
-                                        {option.description}
-                                    </span>
-                                </button>
-                            ))}
+                                        <span
+                                            className={`text-xs font-semibold ${
+                                                fee === option.value
+                                                    ? 'text-foreground'
+                                                    : 'text-muted-foreground'
+                                            }`}
+                                        >
+                                            {option.label}
+                                        </span>
+                                        <span className="text-[9px] leading-tight text-muted-foreground/60">
+                                            {option.description}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
+
+                        {token0 && token1 && (pool || derivedTick !== null) && (
+                            <>
+                                <Separator />
+                                <RangeSelector
+                                    currentTick={(() => {
+                                        const rawTick = pool?.tick ?? derivedTick!
+                                        const isPoolReversed =
+                                            pool &&
+                                            token0.address.toLowerCase() !==
+                                                pool.token0.address.toLowerCase()
+                                        return isPoolReversed ? -rawTick : rawTick
+                                    })()}
+                                    tickSpacing={pool?.tickSpacing ?? getTickSpacing(fee)}
+                                    decimals0={token0.decimals}
+                                    decimals1={token1.decimals}
+                                    token0Symbol={token0.symbol}
+                                    token1Symbol={token1.symbol}
+                                    config={rangeConfig}
+                                    onChange={setRangeConfig}
+                                />
+                            </>
+                        )}
+
+                        {token0 && token1 && (
+                            <>
+                                <Separator />
+                                <div className="space-y-3">
+                                    <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <TokenIcon
+                                                    src={token0.logo}
+                                                    symbol={token0.symbol}
+                                                    size="xs"
+                                                />
+                                                <span className="text-sm font-medium">
+                                                    {token0.symbol}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
+                                                onClick={() => {
+                                                    if (balance0 && token0) {
+                                                        setActiveInput('token0')
+                                                        setAmount0(
+                                                            formatTokenAmount(
+                                                                balance0,
+                                                                token0.decimals
+                                                            )
+                                                        )
+                                                    }
+                                                }}
+                                            >
+                                                MAX
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={amount0}
+                                            onChange={(e) => {
+                                                setActiveInput('token0')
+                                                setAmount0(e.target.value)
+                                            }}
+                                            placeholder="0.0"
+                                            className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Balance:{' '}
+                                                {balance0
+                                                    ? formatBalance(balance0, token0.decimals)
+                                                    : '0'}
+                                            </p>
+                                            {isInsufficientBalance(
+                                                balance0,
+                                                amount0,
+                                                token0.decimals
+                                            ) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleGoSwap(
+                                                            token0.address,
+                                                            token1?.address
+                                                        )
+                                                    }
+                                                    className="flex items-center gap-0.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                                                >
+                                                    Go Swap
+                                                    <ArrowRight className="h-2.5 w-2.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <TokenIcon
+                                                    src={token1.logo}
+                                                    symbol={token1.symbol}
+                                                    size="xs"
+                                                />
+                                                <span className="text-sm font-medium">
+                                                    {token1.symbol}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
+                                                onClick={() => {
+                                                    if (balance1 && token1) {
+                                                        setActiveInput('token1')
+                                                        setAmount1(
+                                                            formatTokenAmount(
+                                                                balance1,
+                                                                token1.decimals
+                                                            )
+                                                        )
+                                                    }
+                                                }}
+                                            >
+                                                MAX
+                                            </button>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={amount1}
+                                            onChange={(e) => {
+                                                setActiveInput('token1')
+                                                setAmount1(e.target.value)
+                                            }}
+                                            placeholder="0.0"
+                                            className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Balance:{' '}
+                                                {balance1
+                                                    ? formatBalance(balance1, token1.decimals)
+                                                    : '0'}
+                                            </p>
+                                            {isInsufficientBalance(
+                                                balance1,
+                                                amount1,
+                                                token1.decimals
+                                            ) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleGoSwap(
+                                                            token1.address,
+                                                            token0?.address
+                                                        )
+                                                    }
+                                                    className="flex items-center gap-0.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                                                >
+                                                    Go Swap
+                                                    <ArrowRight className="h-2.5 w-2.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {token0 && token1 && !pool && !isLoadingPool && (
+                            <div className="rounded-xl bg-primary/5 border border-primary/10 p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium">Initial Price</span>
+                                    <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium">
+                                        New Pool
+                                    </span>
+                                </div>
+                                {initialPrice ? (
+                                    <p className="text-lg font-semibold">
+                                        {initialPrice} {token1.symbol} per 1 {token0.symbol}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                        Enter both token amounts to set the initial price
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        <Button
+                            className="w-full"
+                            size="lg"
+                            onClick={handleSubmit}
+                            disabled={isButtonDisabled()}
+                            isLoading={isLoading}
+                            loadingText={getButtonText()}
+                        >
+                            {getButtonText()}
+                        </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
 
-                    {token0 && token1 && (pool || derivedTick !== null) && (
-                        <>
-                            <Separator />
-                            <RangeSelector
-                                currentTick={(() => {
-                                    const rawTick = pool?.tick ?? derivedTick!
-                                    const isPoolReversed =
-                                        pool &&
-                                        token0.address.toLowerCase() !==
-                                            pool.token0.address.toLowerCase()
-                                    return isPoolReversed ? -rawTick : rawTick
-                                })()}
-                                tickSpacing={pool?.tickSpacing ?? getTickSpacing(fee)}
-                                decimals0={token0.decimals}
-                                decimals1={token1.decimals}
-                                token0Symbol={token0.symbol}
-                                token1Symbol={token1.symbol}
-                                config={rangeConfig}
-                                onChange={setRangeConfig}
-                            />
-                        </>
-                    )}
-
-                    {token0 && token1 && (
-                        <>
-                            <Separator />
-                            <div className="space-y-3">
-                                <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <TokenIcon
-                                                src={token0.logo}
-                                                symbol={token0.symbol}
-                                                size="xs"
-                                            />
-                                            <span className="text-sm font-medium">
-                                                {token0.symbol}
-                                            </span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
-                                            onClick={() => {
-                                                if (balance0 && token0) {
-                                                    setActiveInput('token0')
-                                                    setAmount0(
-                                                        formatTokenAmount(balance0, token0.decimals)
-                                                    )
-                                                }
-                                            }}
-                                        >
-                                            MAX
-                                        </button>
-                                    </div>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={amount0}
-                                        onChange={(e) => {
-                                            setActiveInput('token0')
-                                            setAmount0(e.target.value)
-                                        }}
-                                        placeholder="0.0"
-                                        className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-[10px] text-muted-foreground">
-                                            Balance:{' '}
-                                            {balance0
-                                                ? formatBalance(balance0, token0.decimals)
-                                                : '0'}
-                                        </p>
-                                        {isInsufficientBalance(
-                                            balance0,
-                                            amount0,
-                                            token0.decimals
-                                        ) && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleGoSwap(token0.address, token1?.address)
-                                                }
-                                                className="flex items-center gap-0.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
-                                            >
-                                                Go Swap
-                                                <ArrowRight className="h-2.5 w-2.5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="rounded-xl bg-muted/30 border border-border/30 p-3 space-y-1.5">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <TokenIcon
-                                                src={token1.logo}
-                                                symbol={token1.symbol}
-                                                size="xs"
-                                            />
-                                            <span className="text-sm font-medium">
-                                                {token1.symbol}
-                                            </span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className="text-[10px] font-semibold text-foreground hover:text-foreground/80 px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 transition-colors"
-                                            onClick={() => {
-                                                if (balance1 && token1) {
-                                                    setActiveInput('token1')
-                                                    setAmount1(
-                                                        formatTokenAmount(balance1, token1.decimals)
-                                                    )
-                                                }
-                                            }}
-                                        >
-                                            MAX
-                                        </button>
-                                    </div>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={amount1}
-                                        onChange={(e) => {
-                                            setActiveInput('token1')
-                                            setAmount1(e.target.value)
-                                        }}
-                                        placeholder="0.0"
-                                        className="w-full bg-transparent text-xl font-semibold placeholder:text-muted-foreground/40 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-[10px] text-muted-foreground">
-                                            Balance:{' '}
-                                            {balance1
-                                                ? formatBalance(balance1, token1.decimals)
-                                                : '0'}
-                                        </p>
-                                        {isInsufficientBalance(
-                                            balance1,
-                                            amount1,
-                                            token1.decimals
-                                        ) && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleGoSwap(token1.address, token0?.address)
-                                                }
-                                                className="flex items-center gap-0.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors"
-                                            >
-                                                Go Swap
-                                                <ArrowRight className="h-2.5 w-2.5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    {token0 && token1 && !pool && !isLoadingPool && (
-                        <div className="rounded-xl bg-primary/5 border border-primary/10 p-3 space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium">Initial Price</span>
-                                <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded font-medium">
-                                    New Pool
-                                </span>
-                            </div>
-                            {initialPrice ? (
-                                <p className="text-lg font-semibold">
-                                    {initialPrice} {token1.symbol} per 1 {token0.symbol}
-                                </p>
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    Enter both token amounts to set the initial price
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={handleSubmit}
-                        disabled={isButtonDisabled()}
-                        isLoading={isLoading}
-                        loadingText={getButtonText()}
-                    >
-                        {getButtonText()}
-                    </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title={pool ? 'Add liquidity' : 'Create pool & add liquidity'}
+                steps={txSteps}
+                chainId={chainId}
+                onDone={() => {
+                    resetApproval0()
+                    resetApproval1()
+                    resetForm()
+                    onClose()
+                }}
+            />
+        </>
     )
 }
