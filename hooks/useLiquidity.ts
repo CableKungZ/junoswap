@@ -126,6 +126,7 @@ export function useAddLiquidity(params: AddLiquidityParams | null) {
     }
     return {
         mint,
+        canMint: isEnabled && !!callData,
         isPreparing: isSimulating,
         isExecuting,
         isConfirming,
@@ -233,6 +234,7 @@ export function useIncreaseLiquidity(
     }
     return {
         increase,
+        canIncrease: isEnabled && !!callData,
         isPreparing: isSimulating,
         isExecuting,
         isConfirming,

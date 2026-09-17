@@ -59,6 +59,14 @@ export const wagmiConfig = createConfig({
         [base.id]: http(rpcUrls[base.id], { batch: true }),
         [worldchain.id]: http(rpcUrls[worldchain.id], { batch: true }),
     },
+    // viem polls at half the chain's blockTime, capped at 4s, and caches the block number
+    // for as long. KUB and JBC ship without a blockTime, so it assumed 12s blocks: a receipt
+    // took ~10s to show for a tx that landed in 3s. Chains that declare one keep viem's default.
+    pollingInterval: {
+        [bitkub.id]: 1_000,
+        [kubTestnet.id]: 1_000,
+        [jbc.id]: 2_000,
+    },
     ssr: true,
     storage: createStorage({
         storage: cookieStorage,

@@ -16,6 +16,8 @@ import { formatTokenAmount } from '@/lib/tokens'
 import { toastError } from '@/lib/toast'
 import { toast } from 'sonner'
 import { getChainMetadata } from '@/lib/wagmi'
+import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 import type { PositionWithTokens } from '@/types/earn'
 
 const PERCENTAGE_OPTIONS = [25, 50, 75, 100]
@@ -38,6 +40,7 @@ export function RemoveLiquidityDialog({
     const [percentage, setPercentage] = useState(100)
     const { position: selectedPosition } = usePositionDetails(storePosition?.tokenId, undefined)
     const handledHashRef = useRef<string | null>(null)
+    const [txOpen, setTxOpen] = useState(false)
     const {
         remove,
         liquidityToRemove,
@@ -71,8 +74,8 @@ export function RemoveLiquidityDialog({
                     onClick: () => window.open(explorerUrl, '_blank', 'noopener,noreferrer'),
                 },
             })
+            // The tx dialog owns the success frame and closes both from its Done button.
             onSuccess?.()
-            onClose()
             setPercentage(100)
         }
     }, [isSuccess, hash, chainId, onClose, onSuccess])
@@ -88,13 +91,50 @@ export function RemoveLiquidityDialog({
     }, [simulationError])
     if (!selectedPosition) return null
     const isLoading = isSimulating || isPreparing || isExecuting || isConfirming
-    const handleRemove = () => {
+    const runRemove = () => {
         try {
             remove()
         } catch (err) {
             toastError(err instanceof Error ? err.message : 'Failed to remove liquidity')
         }
     }
+    const handleRemove = () => {
+        setTxOpen(true)
+        runRemove()
+    }
+    const sym0 = selectedPosition.token0Info.symbol
+    const sym1 = selectedPosition.token1Info.symbol
+    const txSteps = [
+        actionStep({
+            label: 'Remove liquidity',
+            flags: {
+                isPending: isSimulating || isPreparing || isExecuting,
+                isConfirming,
+                isSuccess,
+                isError: !!error,
+                error,
+                simulationError,
+                hash,
+            },
+            run: runRemove,
+            renderStage: (phase) => (
+                <TxStageRecord
+                    phase={phase}
+                    chainId={chainId}
+                    hash={hash}
+                    rows={[
+                        ['Position', `#${selectedPosition.tokenId.toString()}`],
+                        ['Pair', `${sym0} / ${sym1}`],
+                        ['Removing', `${percentage}% of liquidity`],
+                        [
+                            'You receive',
+                            `${formatTokenAmount(amount0Min, selectedPosition.token0Info.decimals)} ${sym0} + ${formatTokenAmount(amount1Min, selectedPosition.token1Info.decimals)} ${sym1}`,
+                        ],
+                    ]}
+                />
+            ),
+        }),
+    ]
     const getButtonText = () => {
         if (isPreparing) return 'Preparing...'
         if (isExecuting) return 'Confirm in wallet...'
@@ -102,104 +142,118 @@ export function RemoveLiquidityDialog({
         return 'Remove Liquidity'
     }
     return (
-        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Remove Liquidity</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-6">
-                    <div className="text-center">
-                        <div className="text-lg font-medium">
-                            {selectedPosition.token0Info.symbol} /{' '}
-                            {selectedPosition.token1Info.symbol}
+        <>
+            <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Remove Liquidity</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-6">
+                        <div className="text-center">
+                            <div className="text-lg font-medium">
+                                {selectedPosition.token0Info.symbol} /{' '}
+                                {selectedPosition.token1Info.symbol}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                                Position #{selectedPosition.tokenId.toString()}
+                            </div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                            Position #{selectedPosition.tokenId.toString()}
+                        <div className="space-y-2">
+                            <div className="text-sm text-muted-foreground">Amount to remove</div>
+                            <div className="grid grid-cols-4 gap-2">
+                                {PERCENTAGE_OPTIONS.map((p) => (
+                                    <Button
+                                        key={p}
+                                        type="button"
+                                        variant={percentage === p ? 'secondary' : 'outline'}
+                                        onClick={() => setPercentage(p)}
+                                    >
+                                        {p}%
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="bg-muted rounded-lg p-4 space-y-2">
+                            <div className="text-sm text-muted-foreground">
+                                You will receive at least:
+                            </div>
+                            <div className="flex justify-between">
+                                <span>{selectedPosition.token0Info.symbol}</span>
+                                <span className="font-medium">
+                                    {formatTokenAmount(
+                                        amount0Min,
+                                        selectedPosition.token0Info.decimals
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>{selectedPosition.token1Info.symbol}</span>
+                                <span className="font-medium">
+                                    {formatTokenAmount(
+                                        amount1Min,
+                                        selectedPosition.token1Info.decimals
+                                    )}
+                                </span>
+                            </div>
+                            {(selectedPosition.tokensOwed0 > 0n ||
+                                selectedPosition.tokensOwed1 > 0n) && (
+                                <>
+                                    <div className="border-t pt-2 mt-2">
+                                        <div className="text-sm text-muted-foreground">
+                                            Plus uncollected fees:
+                                        </div>
+                                    </div>
+                                    {selectedPosition.tokensOwed0 > 0n && (
+                                        <div className="flex justify-between text-positive">
+                                            <span>{selectedPosition.token0Info.symbol}</span>
+                                            <span>
+                                                +
+                                                {formatTokenAmount(
+                                                    selectedPosition.tokensOwed0,
+                                                    selectedPosition.token0Info.decimals
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {selectedPosition.tokensOwed1 > 0n && (
+                                        <div className="flex justify-between text-positive">
+                                            <span>{selectedPosition.token1Info.symbol}</span>
+                                            <span>
+                                                +
+                                                {formatTokenAmount(
+                                                    selectedPosition.tokensOwed1,
+                                                    selectedPosition.token1Info.decimals
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">Amount to remove</div>
-                        <div className="grid grid-cols-4 gap-2">
-                            {PERCENTAGE_OPTIONS.map((p) => (
-                                <Button
-                                    key={p}
-                                    type="button"
-                                    variant={percentage === p ? 'secondary' : 'outline'}
-                                    onClick={() => setPercentage(p)}
-                                >
-                                    {p}%
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="bg-muted rounded-lg p-4 space-y-2">
-                        <div className="text-sm text-muted-foreground">
-                            You will receive at least:
-                        </div>
-                        <div className="flex justify-between">
-                            <span>{selectedPosition.token0Info.symbol}</span>
-                            <span className="font-medium">
-                                {formatTokenAmount(
-                                    amount0Min,
-                                    selectedPosition.token0Info.decimals
-                                )}
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span>{selectedPosition.token1Info.symbol}</span>
-                            <span className="font-medium">
-                                {formatTokenAmount(
-                                    amount1Min,
-                                    selectedPosition.token1Info.decimals
-                                )}
-                            </span>
-                        </div>
-                        {(selectedPosition.tokensOwed0 > 0n ||
-                            selectedPosition.tokensOwed1 > 0n) && (
-                            <>
-                                <div className="border-t pt-2 mt-2">
-                                    <div className="text-sm text-muted-foreground">
-                                        Plus uncollected fees:
-                                    </div>
-                                </div>
-                                {selectedPosition.tokensOwed0 > 0n && (
-                                    <div className="flex justify-between text-positive">
-                                        <span>{selectedPosition.token0Info.symbol}</span>
-                                        <span>
-                                            +
-                                            {formatTokenAmount(
-                                                selectedPosition.tokensOwed0,
-                                                selectedPosition.token0Info.decimals
-                                            )}
-                                        </span>
-                                    </div>
-                                )}
-                                {selectedPosition.tokensOwed1 > 0n && (
-                                    <div className="flex justify-between text-positive">
-                                        <span>{selectedPosition.token1Info.symbol}</span>
-                                        <span>
-                                            +
-                                            {formatTokenAmount(
-                                                selectedPosition.tokensOwed1,
-                                                selectedPosition.token1Info.decimals
-                                            )}
-                                        </span>
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button
-                        size="lg"
-                        onClick={handleRemove}
-                        disabled={isLoading || liquidityToRemove === 0n}
-                    >
-                        {getButtonText()}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter>
+                        <Button
+                            size="lg"
+                            onClick={handleRemove}
+                            disabled={isLoading || liquidityToRemove === 0n}
+                        >
+                            {getButtonText()}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Its own Radix root, outside this one, so the two modals don't fight over focus. */}
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Remove liquidity"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={() => {
+                    onClose()
+                }}
+            />
+        </>
     )
 }

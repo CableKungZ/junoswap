@@ -276,3 +276,21 @@ export function wrapQuoteResult(amountIn: bigint, operation: 'wrap' | 'unwrap'):
         gasEstimate: operation === 'wrap' ? 50000n : 40000n,
     }
 }
+
+export type RecipientIssue = 'zero' | 'self' | 'token-contract'
+
+/**
+ * Transfers the chain accepts but the user almost never means. 'zero' burns the funds and
+ * 'token-contract' usually strands them, so the send form blocks those; 'self' only warns.
+ */
+export function getRecipientIssue(
+    recipient: string,
+    sender: string | undefined,
+    tokenAddress: string | undefined
+): RecipientIssue | null {
+    const to = recipient.toLowerCase()
+    if (/^0x0{40}$/.test(to)) return 'zero'
+    if (sender && to === sender.toLowerCase()) return 'self'
+    if (tokenAddress && to === tokenAddress.toLowerCase()) return 'token-contract'
+    return null
+}

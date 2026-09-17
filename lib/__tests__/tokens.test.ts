@@ -12,6 +12,7 @@ import {
     getSwapAddress,
     isSameToken,
     getWrapOperation,
+    getRecipientIssue,
 } from '@/lib/tokens'
 
 vi.mock('@coshi190/juno-moneta-sdk', async (importOriginal) => ({
@@ -180,5 +181,23 @@ describe('lib/tokens', () => {
             const erc20Chain1 = { ...stable, chainId: 1 }
             expect(getWrapOperation(nativeChain1, erc20Chain1)).toBe(null)
         })
+    })
+})
+
+describe('getRecipientIssue', () => {
+    const me = '0xAbC0000000000000000000000000000000000001'
+    const token = '0x7d984C24d2499D840eB3b7016077164e15E5faA6'
+
+    it('flags zero address, self and the token contract, case-insensitively', () => {
+        expect(getRecipientIssue(`0x${'0'.repeat(40)}`, me, token)).toBe('zero')
+        expect(getRecipientIssue(me.toLowerCase(), me, token)).toBe('self')
+        expect(getRecipientIssue(token.toLowerCase(), me, token)).toBe('token-contract')
+    })
+
+    it('passes an ordinary recipient, and works without a connected sender', () => {
+        expect(
+            getRecipientIssue('0x1111111111111111111111111111111111111111', me, token)
+        ).toBeNull()
+        expect(getRecipientIssue(token, undefined, token)).toBe('token-contract')
     })
 })

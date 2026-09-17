@@ -23,6 +23,9 @@ import { formatBalance, getDisplayToken } from '@/lib/tokens'
 import { getChainMetadata } from '@/lib/wagmi'
 import { markUnstaked } from '@/lib/optimistic-deposits'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { getStakerAddress } from '@/lib/earn-programs'
+import { TxFlowDialog, actionStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageFlow } from '@/components/ui/tx-stage'
 import type { PositionWithTokens, StakedPosition } from '@/types/earn'
 import type { EarnProgram } from '@/lib/earn-programs'
 
@@ -175,6 +178,7 @@ function IdlePositionCard({
     const { address } = useAccount()
     const chainId = useChainId()
     const [processedTxHash, setProcessedTxHash] = useState<`0x${string}` | null>(null)
+    const [txOpen, setTxOpen] = useState(false)
     const { withdraw, isPreparing, isExecuting, isConfirming, isSuccess, error, hash } =
         useWithdrawPosition(position.tokenId, address, program)
 
@@ -191,6 +195,47 @@ function IdlePositionCard({
         })
         onWithdrawn()
     }, [isSuccess, hash, processedTxHash, address, chainId, position.tokenId, onWithdrawn])
+
+    const handleWithdraw = () => {
+        setTxOpen(true)
+        withdraw()
+    }
+    // withdrawToken pulls a deposit that is staked in nothing back out of the staker.
+    const txSteps = [
+        actionStep({
+            label: `Withdraw position #${position.tokenId.toString()}`,
+            flags: {
+                isPending: isPreparing || isExecuting,
+                isConfirming,
+                isSuccess,
+                isError: !!error,
+                error,
+                hash,
+            },
+            run: withdraw,
+            renderStage: (phase) => (
+                <TxStageFlow
+                    phase={phase}
+                    chainId={chainId}
+                    hash={hash}
+                    from={{
+                        kind: 'contract',
+                        label: 'Farm staker',
+                        address: getStakerAddress(chainId, program),
+                        amount: 'Deposited',
+                    }}
+                    to={{
+                        kind: 'position',
+                        tokenId: position.tokenId,
+                        feeTier: position.fee,
+                        inRange: position.inRange,
+                        token0: position.token0Info,
+                        token1: position.token1Info,
+                    }}
+                />
+            ),
+        }),
+    ]
 
     useEffect(() => {
         if (error) toastError(error)
@@ -221,7 +266,7 @@ function IdlePositionCard({
                 <Button
                     className="mt-4 w-full"
                     variant="outline"
-                    onClick={withdraw}
+                    onClick={handleWithdraw}
                     disabled={isBusy}
                     isLoading={isBusy}
                     loadingText={label}
@@ -229,6 +274,14 @@ function IdlePositionCard({
                     {label}
                 </Button>
             </CardContent>
+
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Withdraw position"
+                steps={txSteps}
+                chainId={chainId}
+            />
         </Card>
     )
 }

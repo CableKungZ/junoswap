@@ -27,6 +27,8 @@ interface UseSendTokenResult {
     isError: boolean
     error: Error | null
     hash: Address | undefined
+    /** Why the ERC20 transfer would revert, known before the wallet opens. */
+    simulationError: Error | null
     reset: () => void
 }
 
@@ -35,7 +37,11 @@ export function useSendToken({ token, recipient, amount }: UseSendTokenParams): 
     const rawAmount = token && amount ? parseTokenAmount(amount, token.decimals) : 0n
     const publicClient = usePublicClient()
 
-    const { data: simulationData, isLoading: isPreparing } = useSimulateContract({
+    const {
+        data: simulationData,
+        isLoading: isPreparing,
+        error: simulationError,
+    } = useSimulateContract({
         address: token?.address as Address,
         abi: getAbi('erc20'),
         functionName: 'transfer',
@@ -72,7 +78,7 @@ export function useSendToken({ token, recipient, amount }: UseSendTokenParams): 
             return publicClient.getTransactionReceipt({ hash })
         },
         enabled: !!hash && !!publicClient,
-        refetchInterval: (query) => (query.state.data ? false : 2000),
+        refetchInterval: (query) => (query.state.data ? false : 1000),
     })
 
     const isConfirming = !!hash && !receipt
@@ -112,6 +118,7 @@ export function useSendToken({ token, recipient, amount }: UseSendTokenParams): 
         isError: !!writeIsError || isReverted,
         error: writeError ?? (isReverted ? REVERT_ERROR : null),
         hash,
+        simulationError: isNative ? null : (simulationError as Error | null),
         reset,
     }
 }

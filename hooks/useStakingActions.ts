@@ -37,7 +37,7 @@ function useTx(): TxState & { write: (params: WriteArgs) => void } {
         isLoading,
         isSuccess,
         error: receiptError,
-    } = useWaitForTransactionReceipt({ hash, pollingInterval: 2_000, timeout: 120_000 })
+    } = useWaitForTransactionReceipt({ hash, pollingInterval: 1_000, timeout: 120_000 })
     // Without a hash the receipt query is idle, and its isLoading must not read as "confirming"
     // — that spun the submit button of every form the moment it opened.
     // Simulate first: a revert then surfaces with its reason before the wallet ever opens, instead

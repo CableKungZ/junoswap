@@ -15,9 +15,8 @@ import { getAbi, getDexes } from '@coshi190/juno-moneta-sdk'
 import { UNISWAP_V3_STAKER_ABI } from '@/lib/abis/uniswap-v3-staker'
 import {
     encodeIncentiveKeyData,
-    buildUnstakeAndWithdrawMulticall,
     buildUnstakeAndClaimMulticall,
-    buildUnstakeManyAndWithdrawMulticall,
+    buildWithdrawMulticall,
 } from '@/services/mining/staking'
 const SAFE_TRANSFER_FROM_ABI = [
     {
@@ -146,68 +145,6 @@ export function useStakePosition(
 }
 
 /**
- * Unstakes and withdraws several positions from one farm in a single transaction. A wallet with
- * three positions in a farm should not have to sign three times to get them all back.
- */
-export function useUnstakePositions(
-    tokenIds: readonly bigint[],
-    incentiveKey: IncentiveKey | null,
-    recipient: Address | undefined,
-    program: EarnProgram
-): {
-    unstake: () => void
-    isPreparing: boolean
-    isExecuting: boolean
-    isConfirming: boolean
-    isSuccess: boolean
-    error: Error | null
-    hash: `0x${string}` | undefined
-} {
-    const chainId = useChainId()
-    const stakerAddress = getStakerAddress(chainId, program)
-    const multicallData = useMemo(() => {
-        if (!incentiveKey || !recipient || tokenIds.length === 0) return null
-        return buildUnstakeManyAndWithdrawMulticall(tokenIds, incentiveKey, recipient)
-    }, [tokenIds, incentiveKey, recipient])
-    const isEnabled = !!stakerAddress && !!multicallData
-    const {
-        data: simulation,
-        isLoading: isSimulating,
-        error: simulationError,
-    } = useSimulateContract({
-        address: stakerAddress,
-        abi: UNISWAP_V3_STAKER_ABI,
-        functionName: 'multicall',
-        args: multicallData ? [multicallData] : undefined,
-        query: { enabled: isEnabled },
-    })
-    const {
-        writeContract,
-        data: hash,
-        isPending: isExecuting,
-        error: writeError,
-    } = useWriteContract()
-    const {
-        isLoading: isConfirming,
-        isSuccess,
-        error: receiptError,
-    } = useWaitForTransactionReceipt({ hash })
-    const unstake = useCallback(() => {
-        if (!simulation?.request) return
-        writeContract(simulation.request)
-    }, [simulation, writeContract])
-    return {
-        unstake,
-        isPreparing: isEnabled && isSimulating,
-        isExecuting,
-        isConfirming,
-        isSuccess,
-        error: writeError || receiptError || (isEnabled ? (simulationError as Error | null) : null),
-        hash,
-    }
-}
-
-/**
  * Pulls an NFT back out of the staker. A position that was transferred in but is staked in nothing
  * earns no rewards and cannot be moved, so this is the exit for a deposit left behind.
  */
@@ -264,45 +201,38 @@ export function useWithdrawPosition(
     }
 }
 
-export function useUnstakePosition(
-    tokenId: bigint | undefined,
-    incentiveKey: IncentiveKey | null,
-    recipient: Address | undefined,
-    program: EarnProgram,
-    withdrawAfterUnstake: boolean = true
-): {
-    unstake: () => void
+interface StakerCall {
+    run: () => void
+    /** A simulation the call can be sent from, so a step can wait for it before auto-running. */
+    canRun: boolean
     isPreparing: boolean
     isExecuting: boolean
     isConfirming: boolean
     isSuccess: boolean
     error: Error | null
+    simulationError: Error | null
     hash: `0x${string}` | undefined
-} {
-    const chainId = useChainId()
-    const stakerAddress = getStakerAddress(chainId, program)
-    const isEnabled = tokenId !== undefined && !!incentiveKey && !!recipient && !!stakerAddress
-    const multicallData = useMemo(() => {
-        if (!isEnabled || !incentiveKey || !recipient || tokenId === undefined) {
-            return null
-        }
-        if (withdrawAfterUnstake) {
-            return buildUnstakeAndWithdrawMulticall(tokenId, incentiveKey, recipient)
-        }
-        return buildUnstakeAndClaimMulticall(tokenId, incentiveKey, recipient)
-    }, [tokenId, incentiveKey, recipient, withdrawAfterUnstake, isEnabled])
+}
+
+function useStakerMulticall(
+    stakerAddress: Address | undefined,
+    data: readonly `0x${string}`[] | null,
+    enabled: boolean
+): StakerCall {
+    const isEnabled = enabled && !!stakerAddress && !!data && data.length > 0
     const {
-        data: unstakeSimulation,
+        data: simulation,
         isLoading: isSimulating,
         error: simulationError,
+        refetch,
     } = useSimulateContract({
-        address: stakerAddress!,
+        address: stakerAddress,
         abi: UNISWAP_V3_STAKER_ABI,
         functionName: 'multicall',
-        args: multicallData ? [multicallData] : undefined,
-        query: {
-            enabled: isEnabled && !!multicallData,
-        },
+        args: data ? [data] : undefined,
+        // The withdraw simulates right after the unstake lands, and the RPC can lag a block
+        // behind it. A few spaced retries absorb that instead of failing the step.
+        query: { enabled: isEnabled, retry: 3, retryDelay: 1_000 },
     })
     const {
         writeContract,
@@ -315,17 +245,47 @@ export function useUnstakePosition(
         isSuccess,
         error: receiptError,
     } = useWaitForTransactionReceipt({ hash })
-    const unstake = useCallback(() => {
-        if (!unstakeSimulation?.request) return
-        writeContract(unstakeSimulation.request)
-    }, [unstakeSimulation, writeContract])
+    const run = useCallback(() => {
+        if (simulation?.request) writeContract(simulation.request)
+        else refetch()
+    }, [simulation, writeContract, refetch])
     return {
-        unstake,
-        isPreparing: isSimulating,
+        run,
+        canRun: !!simulation?.request,
+        isPreparing: isEnabled && isSimulating,
         isExecuting,
         isConfirming,
         isSuccess,
-        error: writeError || receiptError || (simulationError as Error | null),
+        error: writeError || receiptError || null,
+        simulationError: isEnabled ? (simulationError as Error | null) : null,
         hash,
     }
+}
+
+/**
+ * Takes positions out of a farm in two signatures: unstake and claim first, so the rewards are
+ * paid out as their own step, then withdraw the NFTs once that has landed.
+ */
+export function useUnstakeAndWithdraw(
+    tokenIds: readonly bigint[],
+    incentiveKey: IncentiveKey | null,
+    recipient: Address | undefined,
+    program: EarnProgram
+): { unstake: StakerCall; withdraw: StakerCall } {
+    const chainId = useChainId()
+    const stakerAddress = getStakerAddress(chainId, program)
+    const unstakeData = useMemo(
+        () =>
+            incentiveKey && recipient
+                ? buildUnstakeAndClaimMulticall(tokenIds, incentiveKey, recipient)
+                : null,
+        [tokenIds, incentiveKey, recipient]
+    )
+    const withdrawData = useMemo(
+        () => (recipient ? buildWithdrawMulticall(tokenIds, recipient) : null),
+        [tokenIds, recipient]
+    )
+    const unstake = useStakerMulticall(stakerAddress, unstakeData, true)
+    const withdraw = useStakerMulticall(stakerAddress, withdrawData, unstake.isSuccess)
+    return { unstake, withdraw }
 }

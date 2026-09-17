@@ -32,6 +32,8 @@ import { formatBalance, formatTokenAmount, getTokensForChain } from '@/lib/token
 import { formatRateAmount } from '@/lib/format'
 import { getChainMetadata, isNativeToken } from '@/lib/wagmi'
 import { toastError, toastSuccess } from '@/lib/toast'
+import { TxFlowDialog, approvalStep, actionStep, type TxStep } from '@/components/ui/tx-flow-dialog'
+import { TxStageRecord } from '@/components/ui/tx-stage'
 import { EARN_PROGRAM_LABEL, type EarnProgram } from '@/lib/earn-programs'
 import type { CreateIncentiveForm, V3PoolData } from '@/types/earn'
 import type { Token } from '@/types/token'
@@ -103,6 +105,10 @@ export function CreateFarmDialog({
         rewardAmount,
         balance,
         submit,
+        stakerAddress,
+        needsApproval,
+        approve,
+        create,
         isAwaitingApproval,
         isApproving,
         isPreparing,
@@ -112,6 +118,10 @@ export function CreateFarmDialog({
         error,
         hash,
     } = useCreateIncentive(form, limits, program)
+    const [txOpen, setTxOpen] = useState(false)
+    // Frozen when the flow opens: needsApproval flips the moment the allowance lands,
+    // and rebuilding from it would delete the step being watched.
+    const [flowNeedsApproval, setFlowNeedsApproval] = useState(false)
 
     useOnTxSuccess(open, isSuccess, hash, (hash) => {
         const explorer = getChainMetadata(chainId).explorer
@@ -128,7 +138,7 @@ export function CreateFarmDialog({
             () => queryClient.invalidateQueries({ queryKey: ['incentives'] }),
             INDEXER_SETTLE_MS
         )
-        onClose()
+        // The tx dialog owns the success frame and closes both from its Done button.
     })
 
     useEffect(() => {
@@ -190,8 +200,65 @@ export function CreateFarmDialog({
             setIsConnectModalOpen(true)
             return
         }
+        setFlowNeedsApproval(needsApproval)
+        setTxOpen(true)
         submit()
     }
+
+    /**
+     * useCreateIncentive exposes approve and create separately, so the flow shows both.
+     * Its approval flags are already collapsed (write + receipt), hence pending rather
+     * than a separate confirming state for that step.
+     */
+    const txSteps: TxStep[] = []
+    if (flowNeedsApproval && rewardToken) {
+        txSteps.push(
+            approvalStep({
+                token: rewardToken,
+                spenderLabel: 'Farm staker',
+                spender: stakerAddress,
+                chainId,
+                run: approve,
+                flags: {
+                    isPending: isApproving,
+                    isSuccess: !needsApproval,
+                    isError: !!error && needsApproval,
+                    error,
+                },
+            })
+        )
+    }
+    txSteps.push(
+        actionStep({
+            label: 'Create farm',
+            flags: {
+                isPending: isAwaitingApproval || isPreparing || isExecuting,
+                isConfirming,
+                isSuccess,
+                isError: !!error && !needsApproval,
+                error,
+                hash,
+            },
+            run: create,
+            renderStage: (phase) => (
+                <TxStageRecord
+                    phase={phase}
+                    chainId={chainId}
+                    hash={hash}
+                    rows={[
+                        [
+                            'Pool',
+                            form.pool
+                                ? `${form.pool.token0.symbol} / ${form.pool.token1.symbol}`
+                                : '—',
+                        ],
+                        ['Reward', `${form.rewardAmount || '0'} ${rewardToken?.symbol ?? ''}`],
+                        ['Duration', formatDuration(form.durationSeconds)],
+                    ]}
+                />
+            ),
+        })
+    )
 
     const isSubmitDisabled = isConnected && (isBusy || errors.length > 0)
 
@@ -381,6 +448,15 @@ export function CreateFarmDialog({
                 </DialogContent>
             </Dialog>
             <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
+
+            <TxFlowDialog
+                open={txOpen}
+                onOpenChange={setTxOpen}
+                title="Create mining farm"
+                steps={txSteps}
+                chainId={chainId}
+                onDone={onClose}
+            />
         </>
     )
 }

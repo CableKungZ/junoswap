@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeIncentiveId } from '@/services/mining/staking'
+import { decodeFunctionData } from 'viem'
+import { UNISWAP_V3_STAKER_ABI } from '@/lib/abis/uniswap-v3-staker'
+import {
+    buildUnstakeAndClaimMulticall,
+    buildWithdrawMulticall,
+    computeIncentiveId,
+} from '@/services/mining/staking'
 import type { IncentiveKey } from '@/types/earn'
 
 const TESTNET_KEY: IncentiveKey = {
@@ -23,5 +29,27 @@ describe('computeIncentiveId', () => {
             computeIncentiveId({ ...TESTNET_KEY, startTime: TESTNET_KEY.startTime + 1 })
         ).not.toBe(base)
         expect(computeIncentiveId({ ...TESTNET_KEY, refundee: TESTNET_KEY.pool })).not.toBe(base)
+    })
+})
+
+describe('unstake then withdraw', () => {
+    const RECIPIENT = '0x1111111111111111111111111111111111111111'
+    const calls = (data: readonly `0x${string}`[]) =>
+        data.map((d) => decodeFunctionData({ abi: UNISWAP_V3_STAKER_ABI, data: d }).functionName)
+
+    it('unstakes every position before the single claim, and never withdraws', () => {
+        expect(calls(buildUnstakeAndClaimMulticall([1n, 2n], TESTNET_KEY, RECIPIENT))).toEqual([
+            'unstakeToken',
+            'unstakeToken',
+            'claimReward',
+        ])
+        expect(buildUnstakeAndClaimMulticall([], TESTNET_KEY, RECIPIENT)).toEqual([])
+    })
+
+    it('withdraws each position on its own', () => {
+        expect(calls(buildWithdrawMulticall([1n, 2n], RECIPIENT))).toEqual([
+            'withdrawToken',
+            'withdrawToken',
+        ])
     })
 })
