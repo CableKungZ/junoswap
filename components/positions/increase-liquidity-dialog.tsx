@@ -83,7 +83,6 @@ export function IncreaseLiquidityDialog({
         spender: dexConfig?.positionManager,
         amountToApprove: amount1Parsed,
     })
-    const needsApprovalCheck = needsApproval0 || needsApproval1
     const {
         increase,
         isPreparing,
@@ -99,8 +98,7 @@ export function IncreaseLiquidityDialog({
         amount1Parsed,
         selectedPosition ?? null,
         50, // 0.5% slippage
-        20, // 20 minutes deadline
-        needsApprovalCheck // skip simulation during approval
+        20 // 20 minutes deadline
     )
     useEffect(() => {
         if (!pool || !selectedPosition) return

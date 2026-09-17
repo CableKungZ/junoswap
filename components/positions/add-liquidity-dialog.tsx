@@ -187,9 +187,6 @@ export function AddLiquidityDialog({
         spender: dexConfig?.positionManager,
         amountToApprove: amount1 ? parseTokenAmount(amount1, token1?.decimals ?? 18) : 0n,
     })
-    const needsApprovalCheck = useMemo(() => {
-        return needsApproval0 || needsApproval1
-    }, [needsApproval0, needsApproval1])
     const {
         mint,
         isPreparing,
@@ -199,7 +196,7 @@ export function AddLiquidityDialog({
         error,
         simulationError,
         hash,
-    } = useAddLiquidity(mintParams, needsApprovalCheck)
+    } = useAddLiquidity(mintParams)
     useEffect(() => {
         if (!pool) return
         const tickSpacing = pool.tickSpacing
