@@ -9,7 +9,7 @@ import type { Token } from '@/types/token'
 import type { DEXType } from '@/lib/dex-meta'
 import type { RouteQuote, SwapRoute } from '@/types/routing'
 import { getIntermediaryTokens, MAX_HOPS } from '@/lib/routing-config'
-import { getWrapOperation, findTokenByAddress } from '@/lib/tokens'
+import { getSwapAddress, getWrapOperation, findTokenByAddress } from '@/lib/tokens'
 
 interface UseUniV2MultiHopQuoteParams {
     tokenIn: Token | null
@@ -39,8 +39,16 @@ export function useUniV2MultiHopQuote({
 
     const wrapOperation = useMemo(() => getWrapOperation(tokenIn, tokenOut), [tokenIn, tokenOut])
 
-    const tokenInAddress = tokenIn ? (tokenIn.address as Address) : zeroAddress
-    const tokenOutAddress = tokenOut ? (tokenOut.address as Address) : zeroAddress
+    // Resolved to wrapped-native up front (matching useUniV3MultiHopQuote): passing the raw
+    // native sentinel through to the SDK's hop enumeration lets wrapped-native slip past its
+    // "exclude tokenIn/tokenOut from connectors" filter, since the filter never sees them as
+    // the same token — producing paths like [KKUB, KUSDT, KKUB, LUMI] that revert on-chain.
+    const tokenInAddress = tokenIn
+        ? getSwapAddress(tokenIn.address as Address, chainId)
+        : zeroAddress
+    const tokenOutAddress = tokenOut
+        ? getSwapAddress(tokenOut.address as Address, chainId)
+        : zeroAddress
 
     const isReadyForQuote =
         enabled && !!client && !!tokenIn && !!tokenOut && amountIn > 0n && !wrapOperation

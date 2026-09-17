@@ -48,7 +48,6 @@ export function useUniV2Quote({
         if (dexId === undefined) return enabled
         return [dexId].flat().filter((id) => enabled.includes(id))
     }, [dexId, tokenIn, chainId])
-    const primaryDexId = requestedDexIds[0] ?? null
 
     const wrapOperation = useMemo(() => getWrapOperation(tokenIn, tokenOut), [tokenIn, tokenOut])
 
@@ -144,6 +143,23 @@ export function useUniV2Quote({
     ])
 
     const isLoading = wrapOperation ? false : isReadyForQuote && quoteQuery.isLoading
+
+    // The DEX with the best output among the ones that resolved, not just the first one
+    // requested — a plain "requestedDexIds[0]" here would pick registry order over price,
+    // silently excluding the actual best V2 DEX from every downstream routing decision.
+    const primaryDexId = useMemo(() => {
+        let best: DEXType | null = null
+        let bestAmountOut: bigint | null = null
+        for (const id of requestedDexIds) {
+            const out = quotes[id]?.quote?.amountOut
+            if (out === undefined) continue
+            if (bestAmountOut === null || out > bestAmountOut) {
+                best = id
+                bestAmountOut = out
+            }
+        }
+        return best ?? requestedDexIds[0] ?? null
+    }, [quotes, requestedDexIds])
 
     return {
         quotes,
