@@ -6,6 +6,13 @@ import { TOTAL_SUPPLY, DURIANFUN_MCAP_SUPPLY } from '@/lib/launchpad-curve'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 
+// Rendered inside the token card's <Link>. The tooltip portals out of the DOM, but React still
+// bubbles its clicks to that Link, so clicking or selecting text in it would open the token page.
+const blockCardClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+}
+
 const toDurianfunBase = (mcapNative: number) => (mcapNative / TOTAL_SUPPLY) * DURIANFUN_MCAP_SUPPLY
 
 /** Side reference: a DurianFun token's mcap/ATH the way durianfun.xyz displays them. */
@@ -35,6 +42,7 @@ export function DurianfunMcap({
         <Tooltip>
             <TooltipTrigger asChild>
                 <span
+                    onClick={blockCardClick}
                     className={cn(
                         'cursor-help text-xs text-muted-foreground tabular-nums underline decoration-dotted underline-offset-2',
                         className
@@ -44,7 +52,10 @@ export function DurianfunMcap({
                     {format(value)}
                 </span>
             </TooltipTrigger>
-            <TooltipContent className="max-w-80 normal-case">
+            <TooltipContent
+                className="max-w-80 cursor-text select-text normal-case"
+                onClick={blockCardClick}
+            >
                 <div className="font-medium">As shown on DurianFun (durianfun.xyz)</div>
                 <div className="mt-1 space-y-0.5 tabular-nums">
                     {marketCap > 0 && <div>MCAP {format(marketCap)}</div>}
