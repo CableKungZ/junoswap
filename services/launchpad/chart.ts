@@ -1,7 +1,6 @@
 import { formatEther } from 'viem'
 import type { Timeframe, ChartMode, CandlestickData } from '@/types/chart'
 import { TIMEFRAME_DURATIONS } from '@/types/chart'
-import { computeCurve } from '@coshi190/juno-moneta-sdk'
 import { computePoolPrice } from '@/lib/tick-math'
 import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
 import type { LaunchpadPlatform } from '@/types/launchpad'
@@ -34,12 +33,8 @@ export function aggregateCandlesticks(
     const candles = new Map<number, CandlestickData>()
 
     for (const event of events) {
-        const { price, marketCap, preSwapPrice, preSwapMarketCap } = computeCurve({
-            nativeReserve: event.isBuy ? event.reserveIn : event.reserveOut,
-            tokenReserve: event.isBuy ? event.reserveOut : event.reserveIn,
-            swap: event,
-        })
-        const value = mode === 'mcap' ? marketCap : price
+        const scale = mode === 'mcap' ? TOTAL_SUPPLY : 1
+        const value = event.priceNative * scale
         const volume = calculateVolume(event)
         if (value <= 0) continue
 
@@ -47,7 +42,7 @@ export function aggregateCandlesticks(
 
         const existing = candles.get(candleTime)
         if (!existing) {
-            const openValue = mode === 'mcap' ? preSwapMarketCap : preSwapPrice
+            const openValue = event.preSwapPriceNative * scale
             const open = openValue > 0 ? openValue : value
             candles.set(candleTime, {
                 time: candleTime,
@@ -195,8 +190,8 @@ export interface CurveSwapEvent {
     isBuy: boolean
     amountIn: bigint
     amountOut: bigint
-    reserveIn: bigint
-    reserveOut: bigint
+    priceNative: number
+    preSwapPriceNative: number
     sender?: string
 }
 

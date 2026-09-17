@@ -58,8 +58,8 @@ export function useTokenPriceHistory(
                 isBuy: e.isBuy === 1,
                 amountIn: BigInt(e.amountIn),
                 amountOut: BigInt(e.amountOut),
-                reserveIn: BigInt(e.reserveIn),
-                reserveOut: BigInt(e.reserveOut),
+                priceNative: Number(e.priceNative),
+                preSwapPriceNative: Number(e.preSwapPriceNative),
                 sender: e.sender,
             }))
         },

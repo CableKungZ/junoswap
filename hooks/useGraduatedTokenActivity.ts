@@ -7,7 +7,6 @@ import {
     fetchBondingCurvePricesSince,
     fetchV3History,
     fetchTokenV3Swaps,
-    computeCurve,
 } from '@coshi190/juno-moneta-sdk'
 import { computePoolPrice } from '@/lib/tick-math'
 import { TOTAL_SUPPLY } from '@/lib/launchpad-curve'
@@ -67,10 +66,7 @@ async function fetchTokenActivity(
                 if (e.timestamp >= graduatedAt) continue
                 points.push({
                     timestamp: e.timestamp,
-                    price: computeCurve({
-                        nativeReserve: e.isBuy === 1 ? BigInt(e.reserveIn) : BigInt(e.reserveOut),
-                        tokenReserve: e.isBuy === 1 ? BigInt(e.reserveOut) : BigInt(e.reserveIn),
-                    }).price,
+                    price: Number(e.priceNative),
                 })
             }
             points.sort((a, b) => a.timestamp - b.timestamp)
