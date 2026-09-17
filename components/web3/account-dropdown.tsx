@@ -220,7 +220,7 @@ export function AccountDropdown({ children }: { children: React.ReactNode }) {
                         )}
                         {mounted && (
                             <label className="flex cursor-pointer items-center justify-between px-2 py-1.5">
-                                <span className="text-sm">Transaction dialogs</span>
+                                <span className="text-sm">Transaction steps</span>
                                 <Switch checked={txDialogs} onCheckedChange={setTxDialogs} />
                             </label>
                         )}
