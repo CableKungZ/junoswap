@@ -17,6 +17,20 @@
 export const durianfunMarketAbi = [
     {
         type: 'function',
+        name: 'kubRaised',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ type: 'uint256' }],
+    },
+    {
+        type: 'function',
+        name: 'graduationKub',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ type: 'uint256' }],
+    },
+    {
+        type: 'function',
         name: 'graduated',
         stateMutability: 'view',
         inputs: [],
