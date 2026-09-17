@@ -9,8 +9,7 @@ import { useGraduatedPoolPrice } from '@/hooks/useGraduatedPoolPrice'
 import type { DailyMetrics } from '@/services/launchpad/chart'
 import { useTokenList } from '@/hooks/useTokenList'
 import { useGraduatedPoolAddress } from '@/hooks/useGraduatedPoolAddress'
-import { GRADUATED_POOL_FEE } from '@/services/launchpad/launchpad'
-import { KUBLERX_POOL_FEE } from '@/services/launchpad/durianfun'
+import { getGraduatedPoolConfig } from '@/services/launchpad/platform-config'
 import { formatAddress, formatTimeAgo, formatFullDate } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { TokenIcon } from '@/components/ui/token-icon'
@@ -387,15 +386,13 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                                 poolAddress={poolAddress}
                                 poolFee={
                                     isGraduated
-                                        ? tokenInfo?.platform === 'durianfun'
-                                            ? KUBLERX_POOL_FEE
-                                            : GRADUATED_POOL_FEE
+                                        ? getGraduatedPoolConfig(tokenInfo?.platform).poolFee
                                         : undefined
                                 }
                                 isPoolLoading={isPoolLoading}
                                 dexId={
-                                    isGraduated && tokenInfo?.platform === 'durianfun'
-                                        ? 'kublerx'
+                                    isGraduated
+                                        ? getGraduatedPoolConfig(tokenInfo?.platform).dexId
                                         : undefined
                                 }
                             />

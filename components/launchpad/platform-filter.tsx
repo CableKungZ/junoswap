@@ -8,7 +8,7 @@ import { PlatformLogo } from './platform-logo'
 
 export const ALL_PLATFORMS: LaunchpadPlatform[] = ['junoswap', 'durianfun']
 
-const PLATFORM_LABEL: Record<LaunchpadPlatform, string> = {
+export const PLATFORM_LABEL: Record<LaunchpadPlatform, string> = {
     junoswap: 'Junoswap',
     durianfun: 'DurianFun',
 }

@@ -13,6 +13,7 @@ import type { LaunchToken } from '@/types/launchpad'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 import { AthProgressBar } from './ath-progress-bar'
 import { PlatformLogo } from './platform-logo'
+import { PLATFORM_LABEL } from './platform-filter'
 import { DurianfunMcap } from './durianfun-mcap'
 
 // Meme-style "stonks" line in the corner of the token icon, traced from real recent price
@@ -107,6 +108,7 @@ export function TokenCard({
     const hasAth = !!athMarketCap && parseFloat(athMarketCap) > 0
     const athNum = athMarketCap ? parseFloat(athMarketCap) : undefined
     const isDurianfun = token.platform === 'durianfun'
+    const platform = token.platform ?? 'junoswap'
 
     const formatMarketCap = (value: string) =>
         nativeUsdPrice !== null
@@ -176,17 +178,8 @@ export function TokenCard({
 
                         <div className="mt-1.5 flex flex-wrap items-center gap-1">
                             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                {token.platform === 'durianfun' ? (
-                                    <>
-                                        <PlatformLogo platform="durianfun" />
-                                        DurianFun
-                                    </>
-                                ) : (
-                                    <>
-                                        <PlatformLogo platform="junoswap" />
-                                        Junoswap
-                                    </>
-                                )}
+                                <PlatformLogo platform={platform} />
+                                {PLATFORM_LABEL[platform]}
                             </span>
                             {isGraduated && (
                                 <span className="shrink-0 rounded-full border border-positive/25 bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
