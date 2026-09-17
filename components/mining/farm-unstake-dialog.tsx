@@ -85,7 +85,12 @@ export function FarmUnstakeDialog({ open, incentive, onClose, onSuccess }: FarmU
     // Everything is selected until the user narrows it down, so the common case is one click.
     useEffect(() => {
         if (hasTouchedSelection || myStakes.length === 0) return
-        setSelectedIds(myStakes.map((stake) => stake.position.tokenId.toString()))
+        const ids = myStakes.map((stake) => stake.position.tokenId.toString())
+        // Upstream reads hand back a fresh array on refetch; a new but equal list must not
+        // re-render, or the effect loops.
+        setSelectedIds((prev) =>
+            prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids
+        )
     }, [myStakes, hasTouchedSelection])
 
     const selectedTokenIds = useMemo(() => {
