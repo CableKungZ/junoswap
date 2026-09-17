@@ -16,6 +16,8 @@ export const PLATFORM_LABEL: Record<LaunchpadPlatform, string> = {
 interface PlatformFilterProps {
     value: LaunchpadPlatform[]
     onChange: (value: LaunchpadPlatform[]) => void
+    graphOverlay: boolean
+    onGraphOverlayChange: (value: boolean) => void
 }
 
 function Row({
@@ -49,8 +51,14 @@ function Row({
     )
 }
 
-export function PlatformFilter({ value, onChange }: PlatformFilterProps) {
+export function PlatformFilter({
+    value,
+    onChange,
+    graphOverlay,
+    onGraphOverlayChange,
+}: PlatformFilterProps) {
     const allChecked = ALL_PLATFORMS.every((p) => value.includes(p))
+    const isDefault = allChecked && graphOverlay
     // Unticking the last platform would empty the list, so it falls back to everything.
     const toggle = (platform: LaunchpadPlatform) => {
         const next = value.includes(platform)
@@ -67,11 +75,11 @@ export function PlatformFilter({ value, onChange }: PlatformFilterProps) {
                     aria-label="Filter by platform"
                     className={cn(
                         'relative inline-flex h-[38px] w-[38px] items-center justify-center rounded-xl bg-muted/50 transition-colors hover:text-foreground',
-                        allChecked ? 'text-muted-foreground' : 'text-foreground'
+                        isDefault ? 'text-muted-foreground' : 'text-foreground'
                     )}
                 >
                     <SlidersHorizontal className="h-4 w-4" />
-                    {!allChecked && (
+                    {!isDefault && (
                         <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
                     )}
                 </button>
@@ -90,6 +98,13 @@ export function PlatformFilter({ value, onChange }: PlatformFilterProps) {
                         {PLATFORM_LABEL[platform]}
                     </Row>
                 ))}
+                <div className="my-1.5 border-t border-border" />
+                <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Graph Overlay
+                </p>
+                <Row checked={graphOverlay} onClick={() => onGraphOverlayChange(!graphOverlay)}>
+                    Show on cards
+                </Row>
             </PopoverContent>
         </Popover>
     )
