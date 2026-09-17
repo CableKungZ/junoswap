@@ -7,6 +7,10 @@ import { ThemeProvider } from 'next-themes'
 import { wagmiConfig } from '@/lib/wagmi'
 import '@/lib/lifi' // activates LI.FI SDK config (integrator + fee + EVM provider)
 
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+    import('@locator/runtime').then((m) => m.default())
+}
+
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
