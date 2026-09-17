@@ -23,8 +23,8 @@ import { TokenStats } from './token-stats'
 import { RecentTrades } from './recent-trades'
 import { TokenHolders } from './token-holders'
 import { GraduationProgress } from './graduation-progress'
+import { DurianfunGraduationProgress } from './durianfun-graduation-progress'
 import { ShareTokenDialog } from './share-token-dialog'
-import { PlatformLogo } from './platform-logo'
 import { Globe, ArrowLeft, Copy, Check, Share2, Sprout, Facebook } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -241,6 +241,7 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                     <TokenStats
                         marketCap={marketCap}
                         symbol={symbol}
+                        platform={tokenInfo?.platform}
                         isGraduated={isGraduated}
                         athMarketCap={athMarketCap}
                         priceChange1dPct={priceChange1dPct}
@@ -261,29 +262,13 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                         platform={tokenInfo?.platform}
                     />
 
-                    {(isDurianfun ||
-                        tokenInfo?.description ||
+                    {(tokenInfo?.description ||
                         tokenInfo?.link1 ||
                         tokenInfo?.link2 ||
                         tokenInfo?.link3 ||
                         tokenInfo?.link4) && (
                         <div className="rounded-xl border bg-card p-4">
-                            <div className="mb-2 flex items-center gap-2">
-                                <h3 className="text-sm font-semibold">About {symbol}</h3>
-                                {isDurianfun && (
-                                    <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                        <PlatformLogo platform="durianfun" />
-                                        DurianFun
-                                    </span>
-                                )}
-                            </div>
-                            {isDurianfun && (
-                                <p className="mb-2 text-xs text-muted-foreground">
-                                    This token was created on DurianFun, not Junoswap — trading,
-                                    contracts, and token safety are not managed or audited by
-                                    Junoswap.
-                                </p>
-                            )}
+                            <h3 className="mb-2 text-sm font-semibold">About {symbol}</h3>
                             {tokenInfo?.description && (
                                 <p className="text-sm text-muted-foreground break-words min-w-0">
                                     {tokenInfo.description}
@@ -431,6 +416,13 @@ export function TokenDetailPage({ tokenAddr }: TokenDetailPageProps) {
                                     </CardContent>
                                 </Card>
                             )}
+                        {isDurianfun && tokenInfo?.market && (
+                            <DurianfunGraduationProgress
+                                marketAddr={tokenInfo.market}
+                                chainId={chainId}
+                                isGraduated={isGraduated}
+                            />
+                        )}
                         <div className="hidden lg:block">
                             <TokenHolders
                                 tokenAddr={tokenAddr}

@@ -18,7 +18,10 @@ import { getChainMetadata } from '@/lib/wagmi'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { SettingsMenu } from '@/components/swap/settings-menu'
 import { useSwapStore } from '@/store/swap-store'
+import { CURVE_FEE_BPS } from '@/services/launchpad/chart'
 import { PercentButtons, AmountButtons } from './token-trade-card'
+
+const DURIANFUN_FEE = `${(CURVE_FEE_BPS.durianfun / 100).toFixed(2)}% (KUB)`
 
 // Junoswap's own address, passed as `referrer` on every Durianfun curve swap — Durianfun
 // pays a referral fee share on volume routed through it (see launchpad-aggregator/reference/RECON.md).
@@ -246,6 +249,12 @@ export function DurianfunTradeCard({
                                                 {formatTokenAmount(buyTx.minOut)} {tokenSymbol}
                                             </span>
                                         </div>
+                                        <div className="flex justify-between gap-2">
+                                            <span className="text-muted-foreground shrink-0">
+                                                Fee
+                                            </span>
+                                            <span className="font-medium">{DURIANFUN_FEE}</span>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             )}
@@ -330,6 +339,12 @@ export function DurianfunTradeCard({
                                             <span className="font-medium text-right min-w-0">
                                                 {formatKub(sellTx.minOut)} KUB
                                             </span>
+                                        </div>
+                                        <div className="flex justify-between gap-2">
+                                            <span className="text-muted-foreground shrink-0">
+                                                Fee
+                                            </span>
+                                            <span className="font-medium">{DURIANFUN_FEE}</span>
                                         </div>
                                     </CardContent>
                                 </Card>

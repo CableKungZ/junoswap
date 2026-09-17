@@ -13,6 +13,7 @@ import type { LaunchToken } from '@/types/launchpad'
 import { useNativeUsdPriceContext } from './native-usd-price-provider'
 import { AthProgressBar } from './ath-progress-bar'
 import { PlatformLogo } from './platform-logo'
+import { DurianfunMcap } from './durianfun-mcap'
 
 // Meme-style "stonks" line in the corner of the token icon, traced from real recent price
 // samples (sparklinePath, from useGraduatedTokenActivity / useCurveTokenSparklines). A fixed jagged
@@ -104,6 +105,8 @@ export function TokenCard({
     const name = tokenName || token.name || ''
     const isJunoswap = !token.platform || token.platform === 'junoswap'
     const hasAth = !!athMarketCap && parseFloat(athMarketCap) > 0
+    const athNum = athMarketCap ? parseFloat(athMarketCap) : undefined
+    const isDurianfun = token.platform === 'durianfun'
 
     const formatMarketCap = (value: string) =>
         nativeUsdPrice !== null
@@ -193,19 +196,40 @@ export function TokenCard({
                         </div>
 
                         <div className="mt-auto pt-3">
-                            <div className="flex items-baseline justify-between gap-2">
-                                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                                    Mcap
-                                </p>
-                                {hasAth && (
-                                    <p className="text-[11px] tabular-nums text-muted-foreground">
-                                        ATH {formatMarketCap(athMarketCap)}
+                            <div className="flex justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                        Mcap
                                     </p>
+                                    <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight">
+                                        <span className="whitespace-nowrap">
+                                            {marketCap ? formatMarketCap(marketCap) : '—'}
+                                        </span>
+                                        {isDurianfun && marketCap && (
+                                            <DurianfunMcap
+                                                marketCap={parseFloat(marketCap)}
+                                                athMarketCap={athNum}
+                                                label={false}
+                                                className="ml-1.5 inline-block text-[11px] font-normal tracking-normal"
+                                            />
+                                        )}
+                                    </p>
+                                </div>
+                                {hasAth && (
+                                    <div className="flex shrink-0 flex-col items-end text-[11px] tabular-nums text-muted-foreground">
+                                        <p>ATH {formatMarketCap(athMarketCap)}</p>
+                                        {isDurianfun && (
+                                            <DurianfunMcap
+                                                marketCap={marketCap ? parseFloat(marketCap) : 0}
+                                                athMarketCap={athNum}
+                                                show="ath"
+                                                label={false}
+                                                className="text-[11px] leading-tight"
+                                            />
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                            <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight">
-                                {marketCap ? formatMarketCap(marketCap) : '—'}
-                            </p>
                             {hasAth && marketCap && (
                                 <div className="mt-2">
                                     <AthProgressBar
