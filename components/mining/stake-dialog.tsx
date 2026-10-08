@@ -19,6 +19,7 @@ import { useUserPositions } from '@/hooks/useUserPositions'
 import { useStakerDeposits } from '@/hooks/useStakerDeposits'
 import { useFarmStakes } from '@/hooks/useFarmStakes'
 import { useStakePosition } from '@/hooks/useStaking'
+import { useStakeEligibility } from '@/hooks/useStakeEligibility'
 import { formatBalance } from '@/lib/tokens'
 import { formatTimeRemaining, incentiveToPoolData } from '@/services/mining/incentives'
 import { toastSuccess, toastError } from '@/lib/toast'
@@ -69,7 +70,7 @@ export function StakeDialog({
             ),
         [deposits, program, address]
     )
-    const eligiblePositions = useMemo(() => {
+    const candidatePositions = useMemo(() => {
         if (!selectedIncentive) return []
         const inPool = (p: PositionWithTokens) =>
             p.poolAddress.toLowerCase() === selectedIncentive.pool.toLowerCase()
@@ -79,6 +80,12 @@ export function StakeDialog({
             ...myDeposits.map((d) => d.position).filter(inPool),
         ]
     }, [positions, deposits, myDeposits, selectedIncentive])
+    // Hide what the farm would reject, and say why, instead of letting the stake revert later.
+    const {
+        eligible: eligiblePositions,
+        ineligible: ineligiblePositions,
+        isLoading: isLoadingEligibility,
+    } = useStakeEligibility(candidatePositions, selectedIncentive)
     const selectedPosition = useMemo(() => {
         if (!selectedPositionId) return null
         return eligiblePositions.find((p) => p.tokenId.toString() === selectedPositionId) ?? null
@@ -274,12 +281,16 @@ export function StakeDialog({
                         </div>
                         <div className="space-y-3">
                             <Label>Select Position to Stake</Label>
-                            {isLoadingPositions ? (
+                            {isLoadingPositions || isLoadingEligibility ? (
                                 <EmptyState title="Loading positions..." />
                             ) : eligiblePositions.length === 0 ? (
                                 <EmptyState
                                     title="No eligible positions"
-                                    description="Create an LP position for this pool first."
+                                    description={
+                                        ineligiblePositions.length > 0
+                                            ? 'Your positions in this pool do not meet the farm rules.'
+                                            : 'Create an LP position for this pool first.'
+                                    }
                                     action={
                                         <Button
                                             size="sm"
@@ -315,6 +326,16 @@ export function StakeDialog({
                                         ))}
                                     </div>
                                 </RadioGroup>
+                            )}
+                            {ineligiblePositions.length > 0 && !isLoadingEligibility && (
+                                <ul className="space-y-1 text-xs text-muted-foreground">
+                                    {ineligiblePositions.map(({ position, reason }) => (
+                                        <li key={position.tokenId.toString()}>
+                                            #{position.tokenId.toString()} can&apos;t be staked:{' '}
+                                            {reason}
+                                        </li>
+                                    ))}
+                                </ul>
                             )}
                         </div>
                     </div>

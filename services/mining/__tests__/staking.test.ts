@@ -5,6 +5,7 @@ import {
     buildUnstakeAndClaimMulticall,
     buildWithdrawMulticall,
     computeIncentiveId,
+    describeStakeIneligibility,
 } from '@/services/mining/staking'
 import type { IncentiveKey } from '@/types/earn'
 
@@ -51,5 +52,23 @@ describe('unstake then withdraw', () => {
             'withdrawToken',
             'withdrawToken',
         ])
+    })
+})
+
+describe('describeStakeIneligibility', () => {
+    it('turns the staker revert strings into short labels', () => {
+        expect(describeStakeIneligibility('JunoswapV3Staker::stakeToken: range too narrow')).toBe(
+            'Price range too narrow'
+        )
+        expect(
+            describeStakeIneligibility('JunoswapV3Staker::stakeToken: position out of range')
+        ).toBe('Out of range')
+    })
+
+    it('passes an unknown reason through without the contract prefix', () => {
+        expect(describeStakeIneligibility('JunoswapV3Staker::stakeToken: something new')).toBe(
+            'something new'
+        )
+        expect(describeStakeIneligibility('plain')).toBe('plain')
     })
 })

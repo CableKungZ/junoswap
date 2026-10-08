@@ -90,3 +90,25 @@ export function buildUnstakeAndClaimMulticall(
 export function buildWithdrawMulticall(tokenIds: readonly bigint[], recipient: Address): Hex[] {
     return tokenIds.map((tokenId) => encodeWithdrawToken(tokenId, recipient))
 }
+
+const STAKE_REASON_PREFIX = 'JunoswapV3Staker::stakeToken: '
+
+const STAKE_REASON_LABELS: Record<string, string> = {
+    'incentive not started': 'Farm has not started',
+    'incentive ended': 'Farm has ended',
+    'non-existent incentive': 'Farm does not exist',
+    'token already staked': 'Already staked in this farm',
+    'token pool is not the incentive pool': 'Different pool',
+    'cannot stake token with 0 liquidity': 'No liquidity',
+    'range too narrow': 'Price range too narrow',
+    'position out of range': 'Out of range',
+    'liquidity exceeds pool': 'Liquidity too large for the pool',
+}
+
+/** The staker's revert string from `stakeEligibility`, as a short label. Unknown text passes through. */
+export function describeStakeIneligibility(reason: string): string {
+    const bare = reason.startsWith(STAKE_REASON_PREFIX)
+        ? reason.slice(STAKE_REASON_PREFIX.length)
+        : reason
+    return STAKE_REASON_LABELS[bare] ?? bare
+}
