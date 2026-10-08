@@ -25,6 +25,10 @@ interface MiningFarmCardProps {
     onStake: (incentive: Incentive) => void
     onUnstake: (incentive: Incentive) => void
     onAddLiquidity: (incentive: Incentive) => void
+    /** False hides the whole action row, e.g. an ended farm the viewer has no stake in. */
+    showActions?: boolean
+    /** Set when the viewer is still staked in an ended farm: replaces the dead "Ended" button. */
+    unclaimed?: string
 }
 
 function formatUsd(value: number): string {
@@ -70,6 +74,8 @@ export function MiningFarmCard({
     onStake,
     onUnstake,
     onAddLiquidity,
+    showActions = true,
+    unclaimed,
 }: MiningFarmCardProps) {
     const { isConnected } = useAccount()
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
@@ -104,14 +110,14 @@ export function MiningFarmCard({
         ? 'h-full rounded-full bg-muted-foreground/25 transition-all duration-300'
         : 'h-full rounded-full transition-all duration-300'
 
-    const isDisabled = status === 'ended' || status === 'pending'
+    const isDisabled = (status === 'ended' && !unclaimed) || status === 'pending'
     const buttonLabel = !isConnected
         ? 'Connect Wallet'
         : status === 'active'
           ? 'Stake'
           : status === 'pending'
             ? 'Soon'
-            : 'Ended'
+            : (unclaimed ?? 'Ended')
 
     return (
         <Card className="position-card-hover flex flex-col overflow-hidden">
@@ -174,50 +180,53 @@ export function MiningFarmCard({
                     </div>
                 </div>
 
-                <div className="mt-4 flex gap-2">
-                    <Button
-                        className="flex-1"
-                        variant={isDisabled ? 'outline' : 'default'}
-                        disabled={isDisabled}
-                        onClick={() => {
-                            if (!isConnected) {
-                                setIsConnectModalOpen(true)
-                                return
-                            }
-                            onStake(incentive)
-                        }}
-                    >
-                        {buttonLabel}
-                    </Button>
-                    {isConnected && (
+                {showActions && (
+                    <div className="mt-4 flex gap-2">
+                        <Button
+                            className="flex-1"
+                            variant={isDisabled ? 'outline' : 'default'}
+                            disabled={isDisabled}
+                            onClick={() => {
+                                if (!isConnected) {
+                                    setIsConnectModalOpen(true)
+                                    return
+                                }
+                                if (unclaimed) onUnstake(incentive)
+                                else onStake(incentive)
+                            }}
+                        >
+                            {buttonLabel}
+                        </Button>
+                        {isConnected && (
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="shrink-0"
+                                title="Unstake &amp; claim"
+                                aria-label="Unstake from this farm"
+                                onClick={() => onUnstake(incentive)}
+                            >
+                                <Minus />
+                            </Button>
+                        )}
                         <Button
                             variant="outline"
                             size="icon"
                             className="shrink-0"
-                            title="Unstake &amp; claim"
-                            aria-label="Unstake from this farm"
-                            onClick={() => onUnstake(incentive)}
+                            title="Add liquidity to this pool"
+                            aria-label="Add liquidity to this pool"
+                            onClick={() => {
+                                if (!isConnected) {
+                                    setIsConnectModalOpen(true)
+                                    return
+                                }
+                                onAddLiquidity(incentive)
+                            }}
                         >
-                            <Minus />
+                            <Droplets />
                         </Button>
-                    )}
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        title="Add liquidity to this pool"
-                        aria-label="Add liquidity to this pool"
-                        onClick={() => {
-                            if (!isConnected) {
-                                setIsConnectModalOpen(true)
-                                return
-                            }
-                            onAddLiquidity(incentive)
-                        }}
-                    >
-                        <Droplets />
-                    </Button>
-                </div>
+                    </div>
+                )}
             </CardContent>
             <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />
         </Card>
