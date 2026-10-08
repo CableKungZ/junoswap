@@ -310,11 +310,12 @@ export function MyPositions({ onUnstake }: { onUnstake: (staked: StakedPosition)
 
     const idlePositions = useMemo(() => {
         if (!owner) return []
-        const stakedTokenIds = new Set(myStakes.map((s) => s.position.tokenId.toString()))
+        // numberOfStakes is authoritative; inferring "idle" from resolved farms mislabels a staked
+        // NFT whenever its farm hasn't loaded (or can't be resolved), and withdrawToken then reverts.
         return deposits
             .filter((d) => d.depositor.toLowerCase() === owner)
-            .filter((d) => !stakedTokenIds.has(d.position.tokenId.toString()))
-    }, [deposits, myStakes, owner])
+            .filter((d) => d.numberOfStakes === 0)
+    }, [deposits, owner])
 
     type Entry =
         | { kind: 'staked'; key: string; staked: StakedPosition }
