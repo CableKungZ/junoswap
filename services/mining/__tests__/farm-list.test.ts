@@ -251,8 +251,8 @@ describe('sortFarms', () => {
 })
 
 describe('pagination', () => {
-    it('uses three per page for cards and ten for the table', () => {
-        expect(FARM_PAGE_SIZE.card).toBe(3)
+    it('uses six per page for cards and ten for the table', () => {
+        expect(FARM_PAGE_SIZE.card).toBe(6)
         expect(FARM_PAGE_SIZE.table).toBe(10)
     })
 
