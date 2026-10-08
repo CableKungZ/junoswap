@@ -128,7 +128,7 @@ export function MiningFarmCard({
         <Card className="position-card-hover flex flex-col overflow-hidden">
             <CardContent className="flex flex-1 flex-col p-5">
                 <div className="flex items-start justify-between gap-2">
-                    <FarmIdentity incentive={incentive} />
+                    <FarmIdentity incentive={incentive} expandable />
                     <FarmStatusBadge status={status} />
                 </div>
 
