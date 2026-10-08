@@ -110,6 +110,7 @@ export function FarmTable({
                             <TableRow key={incentive.incentiveId} className="border-0">
                                 <TableCell className="p-3 px-4">
                                     <FarmIdentity
+                                        expandable
                                         incentive={incentive}
                                         size="sm"
                                         withProgram

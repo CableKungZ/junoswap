@@ -13,6 +13,7 @@ import { formatAprPercent, formatTvl } from '@/lib/format'
 import { useTokenPriceMap } from '@/hooks/useTokenPriceMap'
 import {
     formatTimeRemaining,
+    formatTimeUntilStart,
     getIncentiveProgress,
     getIncentiveStatus,
 } from '@/services/mining/incentives'
@@ -102,7 +103,11 @@ export function MiningFarmCard({
     const isEnded = status === 'ended'
     const barWidth = isEnded ? 100 : progress
     const barLabel =
-        status === 'active' ? timeRemaining : status === 'pending' ? 'Upcoming' : 'Ended'
+        status === 'active'
+            ? timeRemaining
+            : status === 'pending'
+              ? formatTimeUntilStart(incentive.startTime)
+              : 'Ended'
     const barFillStyle = isEnded
         ? undefined
         : { background: 'linear-gradient(90deg, hsl(var(--primary) / 0.3), hsl(var(--primary)))' }
@@ -123,7 +128,7 @@ export function MiningFarmCard({
         <Card className="position-card-hover flex flex-col overflow-hidden">
             <CardContent className="flex flex-1 flex-col p-5">
                 <div className="flex items-start justify-between gap-2">
-                    <FarmIdentity incentive={incentive} />
+                    <FarmIdentity incentive={incentive} expandable />
                     <FarmStatusBadge status={status} />
                 </div>
 

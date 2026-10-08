@@ -1,12 +1,13 @@
 'use client'
 
 import { EARN_PROGRAM_BADGE, getAvailablePrograms, type EarnProgram } from '@/lib/earn-programs'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { Plus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PaginationControls } from '@/components/ui/pagination'
 import { TokenIconSkeleton } from '@/components/ui/token-icon'
 import { ConnectModal } from '@/components/web3/connect-modal'
 import { MiningFarmCard } from './farm-card'
@@ -22,15 +23,18 @@ import { formatRewardAmount } from '@/lib/format'
 import { getDisplayToken } from '@/lib/tokens'
 import { useStakerDeposits } from '@/hooks/useStakerDeposits'
 import { useNowSeconds } from '@/hooks/useNowSeconds'
-import { useInfiniteList } from '@/hooks/useInfiniteList'
 import {
     DEFAULT_FARM_SORT,
     DEFAULT_FARM_STATUSES,
+    FARM_PAGE_SIZE,
     DEFAULT_FARM_VIEW,
     FARM_OWNERSHIP_OPTIONS,
     FARM_STATUS_OPTIONS,
+    clampPage,
     filterFarms,
     getFarmStatusAt,
+    getTotalPages,
+    paginate,
     sortFarms,
 } from '@/services/mining/farm-list'
 import type {
@@ -40,9 +44,6 @@ import type {
     FarmView,
     Incentive,
 } from '@/types/earn'
-
-/** Rows added per scroll; a multiple of the card grid's 3 columns so rows stay full. */
-const FARM_BATCH_SIZE: Record<FarmView, number> = { card: 9, table: 20 }
 
 function FarmCardSkeleton() {
     return (
@@ -157,6 +158,7 @@ export function MiningFarms({
     const [status, setStatus] = useState<readonly FarmStatusFilter[]>(DEFAULT_FARM_STATUSES)
     const [ownership, setOwnership] = useState<readonly FarmOwnershipFilter[]>([])
     const [programFilter, setProgramFilter] = useState<readonly EarnProgram[]>([])
+    const [page, setPage] = useState(1)
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
 
     // Staking moves the NFT into the staker, so the wallet-held sweep alone misses every position
@@ -180,6 +182,10 @@ export function MiningFarms({
     const isLoadingOwnership =
         isLoadingWallet ||
         (ownership.includes('my-staked') && (isLoadingDeposits || isLoadingStakes))
+
+    useEffect(() => {
+        setPage(1)
+    }, [view, sort, status, ownership, programFilter])
 
     const byProgram = useMemo(
         () =>
@@ -208,15 +214,10 @@ export function MiningFarms({
         myPoolAddresses,
     ])
 
-    const {
-        shown: pageItems,
-        hasMore,
-        sentinelRef,
-    } = useInfiniteList(
-        visible,
-        FARM_BATCH_SIZE[view],
-        [view, sort, status.join(), ownership.join(), programFilter.join()].join('|')
-    )
+    const pageSize = FARM_PAGE_SIZE[view]
+    const totalPages = getTotalPages(visible.length, pageSize)
+    const safePage = clampPage(page, totalPages)
+    const pageItems = paginate(visible, safePage, pageSize)
 
     const createButton = (
         <Button
@@ -338,10 +339,17 @@ export function MiningFarms({
                             onConnect={() => setIsConnectModalOpen(true)}
                         />
                     )}
-                    <p className="text-center text-xs text-muted-foreground">
-                        Showing {pageItems.length} of {visible.length}
-                    </p>
-                    {hasMore && <div ref={sentinelRef} className="h-10" aria-hidden />}
+                    <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
+                        <p className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                            Showing {(safePage - 1) * pageSize + 1}–
+                            {(safePage - 1) * pageSize + pageItems.length} of {visible.length}
+                        </p>
+                        <PaginationControls
+                            currentPage={safePage}
+                            totalPages={totalPages}
+                            onPageChange={setPage}
+                        />
+                    </div>
                 </div>
             )}
             <ConnectModal open={isConnectModalOpen} onOpenChange={setIsConnectModalOpen} />

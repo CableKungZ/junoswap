@@ -7,9 +7,9 @@ import type {
     MyFarmFilter,
 } from '@/types/earn'
 
-/** Card view fits one row of three; the table trades density for the same vertical space. */
+/** Card view is two rows of three, so the sections below the list stay in reach; the table trades density for the same space. */
 export const FARM_PAGE_SIZE: Record<FarmView, number> = {
-    card: 3,
+    card: 6,
     table: 10,
 }
 
